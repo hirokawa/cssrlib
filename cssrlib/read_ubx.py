@@ -9,10 +9,11 @@ import cbitstruct as bs
 import numpy as np
 import os
 import struct as st
+from enum import IntEnum
 import cssrlib.cssrlib as cs
 from nav import ephsat,navmsg
-from gnss import uGNSS,prn2sat,sat2prn
-
+from gnss import uGNSS,uSIG,prn2sat,sat2prn
+    
 class ubxdec:
     MAXSAT=uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX
     RXM_SFRBX =0x0213
@@ -29,6 +30,7 @@ class ubxdec:
         self.prn0=prn0
         self.sat_n=0
         self.nw=0
+        self.nm=0
         self.subfrm=[]
         self.eph = [ephsat() for i in range(self.MAXSAT)]
         self.nav=navmsg()   
@@ -113,26 +115,46 @@ class ubxdec:
         #ver=v[5]
         i=i+16
         self.sat=np.zeros(nm,dtype=int)
-        self.sigid=np.zeros(nm,dtype=int)
-        self.cno=np.zeros(nm,dtype=int)
-        self.obs=np.zeros((nm,3))
+        self.sigid=np.zeros((nm,2),dtype=int)
+        #self.cno=np.zeros(nm,dtype=int)
+        self.obs=np.zeros((nm,2*4))
+        j=0
         for k in range(nm):
             v=st.unpack_from('ddfBBBBHBBBBB',msg,i)
-            self.obs[k,0]=v[0] # PR
-            self.obs[k,1]=v[1] # CP
-            self.obs[k,2]=v[2] # doppler
+            i=i+32
             sys=v[3]
+            if sys==uGNSS.GLO or sys==uGNSS.BDS or sys==uGNSS.SBS:
+                continue # skip Glonass,BDS,SBAS
             prn=v[4]+192 if sys==uGNSS.QZS else v[4]
-            self.sat[k]=prn2sat(sys,prn)
-            self.sigid[k]=v[5]
+            sigid=v[5]
+            if sys==uGNSS.GPS:
+                ifreq=0 if sigid==uSIG.GPS_L1CA else 1
+            if sys==uGNSS.GAL:
+                ifreq=0 if sigid==uSIG.GAL_E1C else 1
+            if sys==uGNSS.QZS:
+                ifreq=0 if sigid==uSIG.QZS_L1CA else 1
+            sat=prn2sat(sys,prn)
+            idx=np.where(self.sat==sat)[0]
+            if np.size(idx)==0:
+                self.sat[j]=sat
+            else:
+                j=idx[0]                
+            self.obs[j,ifreq*4]  =v[0] # PR  
+            self.obs[j,ifreq*4+1]=v[1] # CP
+            self.obs[j,ifreq*4+2]=v[2] # doppler
+            self.obs[j,ifreq*4+3]=v[8] # cno
+            self.sigid[j,ifreq]=sigid
+            if np.size(idx)==0:
+                j=j+1
+            else:               
+                print("RAW t=%.3f sys=%d prn=%3d sig=%d,%d pr=%.3f,%.3f" % (self.tow,sys,prn,self.sigid[j,0],self.sigid[j,1],self.obs[j,0],self.obs[j,4]))            
             #freqid=v[6]
             #locktime=v[7]
-            self.cno[k]=v[8]
             #prstdev=v[9]
             #cpstdev=v[10]
             #dpstdev=v[11]*0.002
             #trkstat=v[12]
-            i=i+32
+        self.nm=j
         return 0
 
     def decode_msg(self,msg,i):
