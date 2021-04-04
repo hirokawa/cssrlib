@@ -111,7 +111,8 @@ class navmsg():
    
         if eph[sat-1].status==7:
             eph[sat-1].sat=sat
-            print('GPS/QZS LNAV: sat=%d iode=%3d' % (sat,iodc0&0xff))
+            if False:
+                print('GPS/QZS LNAV: sat=%d iode=%3d' % (sat,iodc0&0xff))
            
         return 0
             
@@ -152,19 +153,19 @@ class navmsg():
         if eph[sat-1].sat==sat and eph[sat-1].iode==iod_nav[0]:
             return 0
         
-        i=128+6+10
+        i=128+6+10 # Word Type 1
         v=bs.unpack_from('u14s32u32u32',buff,i)
         eph[sat-1].toe=v[0]*60.0
         eph[sat-1].M0=v[1]*1.462918079267163e-09
         eph[sat-1].e=v[2]*1.1641532182693481e-10
         eph[sat-1].sqrtA=v[3]*1.9073486328125e-06
-        i=128*2+6+10
+        i=128*2+6+10 # Word Type 2
         v=bs.unpack_from('s32s32s32s14',buff,i)        
         eph[sat-1].OMG0=v[0]*1.462918079267163e-09
         eph[sat-1].i0=v[1]*1.462918079267163e-09
         eph[sat-1].omg=v[2]*1.462918079267163e-09
         eph[sat-1].idot=v[3]*3.571577341960847e-13
-        i=128*3+6+10
+        i=128*3+6+10 # Word Type 3
         v=bs.unpack_from('s24s16s16s16s16s16u8',buff,i)        
         eph[sat-1].OMGd=v[0]*3.571577341960847e-13
         eph[sat-1].deln=v[1]*3.571577341960847e-13
@@ -173,7 +174,7 @@ class navmsg():
         eph[sat-1].crc=v[4]*0.03125
         eph[sat-1].crs=v[5]*0.03125                      
         eph[sat-1].sva=v[6]       
-        i=128*4+6+10
+        i=128*4+6+10 # Word Type 4
         v=bs.unpack_from('u6s16s16u14s31s21s6',buff,i)        
         svid=v[0]
         eph[sat-1].cic=v[1]*1.862645149230957e-09
@@ -183,9 +184,9 @@ class navmsg():
         eph[sat-1].f1=v[5]*1.4210854715202004e-14                      
         eph[sat-1].f2=v[6]*1.734723475976807e-18
 
-        i=128*5+6
+        i=128*5+6 # Word Type 5
         #v=bs.unpack_from('u11s11s14u5',buff,i)
-        i=i+11+11+14+5
+        i=i+11+11+14+5 # skip iono
         v=bs.unpack_from('s10s10u2u2u1u1',buff,i)
         eph[sat-1].tgd[0]=v[0]*2.3283064365386963e-10  
         eph[sat-1].tgd[1]=v[1]*2.3283064365386963e-10
@@ -197,7 +198,8 @@ class navmsg():
         eph[sat-1].iode=iod_nav[0]
         eph[sat-1].svh=(e5b_hs<<7)|(e5b_dvs<<6)|(e1b_hs<<1)|e1b_dvs
         
-        print('GAL INAV: sat=%2d iodnav=%3d' % (sat,iod_nav[0]))
+        if False:
+            print('GAL INAV: sat=%2d iodnav=%3d' % (sat,iod_nav[0]))
   
         return 0
         

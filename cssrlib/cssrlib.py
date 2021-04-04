@@ -428,8 +428,7 @@ class cssr:
                     self.dstec[k,j]=self.sval(v[j],sz,scl)
         return i
 
-    def decode_cssr(self,msg):
-        i=0
+    def decode_cssr(self,msg,i):
         df={'msgtype':4073}
         while df['msgtype']==4073:            
             df = bs.unpack_from_dict('u12u4',['msgtype','subtype'],msg,i) 
