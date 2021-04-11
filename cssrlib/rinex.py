@@ -7,7 +7,7 @@ Created on Mon Nov 23 20:10:51 2020
 
 import datetime
 import numpy as np
-from gnss import uGNSS,rSIG,rCST,sat2prn,Eph,prn2sat,gpst2time,Obs
+from gnss import uGNSS,rSIG,rCST,sat2prn,Eph,prn2sat,gpst2time,Obs,Nav
 
 class rnxdec:
     MAXSAT=uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX
@@ -20,18 +20,30 @@ class rnxdec:
                  '5Q':rSIG.L5Q,'7Q':rSIG.L7Q}
         self.nf=4
 
-    def decode_nav(self,navfile):
+    def flt(self,u,c=-1):
+        if c>=0:
+            u=u[19*c+4:19*(c+1)+4]
+        return float(u.replace("D", "E"))
+
+    def decode_nav(self,navfile,nav):
         """decode RINEX Navigation message from file """
         
-        nav=[]
+        nav.eph=[]
         with open(navfile,'rt') as fnav:
             for line in fnav:
                 if line[60:73]=='END OF HEADER':
                     break    
-                if line[60:80]=='RINEX VERSION / TYPE':
+                elif line[60:80]=='RINEX VERSION / TYPE':
                     self.ver=float(line[4:10])
                     if self.ver<3.02:
                         return -1        
+                elif line[60:76]=='IONOSPHERIC CORR':
+                    if line[0:4]=='GPSA' or line[0:4]=='QZSA':
+                        for k in range(4):
+                            nav.ion[0,k]=float(line[5+k*12:5+(k+1)*12])
+                    if line[0:4]=='GPSB' or line[0:4]=='QZSB':
+                        for k in range(4):
+                            nav.ion[1,k]=float(line[5+k*12:5+(k+1)*12])
         
             for line in fnav:
                 if line[0] not in self.gnss_tbl:
@@ -51,62 +63,62 @@ class rnxdec:
                 sec=int(line[21:23])            
                 eph.toc=datetime.datetime(year,month,day,hour,minute,sec)
                 
-                eph.af0=float(line[23:42])
-                eph.af1=float(line[42:61])
-                eph.af2=float(line[61:80])        
+                eph.af0=self.flt(line,1)
+                eph.af1=self.flt(line,2)
+                eph.af2=self.flt(line,3)        
         
                 line=fnav.readline()
-                eph.iode=int(float(line[4:23]))
-                eph.crs=float(line[23:42])
-                eph.deln=float(line[42:61])
-                eph.M0=float(line[61:80])         
+                eph.iode=int(self.flt(line,0))
+                eph.crs=self.flt(line,1)
+                eph.deln=self.flt(line,2)
+                eph.M0=self.flt(line,3)         
         
                 line=fnav.readline()
-                eph.cuc=float(line[4:23])
-                eph.e=float(line[23:42])
-                eph.cus=float(line[42:61])
-                sqrtA=float(line[61:80])
+                eph.cuc=self.flt(line,0)
+                eph.e=self.flt(line,1)
+                eph.cus=self.flt(line,2)
+                sqrtA=self.flt(line,3)
                 eph.A=sqrtA**2
                 
                 line=fnav.readline()
-                eph.toes=int(float(line[4:23]))
-                eph.cic=float(line[23:42])
-                eph.OMG0=float(line[42:61])
-                eph.cis=float(line[61:80])    
+                eph.toes=int(self.flt(line,0))
+                eph.cic=self.flt(line,1)
+                eph.OMG0=self.flt(line,2)
+                eph.cis=self.flt(line,3)    
                 
                 line=fnav.readline()
-                eph.i0=float(line[4:23])
-                eph.crc=float(line[23:42])
-                eph.omg=float(line[42:61])
-                eph.OMGd=float(line[61:80]) 
+                eph.i0=self.flt(line,0)
+                eph.crc=self.flt(line,1)
+                eph.omg=self.flt(line,2)
+                eph.OMGd=self.flt(line,3) 
                 
                 line=fnav.readline()
-                eph.idot=float(line[4:23])
-                eph.code=int(float(line[23:42])) # source for GAL
-                eph.week=int(float(line[42:61]))
+                eph.idot=self.flt(line,0)
+                eph.code=int(self.flt(line,1)) # source for GAL
+                eph.week=int(self.flt(line,2))
                 #if len(line)>=80:
                 #    L2_P_data=int(float(line[61:80]) )
                 
                 line=fnav.readline()
-                eph.sva=int(float(line[4:23]))
-                eph.svh=int(float(line[23:42]))
-                eph.tgd=float(line[42:61])
+                eph.sva=int(self.flt(line,0))
+                eph.svh=int(self.flt(line,1))
+                eph.tgd=float(self.flt(line,2))
                 if sys==uGNSS.GAL:
-                    tgd_b=float(line[61:80])
+                    tgd_b=float(self.flt(line,3))
                     if (eph.code>>9)&1:
                         eph.tgd=tgd_b
                 else:
-                    eph.iodc=int(float(line[61:80]))
+                    eph.iodc=int(self.flt(line,3))
         
                 line=fnav.readline()
-                tot=int(float(line[4:23]))
+                tot=int(self.flt(line,0))
                 if len(line)>=42:            
-                    eph.fit=int(float(line[23:42]))
+                    eph.fit=int(self.flt(line,1))
                 
                 eph.toe=gpst2time(eph.week,eph.toes)
                 eph.tot=gpst2time(eph.week,tot)
         
-                nav.append(eph)
+                nav.eph.append(eph)
     
         return nav
 

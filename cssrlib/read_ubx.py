@@ -70,32 +70,6 @@ class ubxdec:
             ck[1]=ck[1]+ck[0]
         return (np.uint8(ck[0])==ck0[0] and np.uint8(ck[1])==ck0[1])
 
-    def decode_l6msg(self,msg,ofst):
-        """decode QZS L6 message """
-        fmt = 'u32u8u3u2u2u1u1'
-        names = ['preamble','prn','vendor','facility','res','sid','alert']
-        i=ofst*8
-        l6head = bs.unpack_from_dict(fmt,names,msg,i)
-        i=i+49
-        if l6head['sid']==1:
-            self.fcnt=0
-        if l6head['facility']!=self.facility_p:
-            #print('t=%10.3f facility changed %d => %d' 
-            #      % (self.timetag,self.facility_p,l6head['facility']))
-            self.fcnt=-1
-        self.facility_p=l6head['facility']
-        if self.fcnt<0:
-            return -1
-        j=1695*self.fcnt
-        for k in range(53):
-            sz=32 if k<52 else 31
-            fmt='u'+str(sz)
-            b=bs.unpack_from(fmt,msg,i)
-            i=i+sz
-            bs.pack_into(fmt,self.buff,j,b[0])
-            j=j+sz
-        self.fcnt=self.fcnt+1
-
     def decode_qzssl6(self,msg,i,len):
         """decode RXM-QZSSL6 message """
         v=st.unpack_from('BBHIBBHH',msg,i)
@@ -110,7 +84,7 @@ class ubxdec:
         #chn=chinfo&0x3
         if svid==self.prn0 and mt==0:
             #print("t=%.2f berr=%d mt=%d chn=%d" % (self.timetag,berr,mt,chn))
-            self.decode_l6msg(msg,i+14)
+            cs.decode_l6msg(msg,i+14)
         return 0
 
     def decode_sfrbx(self,msg,i,len):

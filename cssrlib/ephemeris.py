@@ -6,7 +6,7 @@ Created on Mon Nov 23 20:10:51 2020
 """
 
 import numpy as np
-from gnss import uGNSS,rCST,sat2prn,Eph
+from gnss import uGNSS,rCST,sat2prn,Eph,ecef2pos,prn2sat
 import datetime
 
 MAX_ITER_KEPLER=30
@@ -83,7 +83,7 @@ def satposs(obs,nav):
         sat=obs.sat[i]
         pr=obs.P[i,0]
         t=obs.t-datetime.timedelta(seconds=pr/rCST.CLIGHT)
-        eph=findeph(nav,t,sat)
+        eph=findeph(nav.eph,t,sat)
         if eph is None:
             svh[i]=1;continue
         svh[i]=eph.svh
@@ -91,5 +91,53 @@ def satposs(obs,nav):
         t-=datetime.timedelta(seconds=dt)
         rs[i,:],dts[i]=eph2pos(t,eph)
     return rs,dts,svh
+
+
+if __name__ == '__main__':
+    import cartopy.crs as ccrs
+    import matplotlib.pyplot as plt
+    from rinex import rnxdec 
+
+    lon0=135    
+    plt.figure(figsize=(6, 6))
+    ax = plt.axes(projection=ccrs.Orthographic(central_longitude=lon0,central_latitude=0))
+    ax.coastlines(resolution='50m')
+    ax.gridlines()
+    ax.stock_img()
+
+    bdir='../data/'
+    navfile=bdir+'30340780.21q'
+    
+    dec = rnxdec()
+    nav=dec.decode_nav(navfile)
+
+    n=24*3600//300
+    t0=datetime.datetime(2021,3,19,0,0,0)
+
+    pos=np.zeros((n,3))
+
+    for k in range(uGNSS.MAXSAT):
+        sat=k+1
+        sys,prn=sat2prn(sat)
+        if sys!=uGNSS.QZS:
+            continue
+        for i in range(n):
+            t=t0+datetime.timedelta(seconds=i*300)
+            eph=findeph(nav,t,sat)
+            if eph==None:
+                continue
+            rs,dts=eph2pos(t,eph)    
+            pos[i,:]=ecef2pos(rs)
+            pos[i,0]=np.rad2deg(pos[i,0])
+            pos[i,1]=np.rad2deg(pos[i,1])
+            
+        plt.plot(pos[:,1],pos[:,0],'m-',transform=ccrs.Geodetic())
+        
+
+    
+    
+    
+    
+    
 
         

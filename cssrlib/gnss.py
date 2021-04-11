@@ -13,10 +13,18 @@ class rCST():
     CLIGHT=299792458.0
     MU_GPS=3.9860050E14
     MU_GAL=3.986004418E14
+    GME=3.986004415E+14
+    GMS=1.327124E+20
+    GMM=4.902801E+12
     OMGE=7.2921151467E-5
     OMGE_GAL=7.2921151467E-5
     RE_WGS84=6378137.0
     FE_WGS84=(1.0/298.257223563)
+    AU=149597870691.0
+    D2R=0.017453292519943295
+    AS2R=D2R/3600.0
+    DAY_SEC=86400.0    
+    CENTURY_SEC=DAY_SEC*36525.0
 
 class uGNSS(IntEnum):
     GPS=0;SBS=1;GAL=2;BDS=3;QZS=5;GLO=6;GNSSMAX=7
@@ -60,6 +68,13 @@ class Eph():
     
     def __init__(self,sat=0):
         self.sat=sat
+
+class Nav():
+    def __init__(self):
+        self.eph=[]
+        self.ion=np.array([
+            [0.1118E-07,-0.7451E-08,-0.5961E-07, 0.1192E-06],
+            [0.1167E+06,-0.2294E+06,-0.1311E+06, 0.1049E+07]])
 
 def gpst2time(week,tow):
     t=datetime.datetime(1980,1,6)+datetime.timedelta(weeks=week,seconds=tow)
@@ -191,11 +206,6 @@ def satazel(pos,e):
     return az,el
 
 def ionmodel(t,pos,az,el,ion=None):
-    ion_=np.array([
-        [0.1118E-07,-0.7451E-08,-0.5961E-07, 0.1192E-06],
-        [0.1167E+06,-0.2294E+06,-0.1311E+06, 0.1049E+07]])
-    if ion is None:
-        ion=ion_
     psi=0.0137/(el/np.pi+0.11)-0.022
     phi=pos[0]/np.pi+psi*np.cos(az)
     phi=np.max((-0.416,np.min((0.416,phi))))
