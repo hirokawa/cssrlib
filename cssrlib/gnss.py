@@ -7,7 +7,7 @@ Created on Mon Nov 23 20:10:51 2020
 
 from enum import IntEnum,Enum
 import numpy as np
-import datetime
+import datetime as dt
 
 class rCST():
     CLIGHT=299792458.0
@@ -76,14 +76,21 @@ class Nav():
             [0.1118E-07,-0.7451E-08,-0.5961E-07, 0.1192E-06],
             [0.1167E+06,-0.2294E+06,-0.1311E+06, 0.1049E+07]])
 
+def leaps(tgps):
+    return -18.0
+
+def gpst2utc(tgps):
+    tutc=tgps+dt.timedelta(seconds=leaps(tgps))
+    return tutc
+
 def gpst2time(week,tow):
-    t=datetime.datetime(1980,1,6)+datetime.timedelta(weeks=week,seconds=tow)
+    t=dt.datetime(1980,1,6)+dt.timedelta(weeks=week,seconds=tow)
     return t
 
 def time2gpst(t):
-    dt=(t-datetime.datetime(1980,1,6)).total_seconds()
-    week=int(dt)//604800
-    tow=dt-week*604800
+    dts=(t-dt.datetime(1980,1,6)).total_seconds()
+    week=int(dts)//604800
+    tow=dts-week*604800
     return week,tow
 
 def prn2sat(sys,prn):
@@ -193,6 +200,16 @@ def ecef2pos(r):
                   np.arctan2(r[1],r[0]),
                   np.sqrt(r2+z**2)-v])
     return pos
+
+def pos2ecef(pos):
+    s_p=np.sin(pos[0]);c_p=np.cos(pos[0])
+    s_l=np.sin(pos[1]);c_l=np.cos(pos[1])
+    e2=rCST.FE_WGS84*(2.0-rCST.FE_WGS84)
+    v=rCST.RE_WGS84/np.sqrt(1.0-e2*s_p**2)
+    r=np.array([(v+pos[2])*c_p*c_l,
+                (v+pos[2])*c_p*s_l,
+                (v*(1.0-e2)+pos[2])*s_p])
+    return r
 
 def ecef2enu(pos,r):
     E=xyz2enu(pos)

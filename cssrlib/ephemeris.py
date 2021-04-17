@@ -6,7 +6,7 @@ Created on Mon Nov 23 20:10:51 2020
 """
 
 import numpy as np
-from gnss import uGNSS,rCST,sat2prn,Eph,ecef2pos,prn2sat
+from gnss import uGNSS,rCST,sat2prn,Eph,ecef2pos,prn2sat,Nav
 import datetime
 
 MAX_ITER_KEPLER=30
@@ -30,38 +30,74 @@ def findeph(nav,t,sat,iode=-1):
             eph=eph_
     return eph
 
-def eph2pos(t,eph):
-    tk=(t-eph.toe).total_seconds()
+def dtadjust(t1,t2,tw=604800):
+    dt=(t1-t2).total_seconds()
+    if dt>tw:
+        dt-=tw
+    elif dt<-tw:
+        dt+=tw
+    return dt
+
+def eph2pos(t,eph,flg_v=False):
     sys,prn=sat2prn(eph.sat)
-    c_=rCST.CLIGHT
     if sys==uGNSS.GAL:
         mu=rCST.MU_GAL;omge=rCST.OMGE_GAL
     else: # GPS,QZS
         mu=rCST.MU_GPS;omge=rCST.OMGE
-    M=eph.M0+(np.sqrt(mu/(eph.A**3))+eph.deln)*tk
-    E=M;Ek=0.0
-    for n in range(MAX_ITER_KEPLER):
-        Ek=E
-        E-=(E-eph.e*np.sin(E)-M)/(1.0-eph.e*np.cos(E))
-        if np.abs(E-Ek)<RTOL_KEPLER:
+    dt=dtadjust(t,eph.toe)
+    n=np.sqrt(mu/eph.A**3)+eph.deln
+    M=eph.M0+n*dt
+    E=M
+    for iter in range(10):
+        Eold=E
+        sE=np.sin(E)
+        E=M+eph.e*sE
+        if abs(Eold-E)<1e-12:
             break
-    sE=np.sin(E);cE=np.cos(E)
-    u=np.arctan2(np.sqrt(1-eph.e**2)*sE,cE-eph.e)+eph.omg
-    r=eph.A*(1-eph.e*cE)
-    i=eph.i0+eph.idot*tk
-    s2u=np.sin(2*u);c2u=np.cos(2*u)
-    u+=eph.cus*s2u+eph.cuc*c2u
-    r+=eph.crs*s2u+eph.crc*c2u
-    i+=eph.cis*s2u+eph.cic*c2u
-    x=r*np.cos(u);y=r*np.sin(u);ci=np.cos(i)
-    dOmg=eph.OMG0+(eph.OMGd-omge)*tk-omge*eph.toes
-    sO=np.sin(dOmg);cO=np.cos(dOmg)
-    rs=np.array([x*cO-y*ci*sO,x*sO+y*ci*cO,y*np.sin(i)])
-
-    tk=(t-eph.toc).total_seconds()
-    dts=eph.af0+eph.af1*tk+eph.af2*tk**2
-    dts-=2.0*np.sqrt(mu*eph.A)*eph.e*sE/(c_**2)
-    return rs,dts     
+    cE=np.cos(E)
+    dtc=dtadjust(t,eph.toc)
+    dtrel=-2*np.sqrt(mu)*eph.e*np.sqrt(eph.A)*sE/rCST.CLIGHT**2
+    dts=eph.af0+eph.af1*dtc+eph.af2*dtc**2+dtrel
+    
+    nus=np.sqrt(1-eph.e**2)*sE
+    nuc=cE-eph.e;nue=1-eph.e*cE
+    
+    nu=np.arctan2(nus,nuc)
+    phi=nu+eph.omg
+    h2=np.array([np.cos(2*phi),np.sin(2*phi)])
+    u=phi+np.array([eph.cuc,eph.cus])@h2
+    r=eph.A*nue+np.array([eph.crc,eph.crs])@h2
+    h=np.array([np.cos(u),np.sin(u)])
+    xo=r*h
+    
+    inc=eph.i0+eph.idot*dt+np.array([eph.cic,eph.cis])@h2
+    Omg=eph.OMG0+eph.OMGd*dt-omge*(eph.toes+dt)
+    sOmg=np.sin(Omg);cOmg=np.cos(Omg)
+    si=np.sin(inc);ci=np.cos(inc)
+    p=np.array([cOmg,sOmg,0])    
+    q=np.array([-ci*sOmg,ci*cOmg,si])
+    rs=xo@np.array([p,q])
+    
+    if flg_v: # satellite velocity
+        qq=np.array([si*sOmg,-si*cOmg,ci])
+        Ed=n/nue
+        nud=np.sqrt(1-eph.e**2)/nue*Ed
+        h2d=2*nud*np.array([-h[1],h[0]])
+        ud=nud+np.array([eph.cuc,eph.cus])@h2d
+        rd=eph.A*eph.e*sE*Ed+np.array([eph.crc,eph.crs])@h2d
+        
+        hd=np.array([-h[1],h[0]])
+        xod=rd*h+(r*ud)*hd
+        incd=eph.idot+np.array([eph.cic,eph.cis])@h2d
+        omegd=eph.OMGd-omge
+        
+        pd=np.array([-p[1],p[0],0])*omegd
+        qd=np.array([-q[1],q[0],0])*omegd+qq*incd
+        
+        vs=xo@np.array([pd,qd])+xod@np.array([p,q])
+        return rs,vs,dts
+    
+    return rs,dts
 
 def eph2clk(time,eph):
     t=(time-eph.toc).total_seconds()
@@ -77,6 +113,7 @@ def ephclk(t,eph,sat):
 def satposs(obs,nav):
     n=obs.sat.shape[0]
     rs=np.zeros((n,3))
+    vs=np.zeros((n,3))
     dts=np.zeros(n)
     svh=np.zeros(n,dtype=int)
     for i in range(n):
@@ -89,8 +126,8 @@ def satposs(obs,nav):
         svh[i]=eph.svh
         dt=eph2clk(t,eph)
         t-=datetime.timedelta(seconds=dt)
-        rs[i,:],dts[i]=eph2pos(t,eph)
-    return rs,dts,svh
+        rs[i,:],vs[i,:],dts[i]=eph2pos(t,eph,True)
+    return rs,vs,dts,svh
 
 
 if __name__ == '__main__':
@@ -98,40 +135,49 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     from rinex import rnxdec 
 
-    lon0=135    
-    plt.figure(figsize=(6, 6))
-    ax = plt.axes(projection=ccrs.Orthographic(central_longitude=lon0,central_latitude=0))
-    ax.coastlines(resolution='50m')
-    ax.gridlines()
-    ax.stock_img()
-
     bdir='../data/'
     navfile=bdir+'30340780.21q'
     
+    nav = Nav()
     dec = rnxdec()
-    nav=dec.decode_nav(navfile)
+    nav=dec.decode_nav(navfile,nav)
 
     n=24*3600//300
     t0=datetime.datetime(2021,3,19,0,0,0)
 
-    pos=np.zeros((n,3))
+    flg_plot=False
+    
+    if True:
+        t=t0
+        sat=prn2sat(uGNSS.QZS,194)
+        eph=findeph(nav.eph,t,sat)
+        rs,vs,dts=eph2pos(t,eph,True)
 
-    for k in range(uGNSS.MAXSAT):
-        sat=k+1
-        sys,prn=sat2prn(sat)
-        if sys!=uGNSS.QZS:
-            continue
-        for i in range(n):
-            t=t0+datetime.timedelta(seconds=i*300)
-            eph=findeph(nav,t,sat)
-            if eph==None:
+    if flg_plot:
+        lon0=135    
+        plt.figure(figsize=(6, 6))
+        ax = plt.axes(projection=ccrs.Orthographic(central_longitude=lon0,central_latitude=0))
+        ax.coastlines(resolution='50m')
+        ax.gridlines()
+        ax.stock_img()        
+        pos=np.zeros((n,3))
+    
+        for k in range(uGNSS.MAXSAT):
+            sat=k+1
+            sys,prn=sat2prn(sat)
+            if sys!=uGNSS.QZS:
                 continue
-            rs,dts=eph2pos(t,eph)    
-            pos[i,:]=ecef2pos(rs)
-            pos[i,0]=np.rad2deg(pos[i,0])
-            pos[i,1]=np.rad2deg(pos[i,1])
-            
-        plt.plot(pos[:,1],pos[:,0],'m-',transform=ccrs.Geodetic())
+            for i in range(n):
+                t=t0+datetime.timedelta(seconds=i*300)
+                eph=findeph(nav.eph,t,sat)
+                if eph==None:
+                    continue
+                rs,dts=eph2pos(t,eph)    
+                pos[i,:]=ecef2pos(rs)
+                pos[i,0]=np.rad2deg(pos[i,0])
+                pos[i,1]=np.rad2deg(pos[i,1])
+                
+            plt.plot(pos[:,1],pos[:,0],'m-',transform=ccrs.Geodetic())
         
 
     

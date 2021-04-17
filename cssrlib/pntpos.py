@@ -68,7 +68,7 @@ def estpos(obs,nav,rs,dts,svh,rr):
 
 def pntpos(obs,nav,rr):
     n=obs.sat.shape[0]
-    rs,dts,svh=satposs(obs,nav)
+    rs,vs,dts,svh=satposs(obs,nav)
     sol,az,el=estpos(obs,nav,rs,dts,svh,rr)
 
     return sol,az,el
