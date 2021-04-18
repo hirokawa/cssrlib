@@ -14,10 +14,10 @@ class rnxdec:
    
     def __init__(self):
         self.fobs=None
-        self.freq_tbl={rSIG.L1C:0,rSIG.L2W:1,rSIG.L2L:1,rSIG.L5Q:2,rSIG.L7Q:1}
+        self.freq_tbl={rSIG.L1C:0,rSIG.L1X:0,rSIG.L2W:1,rSIG.L2L:1,rSIG.L2X:1,rSIG.L5Q:2,rSIG.L5X:2,rSIG.L7Q:1,rSIG.L7X:1}
         self.gnss_tbl={'G':uGNSS.GPS,'E':uGNSS.GAL,'J':uGNSS.QZS}
-        self.sig_tbl={'1C':rSIG.L1C,'2W':rSIG.L2W,'2L':rSIG.L2L,
-                 '5Q':rSIG.L5Q,'7Q':rSIG.L7Q}
+        self.sig_tbl={'1C':rSIG.L1C,'1X':rSIG.L1X,'2W':rSIG.L2W,'2L':rSIG.L2L,'2X':rSIG.L2X,
+                 '5Q':rSIG.L5Q,'5X':rSIG.L5X,'7Q':rSIG.L7Q,'7X':rSIG.L7X}
         self.nf=4
 
     def flt(self,u,c=-1):
@@ -147,9 +147,14 @@ class rnxdec:
                 self.nsig[sys]=int(line[3:6])
                 for k in range(self.nsig[sys]):
                     sig=line[7+4*k:10+4*k]
-                    if sig[0]!='C' and sig[0]!='L':
+                    if sig[0]=='C':
+                        self.typeid[sys][k] = 0
+                    elif sig[0]=='L':
+                        self.typeid[sys][k] = 1
+                    elif sig[0]=='S':
+                        self.typeid[sys][k] = 2
+                    else:
                         continue
-                    self.typeid[sys][k] = 0 if sig[0]=='C' else 1
                     if sig[1:3] in self.sig_tbl:
                         self.sigid[sys][k]=self.sig_tbl[sig[1:3]]
         return 0
@@ -174,6 +179,7 @@ class rnxdec:
             obs.data=np.zeros((nsat,self.nf*4))
             obs.P=np.zeros((nsat,self.nf))
             obs.L=np.zeros((nsat,self.nf))
+            obs.S=np.zeros((nsat,self.nf))
             obs.mag=np.zeros((nsat,self.nf))
             obs.sat=np.zeros(nsat,dtype=int)
             print("%2d %2d %6.1f %2d" % (hour,minute,sec,nsat))
@@ -195,10 +201,12 @@ class rnxdec:
                         continue
                     ifreq=self.freq_tbl[self.sigid[sys][i]]
                     if self.typeid[sys][i]==0: # code
-                        obs.mag[k,ifreq]=int(line[16*i+18])
+                        #obs.mag[k,ifreq]=int(line[16*i+18])
                         obs.P[k,ifreq]=float(obs_)
-                    elif self.typeid[sys][i]==0: # carrier
+                    elif self.typeid[sys][i]==1: # carrier
                         obs.L[k,ifreq]=float(obs_)
+                    elif self.typeid[sys][i]==2: # C/No
+                        obs.S[k,ifreq]=float(obs_)
                     obs.data[k,ifreq*self.nf+self.typeid[sys][i]]=float(obs_)
 
             break

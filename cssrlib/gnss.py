@@ -44,7 +44,7 @@ class uSIG(IntEnum):
     SIGMAX=7
 
 class rSIG(IntEnum):
-    NONE=0;L1C=1;L2L=2;L2W=3;L5Q=4;L7Q=5
+    NONE=0;L1C=1;L1X=2;L2L=3;L2X=4;L2W=5;L5Q=6;L5X=7;L7Q=8;L7X=9
     SIGMAX=16
 
 class Obs():
@@ -75,6 +75,23 @@ class Nav():
         self.ion=np.array([
             [0.1118E-07,-0.7451E-08,-0.5961E-07, 0.1192E-06],
             [0.1167E+06,-0.2294E+06,-0.1311E+06, 0.1049E+07]])
+        self.elmin=np.deg2rad(15.0)
+        self.tidecorr=False
+        self.nf=2
+        self.excl_sat=[]
+        self.freq=[1.57542e9,1.22760e9,1.17645e9,1.20714e9]
+        self.rb=[0,0,0] # base station position in ECEF [m]
+        self.gnss_t=[uGNSS.GPS]
+        #self.gnss_t=[uGNSS.GPS,uGNSS.GAL,uGNSS.QZS]
+        # for RTK
+        self.ratio=0
+        self.thresar=[2]
+        self.nx=6+uGNSS.MAXSAT*self.nf
+        self.na=0
+        self.x=np.zeros(self.nx)
+        self.eratio=[30,45]
+        self.err=[0,0.01,0]
+    
 
 def leaps(tgps):
     return -18.0
