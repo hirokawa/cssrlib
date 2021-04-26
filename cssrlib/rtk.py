@@ -65,23 +65,24 @@ def sysidx(satlist,sys_ref):
             idx.append(k)
     return idx
 
-def IB(s,f):
-    idx=6+gn.uGNSS.MAXSAT*f+s-1
+def IB(s,f,nx=3):
+    idx=nx+gn.uGNSS.MAXSAT*f+s-1
     return idx
 
 def varerr(nav,sat,sys,el,f):
     s_el=np.sin(el)
+    if s_el<=0.0:
+        return 0.0
     fact= nav.eratio[f-nav.nf] if f>=nav.nf else 1
     a=fact*nav.err[1]
     b=fact*nav.err[2]
     return 2.0*(a**2+(b/s_el)**2)
     
-def ddres(nav,y,e,sat,el):
+def ddres(nav,x,y,e,sat,el):
     """ DD phase/code residual """
     _c=gn.rCST.CLIGHT
     nf=nav.nf
     ns=len(el)
-    x=nav.x
 #    posu=gn.ecef2pos(x)
 #    posr=gn.ecef2pos(nav.rb)
     nb=np.zeros(2*4*2+2,dtype=int)
@@ -113,7 +114,6 @@ def ddres(nav,y,e,sat,el):
                     v[nv]-=lami*(x[idx_i]-x[idx_j])
                     H[nv,idx_i]=lami
                     H[nv,idx_j]=-lami
-                    varerr(nav,sat,sys,el,f)
                 Ri[nv]=varerr(nav,sat[i],sys,el[i],f)
                 Rj[nv]=varerr(nav,sat[j],sys,el[j],f)
                 
@@ -126,60 +126,89 @@ def ddres(nav,y,e,sat,el):
 
     return v,H,R
 
-def valpos(nav,v,R):
+def valpos(nav,v,R,thres=4.0):
     """ post-file residual test """
-    return 0
+    nv=len(v)
+    fact=thres**2
+    for i in range(nv):
+        if v[i]**2 <= fact*R[i,i]:
+            continue
+        print("%i is large : %f"%(i,v[i]))
+    return True
 
-def ddidx(nav,n):
+def ddidx(nav):
     """ index for SD to DD transformation matrix D """
     nb=0
+    n=gn.uGNSS.MAXSAT
     na=nav.na
-    ix=[]
+    ix=np.zeros((n,2),dtype=int)
     fix=np.zeros((n,nav.nf))
-    for m in range(gn.rCST.MAXGNSS):
+    for m in range(gn.uGNSS.GNSSMAX):
         k=na
         for f in range(nav.nf):
             for i in range(k,k+n):
+                sys,prn=gn.sat2prn(i-k+1)
+                if (sys!=m) or sys not in nav.gnss_t:
+                    continue
                 if nav.x[i]==0.0:
                     continue
-                fix[i-k,f]=1
-            k+=n
+                fix[i-k,f]=2
+                break
             for j in range(k,k+n):
+                sys,prn=gn.sat2prn(j-k+1)
+                if (sys!=m) or sys not in nav.gnss_t:
+                    continue
                 if i==j or nav.x[j]==0.0:
                     continue
-                fix[j-k,j]=1
-    return ix
+                ix[nb,:]=[i,j]
+                nb+=1
+                fix[j-k,f]=2
+            k+=n
+    ix=np.resize(ix,(nb,2))
+    return ix,fix
+
+def restamb(nav,bias,nb):
+    nv=0
+    xa=nav.x
+    xa[0:nav.na]=nav.xa[0:nav.na]
+    
+    for m in range(5):
+        for f in range(nav.nf):
+            n=0
+            index=[]
+            for i in range(gn.uGNSS.MAXSAT):
+                index.append(IB(i+1,f))
+                n+=1
+            if n<2:
+                continue
+            xa[index[0]] = nav.x[index[0]]
+            for i in range(1,n):
+                xa[index[i]]=xa[index[0]]-bias[nv]
+                nv+=1
+    return xa
 
 def resamb_lambda(nav,bias,xa):
     nx=nav.nx;na=nav.na
-    ix=np.zeros((nx,2),dtype=int)
-    nb,ix=ddidx(nav)
+    ix,fix=ddidx(nav)
+    nb=len(ix)
     if nb<=0:
         print("no valid DD")
         return -1
-    y=np.zeros(nb)
-    DP=np.zeros((nb,nx-na))
-    b=np.zeros((nb,2))
-    db=np.zeros(nb)
-    Qb=np.zeros((nb,nb))
-    Qab=np.zeros((na,nb))
-    
+
     # y=D*xc, Qb=D*Qc*D', Qab=Qac*D'
-    #y=nav.x[ix[0:2:2*nb]]-nav.x[idx[1:2:2*nb+1]]
-    #for j in range(nx-na):
-    #    DP[:,j]=nav.P[ix[0:2:2*nb],na+j]-nav.P[ix[1:2:2*nb+1],na+j]-
-    #for j in range(nb):
-    #    Qb[:,j]=DP[]-DP[]
-    #for j in range(nb):
-    #    Qab[:,j]=nav.P[]-nav.P[]
+    y=nav.x[ix[:,0]]-nav.x[ix[:,1]]
+    DP=nav.P[ix[:,0],na:nx]-nav.P[ix[:,1],na:nx]
+    Qb=DP[:,ix[:,0]-na]-DP[:,ix[:,1]-na]
+    Qab=nav.P[0:na,ix[:,0]]-nav.P[0:na,ix[:,1]]
+    
     # MLAMBDA ILS
     b,s=mlambda(y,Qb)
     stat=False
     if s[0]<=0.0 or s[1]/s[0]>=nav.thresar[0]:
         #nav.xa=x
         nav.Pa=nav.P[0:na,0:na]
-        bias=b
-        y-=b
+        bias=b[:,0]
+        y-=b[:,0]
         Qb=np.linalg.inv(Qb)
         nav.xa-=Qab@Qb@y
         nav.Pa-=Qab@Qb@Qab.T
@@ -191,12 +220,118 @@ def resamb_lambda(nav,bias,xa):
     return stat
 
 def kfupdate(x,P,H,v,R):
-    PHt=P@H.T
-    S=H@PHt+R
+    n=len(x)
+    ix=[]
+    k=0
+    for i in range(n):
+        if x[i]!=0.0 and P[i,i]>0.0:
+            ix.append(i);k+=1
+    x_=x[ix]
+    P_=P[ix,:][:,ix]
+    H_=H[:,ix]
+    PHt=P_@H_.T
+    S=H_@PHt+R
     K=PHt@np.linalg.inv(S)
-    x+=K@v
-    P-=K@H@P
+    x_+=K@v
+    P_-=K@H_@P_
+    x[ix]=x_
+    #P[ix,:][:,ix]=P_
+    
+    for k1,i in enumerate(ix):
+       for k2,j in enumerate(ix):
+           P[i,j] = P_[k1,k2]
+       
     return x,P
+
+def rtkinit(nav,pos0=np.zeros(3)):
+    nav.nf=2
+    nav.pmode=0 # 0:static, 1:kinematic
+
+    nav.na=3 if nav.pmode==0 else 6
+    nav.ratio=0
+    nav.thresar=[2]
+    nav.nx=nav.na+gn.uGNSS.MAXSAT*nav.nf
+    nav.x=np.zeros(nav.nx)
+    nav.P=np.zeros((nav.nx,nav.nx))
+    nav.xa=np.zeros(nav.na)
+    nav.Pa=np.zeros((nav.na,nav.na))
+    nav.nfix=nav.neb=0
+    nav.eratio=[100,100]
+    nav.err=[0,0.003,0.003]
+    nav.sig_p0 = 30.0
+    nav.sig_v0 = 10.0
+    nav.sig_n0 = 30.0
+    nav.sig_qp=0.1
+    nav.sig_qv=0.01
+    #
+    nav.x[0:3]=pos0
+    di = np.diag_indices(6)
+    nav.P[di[0:3]]=nav.sig_p0**2
+    nav.q=np.zeros(nav.nx)
+    nav.q[0:3]=nav.sig_qp**2    
+    if nav.pmode>=1:
+        nav.P[di[3:6]]=nav.sig_v0**2
+        nav.q[3:6]=nav.sig_qv**2 
+    # obs index
+    i0={gn.uGNSS.GPS:0,gn.uGNSS.GAL:0,gn.uGNSS.QZS:0}
+    i1={gn.uGNSS.GPS:1,gn.uGNSS.GAL:2,gn.uGNSS.QZS:2}
+    freq0={gn.uGNSS.GPS:nav.freq[0],gn.uGNSS.GAL:nav.freq[0],gn.uGNSS.QZS:nav.freq[0]}
+    freq1={gn.uGNSS.GPS:nav.freq[1],gn.uGNSS.GAL:nav.freq[2],gn.uGNSS.QZS:nav.freq[1]}
+    nav.obs_idx=[i0,i1]
+    nav.obs_freq=[freq0,freq1]
+        
+def udstate(nav,obs,obsb,iu,ir):
+    tt=1.0
+
+    ns=len(iu)
+    sys=[]
+    sat=obs.sat[iu]
+    for sat_i in obs.sat[iu]:
+        sys_i,prn=gn.sat2prn(sat_i)
+        sys.append(sys_i)
+
+    # pos,vel
+    nx=nav.na
+    F=np.eye(nx)
+    if nav.pmode>=1:
+        F[0:3,3:6]=np.eye(3)*tt
+        nav.x[0:3]+=tt*nav.x[3:6]
+    Px=nav.P[0:nx,0:nx]
+    Px=F.T@Px@F
+    Px[np.diag_indices(nav.na)]+=nav.q[0:nav.na]*tt
+    nav.P[0:nx,0:nx]=Px
+    # bias
+    for i in range(nav.nf):
+        bias=np.zeros(ns)
+        offset=0
+        na=0
+        for k in range(ns):
+            if sys[k] not in nav.gnss_t:
+                continue
+            j=nav.obs_idx[i][sys[k]]
+            freq=nav.obs_freq[i][sys[k]]
+            cp=obs.L[iu[k],j]-obsb.L[ir[k],j]
+            pr=obs.P[iu[k],j]-obsb.P[ir[k],j]
+            bias[k]=cp-pr*freq/gn.rCST.CLIGHT   
+            amb=nav.x[IB(sat[k],i)]
+            if amb!=0.0:
+                offset+=bias[k]-amb
+                na+=1
+        # adjust phase-code coherency
+        if na>0:
+            db=offset/na
+            for k in range(gn.uGNSS.MAXSAT):
+                if nav.x[IB(sat[k],i,nav.nxp)]!=0.0:
+                    nav.x[IB(sat[k],i,nav.nxp)]+=db
+        # initialize ambiguity
+        for k in range(ns):
+            j=IB(sat[k],i,nav.na)
+            if bias[k]==0.0 or nav.x[j]!=0.0:
+                continue
+            nav.x[j]=bias[k]
+            nav.P[j,j]=nav.sig_n0**2
+    return 0
+                
 
 def selsat(nav,obs,obsb,elb):
     idx0=np.where(elb>=nav.elmin)
@@ -226,7 +361,7 @@ def relpos(nav,obs,obsb):
     e[ns:,]=er[ir,:]
     
     # Kalman filter time propagation
-    #udstate(nav,obs,obsb,idx)
+    udstate(nav,obs,obsb,iu,ir)
     
     xa=np.zeros(nav.nx)
     xp=nav.x.copy()
@@ -236,28 +371,30 @@ def relpos(nav,obs,obsb):
     yu,eu,el=zdres(nav,obs,rs,dts,xp[0:3])
     
     y[:ns,:]=yu[iu,:]
-    e[:ns,:]=er[iu,:]
+    e[:ns,:]=eu[iu,:]
     el = el[iu]
     sat=obs.sat[iu]
     # DD residual
-    v,H,R=ddres(nav,y,e,sat,el)
+    v,H,R=ddres(nav,xp,y,e,sat,el)
     Pp=nav.P.copy()
     
     # Kalman filter measurement update
     xp,Pp=kfupdate(xp,Pp,H,v,R)
     
-    if False:
+    if True:
         # non-differencial residual for rover after measurement update
-        yr,er,elr=zdres(nav,obs,rs,dts,nav.x)
+        yu,eu,elr=zdres(nav,obs,rs,dts,xp[0:3])
+        y[:ns,:]=yu[iu,:]
+        e[:ns,:]=eu[iu,:]
         # reisdual for float solution
-        v,H,R=ddres(nav,y,e,el)
+        v,H,R=ddres(nav,xp,y,e,sat,el)
         if valpos(nav,v,R):
             nav.x=xp
             nav.P=Pp
     
     stat=resamb_lambda(nav,bias,xa)
     if stat:
-        v,H,R=ddres(nav,y,e,el)
+        v,H,R=ddres(nav,y,e,sat,el)
         #if valpos(nav,v,R):
             #holdamb(nav)
     
@@ -282,19 +419,21 @@ if __name__ == '__main__':
     decb.decode_obsh(basefile)
     dec.decode_obsh(obsfile)
  
-    nep=600//30
+    nep=120
     nep=1
     # GSI 3034 fujisawa
-    nav.rb=[-3.9594006311e6,3.3857045326e6,3.6675231107e6]
+    nav.rb=[-3959400.631,3385704.533,3667523.111]
     
     if True:
+        rtkinit(nav,dec.pos)
         rr=dec.pos
         for ne in range(nep):
             obs=dec.decode_obs()
             obsb=decb.decode_obs()
             
             sol,az,el=pntpos(obs,nav,rr)
-            nav.x[0:3]=sol[0:3]
+            #nav.x[0:3]=sol[0:3]
+            nav.x[0:3]=dec.pos
             relpos(nav,obs,obsb)
 
             

@@ -16,8 +16,9 @@ class rnxdec:
         self.fobs=None
         self.freq_tbl={rSIG.L1C:0,rSIG.L1X:0,rSIG.L2W:1,rSIG.L2L:1,rSIG.L2X:1,rSIG.L5Q:2,rSIG.L5X:2,rSIG.L7Q:1,rSIG.L7X:1}
         self.gnss_tbl={'G':uGNSS.GPS,'E':uGNSS.GAL,'J':uGNSS.QZS}
-        self.sig_tbl={'1C':rSIG.L1C,'1X':rSIG.L1X,'2W':rSIG.L2W,'2L':rSIG.L2L,'2X':rSIG.L2X,
+        self.sig_tbl={'1C':rSIG.L1C,'1X':rSIG.L1X,'1W':rSIG.L1W,'2W':rSIG.L2W,'2L':rSIG.L2L,'2X':rSIG.L2X,
                  '5Q':rSIG.L5Q,'5X':rSIG.L5X,'7Q':rSIG.L7Q,'7X':rSIG.L7X}
+        self.skip_sig_tbl = {uGNSS.GPS:[rSIG.L1X,rSIG.L1W,rSIG.L2L,rSIG.L2X],uGNSS.GAL:[],uGNSS.QZS:[rSIG.L1X]}
         self.nf=4
 
     def flt(self,u,c=-1):
@@ -156,7 +157,10 @@ class rnxdec:
                     else:
                         continue
                     if sig[1:3] in self.sig_tbl:
+                        if self.sig_tbl[sig[1:3]] in self.skip_sig_tbl[sys]:
+                            continue
                         self.sigid[sys][k]=self.sig_tbl[sig[1:3]]
+                        
         return 0
 
 

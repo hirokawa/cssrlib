@@ -78,14 +78,19 @@ if __name__ == '__main__':
 
     xyz_ref=[-3962108.6754,   3381309.5308,   3668678.6346]
     pos_ref=ecef2pos(xyz_ref)
+    # array([ 0.61678759,  2.43512131, 65.68861245])
+    # [ 35.33932589, 139.52217351, 65.68861245]
 
-    navfile=bdir+'SEPT0781.21P'
-    obsfile=bdir+'SEPT0782s.21O'
+#    navfile=bdir+'SEPT0781.21P'
+#    obsfile=bdir+'SEPT0782s.21O'
+
+    navfile=bdir+'SEPT078M.21P'
+    obsfile=bdir+'SEPT078M.21O'
 
     dec = rnxdec()
     nav = Nav()
     dec.decode_nav(navfile,nav)
-    nep=3600//30
+    nep=120
     t=np.zeros(nep)
     enu=np.zeros((nep,3))
     sol=np.zeros((nep,4))
@@ -109,7 +114,7 @@ if __name__ == '__main__':
     plt.xlabel('time[s]')
     plt.legend(['east','north','up'])
     plt.grid()
-    plt.axis([0,3600,-6,6])
+    plt.axis([0,120,-6,6])
     
 
 
