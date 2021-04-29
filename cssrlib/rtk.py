@@ -13,6 +13,8 @@ from ephemeris import findeph,eph2pos,satposs
 from ppp import tidedisp
 from mlambda import mlambda
 
+VAR_HOLDAMB=0.001
+
 def zdres(nav,obs,rs,dts,rr):
     """ non-differencial residual """
     _c=gn.rCST.CLIGHT
@@ -65,8 +67,8 @@ def sysidx(satlist,sys_ref):
             idx.append(k)
     return idx
 
-def IB(s,f,nx=3):
-    idx=nx+gn.uGNSS.MAXSAT*f+s-1
+def IB(s,f,na=3):
+    idx=na+gn.uGNSS.MAXSAT*f+s-1
     return idx
 
 def varerr(nav,sat,sys,el,f):
@@ -142,7 +144,7 @@ def ddidx(nav):
     n=gn.uGNSS.MAXSAT
     na=nav.na
     ix=np.zeros((n,2),dtype=int)
-    fix=np.zeros((n,nav.nf))
+    nav.fix=np.zeros((n,nav.nf))
     for m in range(gn.uGNSS.GNSSMAX):
         k=na
         for f in range(nav.nf):
@@ -152,7 +154,7 @@ def ddidx(nav):
                     continue
                 if nav.x[i]==0.0:
                     continue
-                fix[i-k,f]=2
+                nav.fix[i-k,f]=2
                 break
             for j in range(k,k+n):
                 sys,prn=gn.sat2prn(j-k+1)
@@ -162,13 +164,14 @@ def ddidx(nav):
                     continue
                 ix[nb,:]=[i,j]
                 nb+=1
-                fix[j-k,f]=2
+                nav.fix[j-k,f]=2
             k+=n
     ix=np.resize(ix,(nb,2))
-    return ix,fix
+    return ix
 
 def restamb(nav,bias,nb):
-    nv=0
+    """ restore SD ambiguity """
+    nv=0 
     xa=nav.x
     xa[0:nav.na]=nav.xa[0:nav.na]
     
@@ -177,6 +180,9 @@ def restamb(nav,bias,nb):
             n=0
             index=[]
             for i in range(gn.uGNSS.MAXSAT):
+                sys,prn=gn.sat2prn(i+1)
+                if sys!=m or nav.fix[i,f]!=2:
+                    continue
                 index.append(IB(i+1,f))
                 n+=1
             if n<2:
@@ -187,9 +193,9 @@ def restamb(nav,bias,nb):
                 nv+=1
     return xa
 
-def resamb_lambda(nav,bias,xa):
+def resamb_lambda(nav,bias):
     nx=nav.nx;na=nav.na
-    ix,fix=ddidx(nav)
+    ix=ddidx(nav)
     nb=len(ix)
     if nb<=0:
         print("no valid DD")
@@ -203,9 +209,8 @@ def resamb_lambda(nav,bias,xa):
     
     # MLAMBDA ILS
     b,s=mlambda(y,Qb)
-    stat=False
     if s[0]<=0.0 or s[1]/s[0]>=nav.thresar[0]:
-        #nav.xa=x
+        nav.xa=nav.x[0:na]
         nav.Pa=nav.P[0:na,0:na]
         bias=b[:,0]
         y-=b[:,0]
@@ -214,10 +219,11 @@ def resamb_lambda(nav,bias,xa):
         nav.Pa-=Qab@Qb@Qab.T
         
         # restore SD ambiguity
-        #restamb(nav,bias,nb,xa)
-        stat=True
+        xa=restamb(nav,bias,nb)
+    else:
+        nb=0
 
-    return stat
+    return nb,xa
 
 def kfupdate(x,P,H,v,R):
     n=len(x)
@@ -291,44 +297,44 @@ def udstate(nav,obs,obsb,iu,ir):
         sys.append(sys_i)
 
     # pos,vel
-    nx=nav.na
-    F=np.eye(nx)
+    na=nav.na
     if nav.pmode>=1:
+        F=np.eye(na)
         F[0:3,3:6]=np.eye(3)*tt
         nav.x[0:3]+=tt*nav.x[3:6]
-    Px=nav.P[0:nx,0:nx]
-    Px=F.T@Px@F
-    Px[np.diag_indices(nav.na)]+=nav.q[0:nav.na]*tt
-    nav.P[0:nx,0:nx]=Px
+        Px=nav.P[0:na,0:na]
+        Px=F.T@Px@F
+        Px[np.diag_indices(nav.na)]+=nav.q[0:nav.na]*tt
+        nav.P[0:na,0:na]=Px
     # bias
-    for i in range(nav.nf):
+    for f in range(nav.nf):
         bias=np.zeros(ns)
         offset=0
         na=0
-        for k in range(ns):
-            if sys[k] not in nav.gnss_t:
+        for i in range(ns):
+            if sys[i] not in nav.gnss_t:
                 continue
-            j=nav.obs_idx[i][sys[k]]
-            freq=nav.obs_freq[i][sys[k]]
-            cp=obs.L[iu[k],j]-obsb.L[ir[k],j]
-            pr=obs.P[iu[k],j]-obsb.P[ir[k],j]
-            bias[k]=cp-pr*freq/gn.rCST.CLIGHT   
-            amb=nav.x[IB(sat[k],i)]
+            j=nav.obs_idx[f][sys[i]]
+            freq=nav.obs_freq[f][sys[i]]
+            cp=obs.L[iu[i],j]-obsb.L[ir[i],j]
+            pr=obs.P[iu[i],j]-obsb.P[ir[i],j]
+            bias[i]=cp-pr*freq/gn.rCST.CLIGHT   
+            amb=nav.x[IB(sat[i],f,nav.na)]
             if amb!=0.0:
-                offset+=bias[k]-amb
+                offset+=bias[i]-amb
                 na+=1
         # adjust phase-code coherency
         if na>0:
             db=offset/na
-            for k in range(gn.uGNSS.MAXSAT):
-                if nav.x[IB(sat[k],i,nav.nxp)]!=0.0:
-                    nav.x[IB(sat[k],i,nav.nxp)]+=db
+            for i in range(gn.uGNSS.MAXSAT):
+                if nav.x[IB(i+1,f,nav.na)]!=0.0:
+                    nav.x[IB(i+1,f,nav.na)]+=db
         # initialize ambiguity
-        for k in range(ns):
-            j=IB(sat[k],i,nav.na)
-            if bias[k]==0.0 or nav.x[j]!=0.0:
+        for i in range(ns):
+            j=IB(sat[i],f,nav.na)
+            if bias[i]==0.0 or nav.x[j]!=0.0:
                 continue
-            nav.x[j]=bias[k]
+            nav.x[j]=bias[i]
             nav.P[j,j]=nav.sig_n0**2
     return 0
                 
@@ -340,6 +346,36 @@ def selsat(nav,obs,obsb,elb):
     iu=idx[1]
     ir=idx0[0][idx[2]]
     return k,iu,ir
+
+def holdamb(nav,xa):
+    """ hold integer ambiguity """
+    nb=nav.nx-nav.na
+    v=np.zeros(nb)
+    H=np.zeros((nb,nav.nx))
+    index=[]
+    nv=0
+
+    for m in range(gn.uGNSS.GNSSMAX):
+        for f in range(nav.nf):
+            n=0
+            for i in range(gn.uGNSS.MAXSAT):
+                sys,prn=gn.sat2prn(i+1)
+                if sys!=m or nav.fix[i,f]!=2:
+                    continue
+                index.append(IB(i+1,f))
+                n+=1
+                nav.fix[i,f]==3 # hold
+            # constraint to fixed ambiguity
+            for i in range(1,n):
+                v[nv]=(xa[index[0]]-xa[index[i]])-(nav.x[index[0]]-nav.x[index[i]])
+                H[nv,index[0]]=1
+                H[nv,index[i]]=-1
+                nv+=1
+    if nv>0:
+        R=np.eye(nv)*VAR_HOLDAMB
+        # update states with constraints
+        nav.x,nav.P=kfupdate(nav.x,nav.P,H[0:nv,:],v[0:nv],R)
+    return 0
 
 def relpos(nav,obs,obsb):
     nf=nav.nf
@@ -392,11 +428,11 @@ def relpos(nav,obs,obsb):
             nav.x=xp
             nav.P=Pp
     
-    stat=resamb_lambda(nav,bias,xa)
-    if stat:
-        v,H,R=ddres(nav,y,e,sat,el)
-        #if valpos(nav,v,R):
-            #holdamb(nav)
+    nb,xa=resamb_lambda(nav,bias)
+    if nb>0:
+        v,H,R=ddres(nav,xa,y,e,sat,el)
+        if valpos(nav,v,R):
+            holdamb(nav,xa)
     
     return 0
     
@@ -409,6 +445,9 @@ if __name__ == '__main__':
     obsfile=bdir+'SEPT078M.21O'
     basefile=bdir+'3034078M.21O'
         
+    xyz_ref=[-3962108.6754,   3381309.5308,   3668678.6346]
+    pos_ref=gn.ecef2pos(xyz_ref)
+    
     # rover
     dec = rn.rnxdec()
     nav = gn.Nav()
@@ -420,25 +459,25 @@ if __name__ == '__main__':
     dec.decode_obsh(obsfile)
  
     nep=120
-    nep=1
+    nep=10
     # GSI 3034 fujisawa
     nav.rb=[-3959400.631,3385704.533,3667523.111]
-    
+    enu=np.zeros((nep,3))
     if True:
         rtkinit(nav,dec.pos)
-        rr=dec.pos
+        rr=dec.pos  
         for ne in range(nep):
             obs=dec.decode_obs()
             obsb=decb.decode_obs()
             
-            sol,az,el=pntpos(obs,nav,rr)
-            #nav.x[0:3]=sol[0:3]
-            nav.x[0:3]=dec.pos
+            #sol,az,el=pntpos(obs,nav,rr)
+            if ne==0:
+                nav.x[0:3]=dec.pos
             relpos(nav,obs,obsb)
+            sol=nav.x[0:3]
+            enu[ne,:]=gn.ecef2enu(pos_ref,sol-xyz_ref)
 
-            
-            
-            
+        
         dec.fobs.close()
         decb.fobs.close()
     
