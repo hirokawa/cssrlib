@@ -6,8 +6,14 @@ Created on Mon Nov 23 20:10:51 2020
 """
 
 from enum import IntEnum,Enum
+from math import floor
 import numpy as np
-import datetime as dt
+from copy import deepcopy
+from scipy.interpolate import interp1d
+#import datetime as dt
+
+gpst0=[1980,1,6,0,0,0]
+
 
 class rCST():
     CLIGHT=299792458.0
@@ -47,10 +53,15 @@ class rSIG(IntEnum):
     NONE=0;L1C=1;L1X=2;L1W=3;L2L=4;L2X=5;L2W=6;L5Q=7;L5X=8;L7Q=9;L7X=10
     SIGMAX=16
 
+class gtime_t():
+    def __init__(self,time=0,sec=0.0):
+        self.time=time
+        self.sec=sec
+
 class Obs():
     def __init__(self):
         self.nm=0
-        self.t=0
+        self.t=gtime_t()
         self.P=[]
         self.L=[]
         self.data=[]
@@ -87,19 +98,84 @@ class Nav():
 def leaps(tgps):
     return -18.0
 
-def gpst2utc(tgps):
-    tutc=tgps+dt.timedelta(seconds=leaps(tgps))
+def epoch2time(ep):
+    doy=[1,32,60,91,121,152,182,213,244,274,305,335]
+    time=gtime_t()
+    year=int(ep[0]);mon=int(ep[1]);day=int(ep[2])
+    
+    if year<1970 or 2099<year or mon<1 or 12<mon:
+        return time
+    days=(year-1970)*365+(year-1969)//4+doy[mon-1]+day-2
+    if year%4==0 and mon>=3:
+        days+=1
+    sec=int(ep[5])
+    time.time=days*86400+int(ep[3])*3600+int(ep[4])*60+sec
+    time.sec=ep[5]-sec
+    return time
+
+def gpst2utc(tgps,leaps=-18):
+    #tutc=tgps+dt.timedelta(seconds=leaps(tgps))
+    tutc=tgps+leaps
     return tutc
 
+def timeadd(t:gtime_t,sec):
+    tr=deepcopy(t)
+    tr.sec+=sec
+    tt=floor(tr.sec)
+    tr.time+=int(tt)
+    tr.sec-=tt
+    return tr
+
+def timediff(t1:gtime_t,t2:gtime_t):
+    dt=t1.time-t2.time
+    dt+=t1.sec-t2.sec
+    return dt
+
 def gpst2time(week,tow):
-    t=dt.datetime(1980,1,6)+dt.timedelta(weeks=week,seconds=tow)
+    t=epoch2time(gpst0)
+    if tow<-1e9 or 1e9<tow:
+        tow=0.0
+    t.time+=86400*7*week+int(tow)
+    t.sec=tow-int(tow)
+    #t=dt.datetime(1980,1,6)+dt.timedelta(weeks=week,seconds=tow)
     return t
 
-def time2gpst(t):
-    dts=(t-dt.datetime(1980,1,6)).total_seconds()
-    week=int(dts)//604800
-    tow=dts-week*604800
+def time2gpst(t:gtime_t):
+    t0=epoch2time(gpst0)
+    sec=t.time-t0.time
+    week=int(sec/(86400*7))
+    tow=sec-week*86400*7+t.sec
+    
+    #dts=(t-dt.datetime(1980,1,6)).total_seconds()
+    #week=int(dts)//604800
+    #tow=dts-week*604800
     return week,tow
+
+def time2epoch(t):
+    mday=[31,28,31,30,31,30,31,31,30,31,30,31,31,28,31,30,31,30,31,31,30,31,30,31,
+          31,29,31,30,31,30,31,31,30,31,30,31,31,28,31,30,31,30,31,31,30,31,30,31]
+
+    days=int(t.time/86400)
+    sec=int(t.time-days*86400)
+    day=days%1461
+    for mon in range(48):
+        if day>=mday[mon]:
+            day-=mday[mon]
+        else:
+            break
+    ep=[0,0,0,0,0,0]
+    ep[0]=1970+days//1461*4+mon//12
+    ep[1]=mon%12+1
+    ep[2]=day+1
+    ep[3]=sec//3600
+    ep[4]=sec%3600//60
+    ep[5]=sec%60+t.sec
+    return ep
+    
+def time2doy(t):
+    ep=time2epoch(t)
+    ep[1]=ep[2]=1.0;ep[3]=ep[4]=ep[5]=0.0
+    return timediff(t,epoch2time(ep))/86400+1
 
 def prn2sat(sys,prn):
     if sys==uGNSS.GPS:
@@ -256,6 +332,48 @@ def ionmodel(t,pos,az,el,ion=None):
     diono=rCST.CLIGHT*f*v
     return diono
 
+def interpc(coef,lat):
+    i=int(lat/15.0)
+    if i<1:
+        return coef[:,0]
+    elif i>4:
+        return coef[:,4]
+    d=lat/15.0-i
+    return coef[:,i-1]*(1.0-d)+coef[:,i]*d
+
+def mapf(el,a,b,c):
+    sinel=np.sin(el)
+    return (1.0+a/(1.0+b/(1.0+c)))/(sinel+(a/(sinel+b/(sinel+c))))
+
+def tropmapf(t,pos,el):
+    if pos[2]<-1e3 or pos[2]>20e3 or el<=0.0:
+        return 0.0,0.0
+    coef = np.array([
+        [1.2769934E-3, 1.2683230E-3, 1.2465397E-3, 1.2196049E-3, 1.2045996E-3],
+        [2.9153695E-3, 2.9152299E-3, 2.9288445E-3, 2.9022565E-3, 2.9024912E-3],
+        [62.610505E-3, 62.837393E-3, 63.721774E-3, 63.824265E-3, 64.258455E-3],
+        [0.0000000E-0, 1.2709626E-5, 2.6523662E-5, 3.4000452E-5, 4.1202191E-5],
+        [0.0000000E-0, 2.1414979E-5, 3.0160779E-5, 7.2562722E-5, 11.723375E-5],
+        [0.0000000E-0, 9.0128400E-5, 4.3497037E-5, 84.795348E-5, 170.37206E-5],
+        [5.8021897E-4, 5.6794847E-4, 5.8118019E-4, 5.9727542E-4, 6.1641693E-4],
+        [1.4275268E-3, 1.5138625E-3, 1.4572752E-3, 1.5007428E-3, 1.7599082E-3],
+        [4.3472961E-2, 4.6729510E-2, 4.3908931E-2, 4.4626982E-2, 5.4736038E-2],
+        ])
+    aht=[2.53E-5, 5.49E-3, 1.14E-3]
+    lat=np.rad2deg(pos[0]);hgt=pos[2]
+    y=(time2doy(t)-28.0)/365.25
+    if lat<0.0:
+        y+=0.5
+    cosy=np.cos(2.0*np.pi*y)
+    lat=np.abs(lat)
+    c=interpc(coef,lat)
+    ah=c[0:3]-c[3:6]*cosy
+    aw=c[6:9]
+    dm=(1.0/np.sin(el)-mapf(el,aht[0],aht[1],aht[2]))*hgt*1e-3
+    mapfh=mapf(el,ah[0],ah[1],ah[2])+dm
+    mapfw=mapf(el,aw[0],aw[1],aw[2])
+    return mapfh,mapfw
+
 def tropmodel(t,pos,el,humi=0.7):
     hgt=pos[2]
     
@@ -270,6 +388,10 @@ def tropmodel(t,pos,el,humi=0.7):
     return (trop_hs+trop_wet)/np.cos(z)   
 
 if __name__ == '__main__':
-    t=gpst2time(2151,554726)
+    t=epoch2time([2021,3,19,12,0,0])
+    ep=time2epoch(t)
+    #t=gpst2time(2151,554726)
     week,tow=time2gpst(t)
+    t1=timeadd(t,300)
+    
         

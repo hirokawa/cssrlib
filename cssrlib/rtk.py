@@ -31,13 +31,16 @@ def zdres(nav,obs,rs,dts,rr):
     pos=gn.ecef2pos(rr_)   
     for i in range(n):
         sys,prn=gn.sat2prn(obs.sat[i])
+        if sys not in nav.gnss_t or obs.sat[i] in nav.excl_sat:
+            continue
         r,e[i,:]=gn.geodist(rs[i,:],rr_)
         az,el[i]=gn.satazel(pos,e[i,:])
         if el[i]<nav.elmin:
             continue
-        if obs.sat[i] in nav.excl_sat:
-            continue
         r+=-_c*dts[i]
+        zhd=gn.tropmodel(obs.t,pos,np.deg2rad(90.0),0.0)
+        mapfh,mapfw=gn.tropmapf(obs.t,pos,el[i])
+        r+=mapfh*zhd
         
         j=2 if sys==gn.uGNSS.GAL else 1
         y[i,0]=obs.L[i,0]*_c/nav.freq[0]-r
@@ -212,7 +215,7 @@ def resamb_lambda(nav,bias):
     if s[0]<=0.0 or s[1]/s[0]>=nav.thresar[0]:
         nav.xa=nav.x[0:na]
         nav.Pa=nav.P[0:na,0:na]
-        bias=b[:,0]
+        bias=b[:,0]   
         y-=b[:,0]
         Qb=np.linalg.inv(Qb)
         nav.xa-=Qab@Qb@y
@@ -241,7 +244,6 @@ def kfupdate(x,P,H,v,R):
     x_+=K@v
     P_-=K@H_@P_
     x[ix]=x_
-    #P[ix,:][:,ix]=P_
     
     for k1,i in enumerate(ix):
        for k2,j in enumerate(ix):
@@ -379,11 +381,11 @@ def holdamb(nav,xa):
 
 def relpos(nav,obs,obsb):
     nf=nav.nf
-    if (obs.t-obsb.t).total_seconds()!=0:
+    if gn.timediff(obs.t,obsb.t)!=0:
         return -1
-  
-    rsb,vsb,dtsb,svhb=satposs(obsb,nav)
+
     rs,vs,dts,svh=satposs(obs,nav)
+    rsb,vsb,dtsb,svhb=satposs(obsb,nav)
     
     # non-differencial residual for base 
     yr,er,el=zdres(nav,obsb,rsb,dtsb,nav.rb)
@@ -430,6 +432,9 @@ def relpos(nav,obs,obsb):
     
     nb,xa=resamb_lambda(nav,bias)
     if nb>0:
+        yu,eu,elr=zdres(nav,obs,rs,dts,xa[0:3])
+        y[:ns,:]=yu[iu,:]
+        e[:ns,:]=eu[iu,:]
         v,H,R=ddres(nav,xa,y,e,sat,el)
         if valpos(nav,v,R):
             holdamb(nav,xa)
@@ -440,12 +445,15 @@ def relpos(nav,obs,obsb):
 
             
 if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    
     bdir='../data/'
     navfile=bdir+'SEPT078M.21P'
     obsfile=bdir+'SEPT078M.21O'
     basefile=bdir+'3034078M.21O'
         
-    xyz_ref=[-3962108.6754,   3381309.5308,   3668678.6346]
+    #xyz_ref=[-3962108.6754,   3381309.5308,   3668678.6346]
+    xyz_ref=[-3962108.673,   3381309.574,   3668678.638]
     pos_ref=gn.ecef2pos(xyz_ref)
     
     # rover
@@ -458,10 +466,11 @@ if __name__ == '__main__':
     decb.decode_obsh(basefile)
     dec.decode_obsh(obsfile)
  
-    nep=120
-    nep=10
+    nep=60
+    #nep=10
     # GSI 3034 fujisawa
     nav.rb=[-3959400.631,3385704.533,3667523.111]
+    t=np.zeros(nep)
     enu=np.zeros((nep,3))
     if True:
         rtkinit(nav,dec.pos)
@@ -472,7 +481,9 @@ if __name__ == '__main__':
             
             #sol,az,el=pntpos(obs,nav,rr)
             if ne==0:
-                nav.x[0:3]=dec.pos
+                nav.x[0:3]=dec.pos # initial estimation
+                t0=obs.t
+            t[ne]=gn.timediff(obs.t,t0)
             relpos(nav,obs,obsb)
             sol=nav.x[0:3]
             enu[ne,:]=gn.ecef2enu(pos_ref,sol-xyz_ref)
@@ -481,7 +492,12 @@ if __name__ == '__main__':
         dec.fobs.close()
         decb.fobs.close()
     
-    
+    plt.plot(t,enu)
+    plt.ylabel('pos err[m]')
+    plt.xlabel('time[s]')
+    plt.legend(['east','north','up'])
+    plt.grid()
+    plt.axis([0,ne,-0.2,0.2])    
     
     
     

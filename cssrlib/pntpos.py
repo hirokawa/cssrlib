@@ -6,7 +6,7 @@ Created on Sun Nov 15 20:03:45 2020
 """
 
 import numpy as np
-from gnss import uGNSS,rCST,rSIG,prn2sat,sat2prn,Eph,gpst2time,time2gpst,sat2id,ecef2pos,geodist,satazel,ionmodel,tropmodel,dops,ecef2enu,Nav
+from gnss import uGNSS,rCST,rSIG,prn2sat,sat2prn,Eph,gpst2time,time2gpst,sat2id,ecef2pos,geodist,satazel,ionmodel,tropmodel,dops,ecef2enu,Nav,timediff
 from ephemeris import findeph,eph2pos,satposs
 from rinex import rnxdec    
 import matplotlib.pyplot as plt
@@ -73,7 +73,7 @@ def pntpos(obs,nav,rr):
 
     return sol,az,el
 
-if __name__ == '__main__':
+if __name__ == '__main__':    
     bdir='C:/work/gps/cssrlib/data/'
 
     xyz_ref=[-3962108.6754,   3381309.5308,   3668678.6346]
@@ -103,7 +103,7 @@ if __name__ == '__main__':
             week,tow=time2gpst(obs.t)
             if ne==0:
                 t0=obs.t
-            t[ne]=(obs.t-t0).total_seconds()
+            t[ne]=timediff(obs.t,t0)
             sol[ne,:],az,el=pntpos(obs,nav,rr)
             dop[ne,:]=dops(az,el)
             enu[ne,:]=ecef2enu(pos_ref,sol[ne,0:3]-xyz_ref)

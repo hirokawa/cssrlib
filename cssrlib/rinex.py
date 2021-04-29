@@ -7,7 +7,7 @@ Created on Mon Nov 23 20:10:51 2020
 
 import datetime
 import numpy as np
-from gnss import uGNSS,rSIG,rCST,sat2prn,Eph,prn2sat,gpst2time,Obs,Nav
+from gnss import uGNSS,rSIG,rCST,sat2prn,Eph,prn2sat,gpst2time,Obs,Nav,gtime_t,epoch2time
 
 class rnxdec:
     MAXSAT=uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX
@@ -61,9 +61,8 @@ class rnxdec:
                 day=int(line[12:14])
                 hour=int(line[15:17])                        
                 minute=int(line[18:20])
-                sec=int(line[21:23])            
-                eph.toc=datetime.datetime(year,month,day,hour,minute,sec)
-                
+                sec=int(line[21:23])  
+                eph.toc=epoch2time([year,month,day,hour,minute,sec])         
                 eph.af0=self.flt(line,1)
                 eph.af1=self.flt(line,2)
                 eph.af2=self.flt(line,3)        
@@ -178,15 +177,14 @@ class rnxdec:
             hour=int(line[13:15])                        
             minute=int(line[16:18])
             sec=float(line[19:29])
-            obs.t=datetime.datetime(year,month,day,hour,minute,int(sec),
-                                     int((sec-int(sec))*1e6))
+            obs.t=epoch2time([year,month,day,hour,minute,sec]) 
             obs.data=np.zeros((nsat,self.nf*4))
             obs.P=np.zeros((nsat,self.nf))
             obs.L=np.zeros((nsat,self.nf))
             obs.S=np.zeros((nsat,self.nf))
             obs.mag=np.zeros((nsat,self.nf))
             obs.sat=np.zeros(nsat,dtype=int)
-            print("%2d %2d %6.1f %2d" % (hour,minute,sec,nsat))
+            #print("%2d %2d %6.1f %2d" % (hour,minute,sec,nsat))
             for k in range(nsat):
                 line = self.fobs.readline()
                 if line[0] not in self.gnss_tbl:

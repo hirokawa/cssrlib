@@ -6,8 +6,8 @@ Created on Mon Nov 23 20:10:51 2020
 """
 
 import numpy as np
-from gnss import uGNSS,rCST,sat2prn,Eph,ecef2pos,prn2sat,Nav
-import datetime
+from gnss import uGNSS,rCST,sat2prn,Eph,ecef2pos,prn2sat,Nav,timediff,timeadd,epoch2time
+#import datetime
 
 MAX_ITER_KEPLER=30
 RTOL_KEPLER=1e-13
@@ -24,14 +24,14 @@ def findeph(nav,t,sat,iode=-1):
         if eph_.iode==iode:
             eph=eph_
             break
-        dt=(t-eph_.toe).total_seconds()
+        dt=timediff(t,eph_.toe)
         if abs(dt)<dt_p:
             dt_p=abs(dt)
             eph=eph_
     return eph
 
 def dtadjust(t1,t2,tw=604800):
-    dt=(t1-t2).total_seconds()
+    dt=timediff(t1,t2)
     if dt>tw:
         dt-=tw
     elif dt<-tw:
@@ -100,7 +100,7 @@ def eph2pos(t,eph,flg_v=False):
     return rs,dts
 
 def eph2clk(time,eph):
-    t=(time-eph.toc).total_seconds()
+    t=timediff(time,eph.toc)
     for i in range(2):
       t-=eph.af0+eph.af1*t+eph.af2*t**2
     dts=eph.af0+eph.af1*t+eph.af2*t**2
@@ -118,14 +118,17 @@ def satposs(obs,nav):
     svh=np.zeros(n,dtype=int)
     for i in range(n):
         sat=obs.sat[i]
+        sys,prn=sat2prn(sat)
+        if sys not in nav.gnss_t:
+            continue
         pr=obs.P[i,0]
-        t=obs.t-datetime.timedelta(seconds=pr/rCST.CLIGHT)
+        t=timeadd(obs.t,-pr/rCST.CLIGHT)
         eph=findeph(nav.eph,t,sat)
         if eph is None:
             svh[i]=1;continue
         svh[i]=eph.svh
         dt=eph2clk(t,eph)
-        t-=datetime.timedelta(seconds=dt)
+        t=timeadd(t,-dt)
         rs[i,:],vs[i,:],dts[i]=eph2pos(t,eph,True)
     return rs,vs,dts,svh
 
@@ -136,6 +139,7 @@ if __name__ == '__main__':
     from rinex import rnxdec 
 
     bdir='../data/'
+    #navfile=bdir+'SEPT078M.21P'
     navfile=bdir+'30340780.21q'
     
     nav = Nav()
@@ -143,9 +147,9 @@ if __name__ == '__main__':
     nav=dec.decode_nav(navfile,nav)
 
     n=24*3600//300
-    t0=datetime.datetime(2021,3,19,0,0,0)
+    t0=epoch2time([2021,3,19,0,0,0])
 
-    flg_plot=False
+    flg_plot=True
     
     if True:
         t=t0
@@ -168,8 +172,7 @@ if __name__ == '__main__':
             if sys!=uGNSS.QZS:
                 continue
             for i in range(n):
-                t=t0+datetime.timedelta(seconds=i*300)
-                eph=findeph(nav.eph,t,sat)
+                t=timeadd(t0,i*300)
                 if eph==None:
                     continue
                 rs,dts=eph2pos(t,eph)    
