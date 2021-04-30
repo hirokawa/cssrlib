@@ -8,7 +8,7 @@ Created on Sun Nov 15 20:03:45 2020
 import cbitstruct as bs
 import numpy as np
 from enum import IntEnum
-from gnss import gpst2time,rCST,ecef2pos
+from gnss import gpst2time,rCST,ecef2pos,prn2sat,uGNSS
 
 class sGNSS(IntEnum):
     GPS=0;GLO=1;GAL=2;BDS=3
@@ -121,6 +121,14 @@ class cssr:
             y=(3**cl*(1+val*0.25)-1)*1e-3 # [m]
         return y
 
+    def gnss2sys(self,gnss):
+        tbl={sGNSS.GPS:uGNSS.GPS,sGNSS.GLO:uGNSS.GLO,sGNSS.GAL:uGNSS.GAL,
+             sGNSS.BDS:uGNSS.BDS,sGNSS.QZS:uGNSS.QZS,sGNSS.SBS:uGNSS.SBS}
+        if gnss not in tbl:
+            return -1
+        sys=tbl[gnss]        
+        return sys
+
     def decode_mask(self,din,bitlen):
         v=[]
         n=0
@@ -161,8 +169,9 @@ class cssr:
 
         for gnss in range(0,dfm['ngnss']):
             v=bs.unpack_from_dict('u4u40u16u1',['gnssid','svmask','sigmask','cma'],msg,i) 
+            sys=self.gnss2sys(v['gnssid'])
             i+=61
-            sats,nsat=self.decode_mask(v['svmask'],40)
+            prn,nsat=self.decode_mask(v['svmask'],40)
             sig,nsig=self.decode_mask(v['sigmask'],16)
             self.nsat_n+=nsat
             if v['cma']==1:
@@ -172,8 +181,11 @@ class cssr:
             self.nsig_max=max(self.nsig_max,nsig)
 
             for k in range(0,nsat):
-                self.sys_n.append(v['gnssid'])
-                self.sat_n.append(sats[k])
+                if sys==uGNSS.QZS:
+                    prn[k]+=192
+                sat=prn2sat(sys,prn[k])
+                self.sys_n.append(sys)
+                self.sat_n.append(sat)
                 if v['cma']==1:
                     sig_s,nsig_s=self.decode_mask(vc[k],nsig)
                     self.nsig_n.append(nsig_s)
@@ -186,7 +198,7 @@ class cssr:
         return i    
 
     def decode_orb_sat(self,msg,i,k,sys,inet=0):
-        n=10 if sys==sGNSS.GAL else 8
+        n=10 if sys==uGNSS.GAL else 8
         v=bs.unpack_from_dict('u'+str(n)+'s15s13s13',['iode','dx','dy','dz'],msg,i) 
         self.lc[inet].iode[k]=v['iode']
         self.lc[inet].dorb[k,0]=self.sval(v['dx'],15,0.0016)
@@ -476,10 +488,10 @@ class cssr:
         netmask=bs.unpack_from('u'+str(self.nsat_n),msg,i)[0];i+=self.nsat_n
         self.lc[inet].netmask=netmask
         #loc,nsat_l=self.decode_mask(netmask,self.nsat_n)
-        self.lc[inet].stec_quality=np.zeros(self.nsat_n)
+        self.lc[inet].stec_quality=np.zeros(self.nsat_n,dtype=int)
         if dfm['stec']&2>0:
             self.lc[inet].ci=np.zeros((self.nsat_n,6))
-            self.lc[inet].stype=np.zeros(self.nsat_n)
+            self.lc[inet].stype=np.zeros(self.nsat_n,dtype=int)
         if dfm['stec']&1>0:
             self.lc[inet].dstec=np.zeros((self.nsat_n,ng))
         for k in range(0,self.nsat_n):
@@ -606,36 +618,26 @@ class cssr:
         dlon=posd[1]-grid[0]['lon']
         return dlat,dlon
     
-    def get_trop(self,dlat=0,dlon=0):
+    def get_trop(self,dlat=0.0,dlon=0.0):
         inet=self.inet_ref
-        trph=2.3; trpw=0
+        trph=0; trpw=0
         if self.lc[inet].flg_trop&2:
-            trph+=np.dot(self.lc[inet].ct,[1,dlat,dlon,dlat*dlon])
+            trph=2.3+self.lc[inet].ct@[1,dlat,dlon,dlat*dlon]
         if self.lc[inet].flg_trop&1:
-            trpw=np.dot(self.lc[inet].dtw[self.grid_index],self.grid_weight)
+            trpw=self.lc[inet].dtw[self.grid_index]@self.grid_weight
         return trph,trpw
  
-    def get_stec(self,dlat=0,dlon=0):
+    def get_stec(self,dlat=0.0,dlon=0.0):
         inet=self.inet_ref
         stec=np.zeros(self.nsat_n)
         for i in range(self.nsat_n):
             if not self.isset(self.lc[inet].netmask,self.nsat_n,i):
                 continue
             if self.lc[inet].flg_stec&2:            
-                stype=self.lc[inet].stype[i]
                 ci=self.lc[inet].ci[i,:]
-                stec[i]=ci[0]
-                if stype>0:
-                    stec[i]+=ci[1]*dlat+ci[2]*dlon
-                if stype>1:
-                    stec[i]+=ci[3]*dlat*dlon
-                if stype>2:
-                    stec[i]+=ci[4]*dlat**2+ci[5]*dlon**2
+                stec[i]=[1,dlat,dlon,dlat*dlon,dlat**2,dlon**2]@ci
             if self.lc[inet].flg_stec&1:   
-                dstec=0
-                for k in range(self.ngrid):
-                    j=self.grid_index[k]
-                    dstec+=self.lc[inet].dstec[k,j]*self.grid_weight[k]                
+                dstec=self.lc[inet].dstec[i,self.grid_index]@self.grid_weight              
                 stec[i]+=dstec
         return stec
             

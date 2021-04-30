@@ -92,8 +92,8 @@ class Nav():
         self.excl_sat=[]
         self.freq=[1.57542e9,1.22760e9,1.17645e9,1.20714e9]
         self.rb=[0,0,0] # base station position in ECEF [m]
-        self.gnss_t=[uGNSS.GPS]
-        #self.gnss_t=[uGNSS.GPS,uGNSS.GAL,uGNSS.QZS]
+        #self.gnss_t=[uGNSS.GPS,uGNSS.QZS]
+        self.gnss_t=[uGNSS.GPS,uGNSS.GAL,uGNSS.QZS]
     
 def leaps(tgps):
     return -18.0

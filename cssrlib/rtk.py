@@ -452,7 +452,6 @@ if __name__ == '__main__':
     obsfile=bdir+'SEPT078M.21O'
     basefile=bdir+'3034078M.21O'
         
-    #xyz_ref=[-3962108.6754,   3381309.5308,   3668678.6346]
     xyz_ref=[-3962108.673,   3381309.574,   3668678.638]
     pos_ref=gn.ecef2pos(xyz_ref)
     
@@ -497,7 +496,7 @@ if __name__ == '__main__':
     plt.xlabel('time[s]')
     plt.legend(['east','north','up'])
     plt.grid()
-    plt.axis([0,ne,-0.2,0.2])    
+    plt.axis([0,ne,-0.1,0.1])    
     
     
     

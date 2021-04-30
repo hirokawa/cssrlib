@@ -25,7 +25,7 @@ def findeph(nav,t,sat,iode=-1):
             eph=eph_
             break
         dt=timediff(t,eph_.toe)
-        if abs(dt)<dt_p:
+        if iode<0 and abs(dt)<dt_p:
             dt_p=abs(dt)
             eph=eph_
     return eph
@@ -110,12 +110,13 @@ def ephclk(t,eph,sat):
     dts=eph2clk(t,eph)
     return dts
 
-def satposs(obs,nav):
+def satposs(obs,nav,cs=None):
     n=obs.sat.shape[0]
     rs=np.zeros((n,3))
     vs=np.zeros((n,3))
     dts=np.zeros(n)
     svh=np.zeros(n,dtype=int)
+    iode=-1
     for i in range(n):
         sat=obs.sat[i]
         sys,prn=sat2prn(sat)
@@ -123,13 +124,26 @@ def satposs(obs,nav):
             continue
         pr=obs.P[i,0]
         t=timeadd(obs.t,-pr/rCST.CLIGHT)
-        eph=findeph(nav.eph,t,sat)
+        if cs is not None:
+            if sat not in cs.sat_n:
+                continue
+            idx=np.where(cs.sat_n==sat)[0][0]
+            iode=cs.lc[0].iode[idx]
+        eph=findeph(nav.eph,t,sat,iode)
         if eph is None:
             svh[i]=1;continue
         svh[i]=eph.svh
         dt=eph2clk(t,eph)
         t=timeadd(t,-dt)
         rs[i,:],vs[i,:],dts[i]=eph2pos(t,eph,True)
+        if cs is not None: # apply SSR correction
+            ea=vs[i,:]/np.linalg.norm(vs[i,:])
+            rc=np.cross(rs[i,:],vs[i,:])
+            ec=rc/np.linalg.norm(rc)
+            er=np.cross(ea,ec)
+            dorb=-cs.lc[0].dorb[idx,:]@[er,ea,ec]
+            rs[i,:]+=dorb
+            dts[i]+=cs.lc[0].dclk[idx]/rCST.CLIGHT
     return rs,vs,dts,svh
 
 

@@ -6,15 +6,55 @@ Created on Sun Nov 15 20:03:45 2020
 """
 
 import numpy as np
-from gnss import rCST,sat2prn,time2gpst,ecef2pos,geodist,satazel,ionmodel,tropmodel,dops,ecef2enu,Nav
+import gnss as gn
+from gnss import rCST,sat2prn,time2gpst,ecef2pos,geodist,satazel,ionmodel,tropmodel,dops,ecef2enu,Nav,timediff
 from ephemeris import findeph,satposs
 from rinex import rnxdec    
 import matplotlib.pyplot as plt
 from cssrlib.cssrlib import cssr
 
+from rtk import IB,zdres,ddres,kfupdate,resamb_lambda,valpos,holdamb
+
 MAXITR=10
 ELMIN=10
 NX=4
+
+def rtkinit(nav,pos0=np.zeros(3)):
+    nav.nf=2
+    nav.pmode=0 # 0:static, 1:kinematic
+
+    nav.na=3 if nav.pmode==0 else 6
+    nav.ratio=0
+    nav.thresar=[2]
+    nav.nx=nav.na+gn.uGNSS.MAXSAT*nav.nf
+    nav.x=np.zeros(nav.nx)
+    nav.P=np.zeros((nav.nx,nav.nx))
+    nav.xa=np.zeros(nav.na)
+    nav.Pa=np.zeros((nav.na,nav.na))
+    nav.nfix=nav.neb=0
+    nav.eratio=[100,100]
+    nav.err=[0,0.003,0.003]
+    nav.sig_p0 = 30.0
+    nav.sig_v0 = 10.0
+    nav.sig_n0 = 30.0
+    nav.sig_qp=0.1
+    nav.sig_qv=0.01
+    #
+    nav.x[0:3]=pos0
+    di = np.diag_indices(6)
+    nav.P[di[0:3]]=nav.sig_p0**2
+    nav.q=np.zeros(nav.nx)
+    nav.q[0:3]=nav.sig_qp**2    
+    if nav.pmode>=1:
+        nav.P[di[3:6]]=nav.sig_v0**2
+        nav.q[3:6]=nav.sig_qv**2 
+    # obs index
+    i0={gn.uGNSS.GPS:0,gn.uGNSS.GAL:0,gn.uGNSS.QZS:0}
+    i1={gn.uGNSS.GPS:1,gn.uGNSS.GAL:2,gn.uGNSS.QZS:2}
+    freq0={gn.uGNSS.GPS:nav.freq[0],gn.uGNSS.GAL:nav.freq[0],gn.uGNSS.QZS:nav.freq[0]}
+    freq1={gn.uGNSS.GPS:nav.freq[1],gn.uGNSS.GAL:nav.freq[2],gn.uGNSS.QZS:nav.freq[1]}
+    nav.obs_idx=[i0,i1]
+    nav.obs_freq=[freq0,freq1]
 
 def rescode(itr,obs,nav,rs,dts,svh,x):
     nv=0
@@ -44,6 +84,128 @@ def rescode(itr,obs,nav,rs,dts,svh,x):
 
     return v,H,nv,az,el
 
+def udstate_ppp(nav,obs):
+    tt=1.0
+
+    ns=len(obs.sat)
+    sys=[]
+    sat=obs.sat
+    for sat_i in obs.sat:
+        sys_i,prn=gn.sat2prn(sat_i)
+        sys.append(sys_i)
+
+    # pos,vel
+    na=nav.na
+    if nav.pmode>=1:
+        F=np.eye(na)
+        F[0:3,3:6]=np.eye(3)*tt
+        nav.x[0:3]+=tt*nav.x[3:6]
+        Px=nav.P[0:na,0:na]
+        Px=F.T@Px@F
+        Px[np.diag_indices(nav.na)]+=nav.q[0:nav.na]*tt
+        nav.P[0:na,0:na]=Px
+    # bias
+    for f in range(nav.nf):
+        bias=np.zeros(ns)
+        offset=0
+        na=0
+        for i in range(ns):
+            if sys[i] not in nav.gnss_t:
+                continue
+            j=nav.obs_idx[f][sys[i]]
+            freq=nav.obs_freq[f][sys[i]]
+            #cp=obs.L[iu[i],j]-obsb.L[ir[i],j]
+            #pr=obs.P[iu[i],j]-obsb.P[ir[i],j]
+            cp=obs.L[i,j]
+            pr=obs.P[i,j]
+            bias[i]=cp-pr*freq/gn.rCST.CLIGHT   
+            amb=nav.x[IB(sat[i],f,nav.na)]
+            if amb!=0.0:
+                offset+=bias[i]-amb
+                na+=1
+        # adjust phase-code coherency
+        if na>0:
+            db=offset/na
+            for i in range(gn.uGNSS.MAXSAT):
+                if nav.x[IB(i+1,f,nav.na)]!=0.0:
+                    nav.x[IB(i+1,f,nav.na)]+=db
+        # initialize ambiguity
+        for i in range(ns):
+            j=IB(sat[i],f,nav.na)
+            if bias[i]==0.0 or nav.x[j]!=0.0:
+                continue
+            nav.x[j]=bias[i]
+            nav.P[j,j]=nav.sig_n0**2
+    return 0
+
+
+
+def relpos(nav,obs,cs):
+    nf=nav.nf
+    ns=len(obs.sat)
+
+    rs,vs,dts,svh=satposs(obs,nav,cs)
+    #rsb,vsb,dtsb,svhb=satposs(obsb,nav)
+    
+    # non-differencial residual for base 
+    #yr,er,el=zdres(nav,obsb,rsb,dtsb,nav.rb)
+    
+    #ns,iu,ir=selsat(nav,obs,obsb,el)
+        
+    #y[ns:,:]=yr[ir,:]
+    #e[ns:,]=er[ir,:]
+    
+    # Kalman filter time propagation
+    udstate_ppp(nav,obs)
+    
+    pos=gn.ecef2pos(nav.x[0:3])
+    
+    inet=cs.find_grid_index(pos)
+    dlat,dlon=cs.get_dpos(pos)
+    trph,trpw=cs.get_trop(dlat,dlon)
+    stec=cs.get_stec(dlat,dlon)
+    
+    xa=np.zeros(nav.nx)
+    xp=nav.x.copy()
+    bias=np.zeros(nav.nx)
+
+    # non-differencial residual for rover 
+    y,e,el=zdres(nav,obs,rs,dts,xp[0:3])
+    
+    
+    #y[:ns,:]=yu[iu,:]
+    #e[:ns,:]=eu[iu,:]
+    #el = el[iu]
+    sat=obs.sat
+    # DD residual
+    v,H,R=ddres(nav,xp,y,e,sat,el)
+    Pp=nav.P.copy()
+    
+    # Kalman filter measurement update
+    xp,Pp=kfupdate(xp,Pp,H,v,R)
+    
+    if True:
+        # non-differencial residual for rover after measurement update
+        yu,eu,elr=zdres(nav,obs,rs,dts,xp[0:3])
+        y[:ns,:]=yu[:,:]
+        e[:ns,:]=eu[:,:]
+        # reisdual for float solution
+        v,H,R=ddres(nav,xp,y,e,sat,el)
+        if valpos(nav,v,R):
+            nav.x=xp
+            nav.P=Pp
+    
+    nb,xa=resamb_lambda(nav,bias)
+    if nb>0:
+        yu,eu,elr=zdres(nav,obs,rs,dts,xa[0:3])
+        y[:ns,:]=yu[:,:]
+        e[:ns,:]=eu[:,:]
+        v,H,R=ddres(nav,xa,y,e,sat,el)
+        if valpos(nav,v,R):
+            holdamb(nav,xa)
+    
+    return 0
+
 def estpos(obs,nav,rs,dts,svh,rr):
     x=np.zeros(NX)
     dx=np.zeros(NX)  
@@ -60,23 +222,18 @@ def estpos(obs,nav,rs,dts,svh,rr):
             break
     return x,az,el
 
-def pntpos(obs,nav,rr):
-    rs,dts,svh=satposs(obs,nav)
-    sol,az,el=estpos(obs,nav,rs,dts,svh,rr)
-    return sol,az,el
-
 if __name__ == '__main__':
     bdir='../data/'
     l6file=bdir+'2021078M.l6'
     griddef=bdir+'clas_grid.def'
     
     # based on GSI F5 solution
-    xyz_ref=[-3962108.6754,   3381309.5308,   3668678.6346]
+    xyz_ref=[-3962108.673,   3381309.574,   3668678.638]
     pos_ref=ecef2pos(xyz_ref)
 
-    navfile=bdir+'SEPT0781.21P'
-#    obsfile=bdir+'SEPT0782s.21O'
-    obsfile=bdir+'SEPT0781.21O'
+    bdir='../data/'
+    navfile=bdir+'SEPT078M.21P'
+    obsfile=bdir+'SEPT078M.21O'
 
     cs=cssr()
     cs.monlevel=2
@@ -94,6 +251,7 @@ if __name__ == '__main__':
     dop=np.zeros((nep,4))
     if dec.decode_obsh(obsfile)>=0:
         rr=dec.pos
+        rtkinit(nav,dec.pos)
         pos=ecef2pos(rr)
         inet=cs.find_grid_index(pos)
         
@@ -109,16 +267,10 @@ if __name__ == '__main__':
 
             if ne==0:
                 t0=obs.t
-            t[ne]=(obs.t-t0).total_seconds()
-            sol[ne,:],az,el=pntpos(obs,nav,rr)
-            dop[ne,:]=dops(az,el)
-            enu[ne,:]=ecef2enu(pos_ref,sol[ne,0:3]-xyz_ref)
-            
+            t[ne]=timediff(obs.t,t0)
+
             if ne>=20:
-                inet=cs.find_grid_index(pos)
-                dlat,dlon=cs.get_dpos(pos)
-                trph,trpw=cs.get_trop(dlat,dlon)
-                stec=cs.get_stec(dlat,dlon)
+                relpos(nav,obs,cs)
             
         fc.close()
         dec.fobs.close()

@@ -41,10 +41,10 @@ class rnxdec:
                 elif line[60:76]=='IONOSPHERIC CORR':
                     if line[0:4]=='GPSA' or line[0:4]=='QZSA':
                         for k in range(4):
-                            nav.ion[0,k]=float(line[5+k*12:5+(k+1)*12])
+                            nav.ion[0,k]=self.flt(line[5+k*12:5+(k+1)*12])
                     if line[0:4]=='GPSB' or line[0:4]=='QZSB':
                         for k in range(4):
-                            nav.ion[1,k]=float(line[5+k*12:5+(k+1)*12])
+                            nav.ion[1,k]=self.flt(line[5+k*12:5+(k+1)*12])
         
             for line in fnav:
                 if line[0] not in self.gnss_tbl:

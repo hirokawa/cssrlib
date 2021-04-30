@@ -23,25 +23,30 @@ def rescode(itr,obs,nav,rs,dts,svh,x):
     pos=ecef2pos(rr)
     v=np.zeros(n)
     H=np.zeros((n,NX))
-    az=np.zeros(n)
-    el=np.zeros(n)    
+    azv=np.zeros(n)
+    elv=np.zeros(n)    
     for i in range(n):
         sys,prn=sat2prn(obs.sat[i])
         if np.linalg.norm(rs[i,:])<rCST.RE_WGS84:
             continue
         r,e=geodist(rs[i,:],rr)
-        az[i],el[i]=satazel(pos,e)
-        if el[i]<np.deg2rad(ELMIN):
+        az,el=satazel(pos,e)
+        if el<np.deg2rad(ELMIN):
             continue
         eph=findeph(nav.eph,obs.t,obs.sat[i])
         P=obs.P[i,0]-eph.tgd*rCST.CLIGHT
-        dion=ionmodel(obs.t,pos,az[i],el[i],nav.ion)
-        dtrp=tropmodel(obs.t,pos,el[i])
+        dion=ionmodel(obs.t,pos,az,el,nav.ion)
+        dtrp=tropmodel(obs.t,pos,el)
         v[nv]=P-(r+dtr-rCST.CLIGHT*dts[i]+dion+dtrp)
         H[nv,0:3]=-e;H[nv,3]=1
+        azv[nv]=az
+        elv[nv]=el
         nv+=1
-
-    return v,H,nv,az,el
+    v=v[0:nv]
+    H=H[0:nv,:]
+    azv=azv[0:nv]
+    elv=elv[0:nv]       
+    return v,H,nv,azv,elv
 
 def estpos(obs,nav,rs,dts,svh,rr):
     sol=[]
@@ -76,7 +81,7 @@ def pntpos(obs,nav,rr):
 if __name__ == '__main__':    
     bdir='C:/work/gps/cssrlib/data/'
 
-    xyz_ref=[-3962108.6754,   3381309.5308,   3668678.6346]
+    xyz_ref=[-3962108.673,   3381309.574,   3668678.638]
     pos_ref=ecef2pos(xyz_ref)
     # array([ 0.61678759,  2.43512131, 65.68861245])
     # [ 35.33932589, 139.52217351, 65.68861245]
@@ -95,6 +100,7 @@ if __name__ == '__main__':
     enu=np.zeros((nep,3))
     sol=np.zeros((nep,4))
     dop=np.zeros((nep,4))
+    nsat=np.zeros(nep,dtype=int)
     if dec.decode_obsh(obsfile)>=0:
         rr=dec.pos
         pos=ecef2pos(rr)
@@ -107,6 +113,7 @@ if __name__ == '__main__':
             sol[ne,:],az,el=pntpos(obs,nav,rr)
             dop[ne,:]=dops(az,el)
             enu[ne,:]=ecef2enu(pos_ref,sol[ne,0:3]-xyz_ref)
+            nsat[ne]=len(el)
         dec.fobs.close()
     
     plt.plot(t,enu)
