@@ -6,7 +6,7 @@ Created on Mon Nov 23 20:10:51 2020
 """
 
 from enum import IntEnum,Enum
-from math import floor
+from math import floor,sin,cos,sqrt,asin,atan2
 import numpy as np
 from copy import deepcopy
 from scipy.interpolate import interp1d
@@ -115,7 +115,7 @@ def epoch2time(ep):
 
 def gpst2utc(tgps,leaps=-18):
     #tutc=tgps+dt.timedelta(seconds=leaps(tgps))
-    tutc=tgps+leaps
+    tutc=timeadd(tgps,leaps)
     return tutc
 
 def timeadd(t:gtime_t,sec):
@@ -219,6 +219,9 @@ def sat2id(sat):
     id='%s%02d' %(gnss_tbl[sys],prn)
     return id
 
+def vnorm(r):
+    return r/np.linalg.norm(r)
+
 def geodist(rs,rr):
     e=rs-rr
     r=np.linalg.norm(e)
@@ -243,9 +246,9 @@ def dops(az,el,elmin=0):
     for i in range(nm):
         if el[i]<elmin:
             continue
-        cel=np.cos(el[i]);sel=np.sin(el[i])
-        H[n,0]=cel*np.sin(az[i])
-        H[n,1]=cel*np.cos(az[i])
+        cel=cos(el[i]);sel=sin(el[i])
+        H[n,0]=cel*sin(az[i])
+        H[n,1]=cel*cos(az[i])
         H[n,2]=sel
         H[n,3]=1
         n+=1
@@ -261,8 +264,8 @@ def dops(az,el,elmin=0):
 
 
 def xyz2enu(pos):
-    sp=np.sin(pos[0]);cp=np.cos(pos[0]);
-    sl=np.sin(pos[1]);cl=np.cos(pos[1]);
+    sp=sin(pos[0]);cp=cos(pos[0]);
+    sl=sin(pos[1]);cl=cos(pos[1]);
     E=np.array([[-sl,cl,0],
                 [-sp*cl,-sp*sl,cp],
                 [cp*cl,cp*sl,sp]])
@@ -286,10 +289,10 @@ def ecef2pos(r):
     return pos
 
 def pos2ecef(pos):
-    s_p=np.sin(pos[0]);c_p=np.cos(pos[0])
-    s_l=np.sin(pos[1]);c_l=np.cos(pos[1])
+    s_p=sin(pos[0]);c_p=cos(pos[0])
+    s_l=sin(pos[1]);c_l=cos(pos[1])
     e2=rCST.FE_WGS84*(2.0-rCST.FE_WGS84)
-    v=rCST.RE_WGS84/np.sqrt(1.0-e2*s_p**2)
+    v=rCST.RE_WGS84/sqrt(1.0-e2*s_p**2)
     r=np.array([(v+pos[2])*c_p*c_l,
                 (v+pos[2])*c_p*s_l,
                 (v*(1.0-e2)+pos[2])*s_p])
@@ -297,21 +300,21 @@ def pos2ecef(pos):
 
 def ecef2enu(pos,r):
     E=xyz2enu(pos)
-    e=np.dot(E,r)
+    e=E@r
     return e
 
 def satazel(pos,e):
     enu=ecef2enu(pos,e)
-    az=np.arctan2(enu[0],enu[1])
-    el=np.arcsin(enu[2])
+    az=atan2(enu[0],enu[1])
+    el=asin(enu[2])
     return az,el
 
 def ionmodel(t,pos,az,el,ion=None):
     psi=0.0137/(el/np.pi+0.11)-0.022
-    phi=pos[0]/np.pi+psi*np.cos(az)
+    phi=pos[0]/np.pi+psi*cos(az)
     phi=np.max((-0.416,np.min((0.416,phi))))
-    lam=pos[1]/np.pi+psi*np.sin(az)/np.cos(phi*np.pi)
-    phi+=0.064*np.cos((lam-1.617)*np.pi)
+    lam=pos[1]/np.pi+psi*sin(az)/cos(phi*np.pi)
+    phi+=0.064*cos((lam-1.617)*np.pi)
     week,tow=time2gpst(t)
     tt=43200.0*lam+tow # local time
     tt-=np.floor(tt/86400)*86400
@@ -341,6 +344,17 @@ def interpc(coef,lat):
     d=lat/15.0-i
     return coef[:,i-1]*(1.0-d)+coef[:,i]*d
 
+def antmodel(nav,el=0,nf=2):
+    sE=sin(el)
+    za=90-np.rad2deg(el)
+    za_t=np.arange(0,90.1,5)
+    dant=np.zeros(nf)
+    for f in range(nf):
+        pcv=np.interp(za,za_t,nav.ant_pcv[f])
+        pco=-nav.ant_pco[f]*sE
+        dant[f]=(pco+pcv)*1e-3
+    return dant        
+    
 def mapf(el,a,b,c):
     sinel=np.sin(el)
     return (1.0+a/(1.0+b/(1.0+c)))/(sinel+(a/(sinel+b/(sinel+c))))
@@ -374,7 +388,7 @@ def tropmapf(t,pos,el):
     mapfw=mapf(el,aw[0],aw[1],aw[2])
     return mapfh,mapfw
 
-def tropmodel(t,pos,el,humi=0.7):
+def tropmodel(t,pos,el=np.pi/2,humi=0.7):
     hgt=pos[2]
     
     # standard atmosphere
@@ -385,7 +399,7 @@ def tropmodel(t,pos,el,humi=0.7):
     z=np.pi/2.0-el
     trop_hs=0.0022768*pres/(1.0-0.00266*np.cos(2*pos[0])-0.00028e-3*hgt)
     trop_wet=0.002277*(1255.0/temp+0.05)*e
-    return (trop_hs+trop_wet)/np.cos(z)   
+    return trop_hs,trop_wet,z
 
 if __name__ == '__main__':
     t=epoch2time([2021,3,19,12,0,0])

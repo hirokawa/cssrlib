@@ -36,7 +36,8 @@ def rescode(itr,obs,nav,rs,dts,svh,x):
         eph=findeph(nav.eph,obs.t,obs.sat[i])
         P=obs.P[i,0]-eph.tgd*rCST.CLIGHT
         dion=ionmodel(obs.t,pos,az,el,nav.ion)
-        dtrp=tropmodel(obs.t,pos,el)
+        trop_hs,trop_wet,z=tropmodel(obs.t,pos,el)
+        dtrp=(trop_hs+trop_wet)/np.cos(z)
         v[nv]=P-(r+dtr-rCST.CLIGHT*dts[i]+dion+dtrp)
         H[nv,0:3]=-e;H[nv,3]=1
         azv[nv]=az

@@ -88,6 +88,7 @@ def ddres(nav,x,y,e,sat,el):
     _c=gn.rCST.CLIGHT
     nf=nav.nf
     ns=len(el)
+    mode=1 if len(y)==ns else 0 # 0:DD,1:SD
 #    posu=gn.ecef2pos(x)
 #    posr=gn.ecef2pos(nav.rb)
     nb=np.zeros(2*4*2+2,dtype=int)
@@ -99,7 +100,8 @@ def ddres(nav,x,y,e,sat,el):
     v=np.zeros(ns*nf*2)
     idx_f=[0,1]
     for m,sys in enumerate(nav.gnss_t):
-        idx_f[1]=2 if sys==gn.uGNSS.GAL else 1
+        for f in range(nf):
+            idx_f[f]=nav.obs_idx[f][sys]
         for f in range(0,nf*2):
             if f<nf:
                 freq=nav.freq[idx_f[f]]
@@ -110,7 +112,10 @@ def ddres(nav,x,y,e,sat,el):
                 if i==j:
                     continue
                 ## DD residual
-                v[nv]=(y[i,f]-y[i+ns,f])-(y[j,f]-y[j+ns,f])
+                if mode==0:
+                    v[nv]=(y[i,f]-y[i+ns,f])-(y[j,f]-y[j+ns,f])
+                else:
+                    v[nv]=y[i,f]-y[j,f]                    
                 H[nv,0:3]=-e[i,:]+e[j,:]
                 if f<nf: # carrier
                     idx_i=IB(sat[i],f)
@@ -196,7 +201,7 @@ def restamb(nav,bias,nb):
                 nv+=1
     return xa
 
-def resamb_lambda(nav,bias):
+def resamb_lambda(nav):
     nx=nav.nx;na=nav.na
     ix=ddidx(nav)
     nb=len(ix)
@@ -282,7 +287,7 @@ def rtkinit(nav,pos0=np.zeros(3)):
         nav.q[3:6]=nav.sig_qv**2 
     # obs index
     i0={gn.uGNSS.GPS:0,gn.uGNSS.GAL:0,gn.uGNSS.QZS:0}
-    i1={gn.uGNSS.GPS:1,gn.uGNSS.GAL:2,gn.uGNSS.QZS:2}
+    i1={gn.uGNSS.GPS:1,gn.uGNSS.GAL:2,gn.uGNSS.QZS:1}
     freq0={gn.uGNSS.GPS:nav.freq[0],gn.uGNSS.GAL:nav.freq[0],gn.uGNSS.QZS:nav.freq[0]}
     freq1={gn.uGNSS.GPS:nav.freq[1],gn.uGNSS.GAL:nav.freq[2],gn.uGNSS.QZS:nav.freq[1]}
     nav.obs_idx=[i0,i1]
@@ -403,7 +408,6 @@ def relpos(nav,obs,obsb):
     
     xa=np.zeros(nav.nx)
     xp=nav.x.copy()
-    bias=np.zeros(nav.nx)
 
     # non-differencial residual for rover 
     yu,eu,el=zdres(nav,obs,rs,dts,xp[0:3])
@@ -430,7 +434,7 @@ def relpos(nav,obs,obsb):
             nav.x=xp
             nav.P=Pp
     
-    nb,xa=resamb_lambda(nav,bias)
+    nb,xa=resamb_lambda(nav)
     if nb>0:
         yu,eu,elr=zdres(nav,obs,rs,dts,xa[0:3])
         y[:ns,:]=yu[iu,:]

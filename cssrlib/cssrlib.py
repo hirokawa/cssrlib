@@ -20,28 +20,29 @@ class sCSSR(IntEnum):
     GRID=9;SI=10;COMBINED=11;ATMOS=12
 
 class sSigGPS(IntEnum):
-    L1CA=0;L1P=1;L1W=2;L1CD=3;L1CP=4
-    L1X=5;L2CM=6;L2CL=7;L2X=8;L2P=9
+    L1C=0;L1P=1;L1W=2;L1S=3;L1L=4
+    L1X=5;L2S=6;L2L=7;L2X=8;L2P=9
     L2W=10;L5I=11;L5Q=12;L5X=13
 
 class sSigGLO(IntEnum):
-    G1CA=0;G1P=1;G2CA=2;G2P=3;G1AD=4
-    G1AP=5;G1AX=6;G2AI=7;G2AQ=8;G2AX=9
-    G3I=10;G3Q=11;G3X=12
+    L1C=0;L1P=1;L2C=2;L2P=3;L4A=4
+    L4B=5;L4X=6;L6A=7;L6B=8;L6X=9
+    L3I=10;L3Q=11;L3X=12
 
 class sSigGAL(IntEnum):
-    E1B=0;E1C=1;E1X=2;E5AI=3;E5AQ=4
-    E5AX=5;E5BI=6;E5BQ=7;E5BX=8;E5I=9
-    E5Q=10;E5X=11
+    L1B=0;L1C=1;L1X=2;L5I=3;L5Q=4
+    L5X=5;L7I=6;L7Q=7;L7X=8;L8I=9
+    L8Q=10;L8X=11;L6B=12;L6C=13;L6X=14
 
 class sSigBDS(IntEnum):
-    B1I=0;B1Q=1;B1X=2;B3I=3;B3Q=4
-    B3X=5;B2I=6;B2Q=7;B2X=8;
+    L2I=0;L2Q=1;L2X=2;L6I=3;L6Q=4
+    L6X=5;L7I=6;L7Q=7;L7X=8;L1D=9
+    L1P=10;L1X=11;L5D=12;L5P=13;L5X=14
 
 class sSigQZS(IntEnum):
-    L1CA=0;L1CD=1;L1CP=2
-    L1X=3;L2CM=4;L2CL=5;L2X=6
-    L5I=7;L5Q=8;L5X=9
+    L1C=0;L1S=1;L1L=2;L1X=3;L2S=4
+    L2L=5;L2X=6;L5I=7;L5Q=8;L5X=9
+    L6D=10;L6P=11;L6E=12
 
 class sSigSBS(IntEnum):
     L1CA=0;L5I=1;L5Q=2;L5X=3
@@ -129,12 +130,20 @@ class cssr:
         sys=tbl[gnss]        
         return sys
 
-    def decode_mask(self,din,bitlen):
+    def decode_local_sat(self,netmask):
+        sat=[]
+        for k in range(self.nsat_n):
+            if not self.isset(netmask,self.nsat_n,k):
+                continue
+            sat.append(self.sat_n[k])
+        return sat
+
+    def decode_mask(self,din,bitlen,ofst=1):
         v=[]
         n=0
         for k in range(0,bitlen):
             if (din & 1<<(bitlen-k-1)):
-                v.append(k+1)
+                v.append(k+ofst)
                 n+=1
         return (v,n)
 
@@ -172,7 +181,7 @@ class cssr:
             sys=self.gnss2sys(v['gnssid'])
             i+=61
             prn,nsat=self.decode_mask(v['svmask'],40)
-            sig,nsig=self.decode_mask(v['sigmask'],16)
+            sig,nsig=self.decode_mask(v['sigmask'],16,0)
             self.nsat_n+=nsat
             if v['cma']==1:
                 vc=bs.unpack_from(('u'+str(nsig))*nsat,msg,i) 
@@ -187,10 +196,11 @@ class cssr:
                 self.sys_n.append(sys)
                 self.sat_n.append(sat)
                 if v['cma']==1:
-                    sig_s,nsig_s=self.decode_mask(vc[k],nsig)
+                    sig_s,nsig_s=self.decode_mask(vc[k],nsig,0)
+                    sig_n=[sig[i] for i in sig_s]
                     self.nsig_n.append(nsig_s)
                     self.nsig_total=self.nsig_total+nsig_s
-                    self.sig_n.append(sig_s)
+                    self.sig_n.append(sig_n)
                 else:
                     self.nsig_n.append(nsig)
                     self.nsig_total=self.nsig_total+nsig
@@ -274,33 +284,29 @@ class cssr:
 
     def decode_cssr_bias(self,msg,i,inet=0):
         """decode MT4073,6 Bias Correction message """
+        nsat=self.nsat_n
         head,i=self.decode_head(msg,i)        
         if self.iodssr!=head['iodssr']:
             return -1
         dfm = bs.unpack_from_dict('b1b1b1',['cb','pb','net'],msg,i)
         self.flg_net=dfm['net']
         i+=3 
-        if dfm['net']==True:
-            v=bs.unpack_from_dict('u5u'+str(self.nsat_n),['inet','svmaskn'],msg,i)
+        if dfm['net']:
+            v=bs.unpack_from_dict('u5u'+str(nsat),['inet','svmaskn'],msg,i)
             self.inet=inet=v['inet']
-            i+=5+self.nsat_n
-            loc,nsat_l=self.decode_mask(v['svmaskn'],self.nsat_n)
-            nsig_l = []
-            for k in range(0,nsat_l):
-                nsig_l.append(self.nsig_n[loc[k]-1])
-        else:
-            nsat_l = self.nsat_n
-            nsig_l = self.nsig_n
+            i+=5+nsat
             
-        if dfm['cb']==True:
-            self.lc[inet].cbias = np.zeros((nsat_l,self.nsig_max))
-        if dfm['pb']==True:
-            self.lc[inet].pbias = np.zeros((nsat_l,self.nsig_max))
-        for k in range(0,nsat_l):
-            for j in range(0,nsig_l[k]):
-                if dfm['cb']==True:
+        if dfm['cb']:
+            self.lc[inet].cbias = np.zeros((nsat,self.nsig_max))
+        if dfm['pb']:
+            self.lc[inet].pbias = np.zeros((nsat,self.nsig_max))
+        for k in range(nsat):
+            if not self.isset(v['svmaskn'],nsat,k):
+                continue
+            for j in range(self.nsig_n[k]):
+                if dfm['cb']:
                     i=self.decode_cbias_sat(msg,i,k,j,inet)
-                if dfm['pb']==True:
+                if dfm['pb']:
                     i=self.decode_pbias_sat(msg,i,k,j,inet)
         return i 
 
@@ -349,7 +355,7 @@ class cssr:
         i+=7+self.nsat_n
         self.lc[inet].stec_quality=np.zeros(self.nsat_n)
         self.lc[inet].ci=np.zeros((self.nsat_n,6))
-        for k in range(0,self.nsat_n):
+        for k in range(self.nsat_n):
             if not self.isset(netmask,self.nsat_n,k):
                 continue
             v=bs.unpack_from_dict('u3u3',['class','val'],msg,i)

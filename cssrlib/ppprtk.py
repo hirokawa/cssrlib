@@ -7,13 +7,13 @@ Created on Sun Nov 15 20:03:45 2020
 
 import numpy as np
 import gnss as gn
-from gnss import rCST,sat2prn,time2gpst,ecef2pos,geodist,satazel,ionmodel,tropmodel,dops,ecef2enu,Nav,timediff
+from gnss import rCST,sat2prn,time2gpst,ecef2pos,geodist,satazel,ionmodel,tropmodel,dops,ecef2enu,Nav,timediff,vnorm,antmodel
 from ephemeris import findeph,satposs
 from rinex import rnxdec    
 import matplotlib.pyplot as plt
-from cssrlib.cssrlib import cssr
-
-from rtk import IB,zdres,ddres,kfupdate,resamb_lambda,valpos,holdamb
+from cssrlib.cssrlib import cssr,sSigGPS,sSigGAL,sSigQZS
+from ppp import tidedisp,shapiro,windupcorr
+from rtk import IB,ddres,kfupdate,resamb_lambda,valpos,holdamb
 
 MAXITR=10
 ELMIN=10
@@ -39,6 +39,8 @@ def rtkinit(nav,pos0=np.zeros(3)):
     nav.sig_n0 = 30.0
     nav.sig_qp=0.1
     nav.sig_qv=0.01
+    nav.tidecorr=True
+    nav.phw=np.zeros(gn.uGNSS.MAXSAT)
     #
     nav.x[0:3]=pos0
     di = np.diag_indices(6)
@@ -50,11 +52,23 @@ def rtkinit(nav,pos0=np.zeros(3)):
         nav.q[3:6]=nav.sig_qv**2 
     # obs index
     i0={gn.uGNSS.GPS:0,gn.uGNSS.GAL:0,gn.uGNSS.QZS:0}
-    i1={gn.uGNSS.GPS:1,gn.uGNSS.GAL:2,gn.uGNSS.QZS:2}
+    i1={gn.uGNSS.GPS:1,gn.uGNSS.GAL:2,gn.uGNSS.QZS:1}
     freq0={gn.uGNSS.GPS:nav.freq[0],gn.uGNSS.GAL:nav.freq[0],gn.uGNSS.QZS:nav.freq[0]}
     freq1={gn.uGNSS.GPS:nav.freq[1],gn.uGNSS.GAL:nav.freq[2],gn.uGNSS.QZS:nav.freq[1]}
     nav.obs_idx=[i0,i1]
     nav.obs_freq=[freq0,freq1]
+    nav.cs_sig_idx={gn.uGNSS.GPS:[sSigGPS.L1C,sSigGPS.L2W],
+                    gn.uGNSS.GAL:[sSigGAL.L1X,sSigGAL.L5X],
+                    gn.uGNSS.QZS:[sSigQZS.L1C,sSigQZS.L2X]
+                    }
+    # antenna type: TRM59800.80     NONE [mm] 0:5:90 [deg]
+    nav.ant_pcv=[[+0.00,-0.22,-0.86,-1.87,-3.17,-4.62,-6.03,-7.21,-7.98,
+                  -8.26,-8.02,-7.32,-6.20,-4.65,-2.54,+0.37,+4.34,+9.45,+15.42],
+                 [+0.00,-0.14,-0.53,-1.13,-1.89,-2.74,-3.62,-4.43,-5.07,
+                  -5.40,-5.32,-4.79,-3.84,-2.56,-1.02,+0.84,+3.24,+6.51,+10.84],
+                 [+0.00,-0.14,-0.53,-1.13,-1.89,-2.74,-3.62,-4.43,-5.07,
+                  -5.40,-5.32,-4.79,-3.84,-2.56,-1.02,+0.84,+3.24,+6.51,+10.84]]
+    nav.ant_pco=[+89.51,+117.13,+117.13]
 
 def rescode(itr,obs,nav,rs,dts,svh,x):
     nv=0
@@ -138,45 +152,116 @@ def udstate_ppp(nav,obs):
             nav.P[j,j]=nav.sig_n0**2
     return 0
 
-
-
-def relpos(nav,obs,cs):
+def zdres(nav,obs,rs,vs,dts,rr,cs):
+    """ non-differencial residual """
+    _c=gn.rCST.CLIGHT
     nf=nav.nf
-    ns=len(obs.sat)
-
-    rs,vs,dts,svh=satposs(obs,nav,cs)
-    #rsb,vsb,dtsb,svhb=satposs(obsb,nav)
-    
-    # non-differencial residual for base 
-    #yr,er,el=zdres(nav,obsb,rsb,dtsb,nav.rb)
-    
-    #ns,iu,ir=selsat(nav,obs,obsb,el)
-        
-    #y[ns:,:]=yr[ir,:]
-    #e[ns:,]=er[ir,:]
-    
-    # Kalman filter time propagation
-    udstate_ppp(nav,obs)
-    
-    pos=gn.ecef2pos(nav.x[0:3])
+    n=len(obs.P)
+    y=np.zeros((n,nf*2))
+    el=np.zeros(n)
+    e=np.zeros((n,3))
+    rr_=rr.copy()
+    if nav.tidecorr:
+        pos=gn.ecef2pos(rr_)
+        disp=tidedisp(gn.gpst2utc(obs.t),pos)
+        rr_+=disp
+    pos=gn.ecef2pos(rr_)
     
     inet=cs.find_grid_index(pos)
     dlat,dlon=cs.get_dpos(pos)
     trph,trpw=cs.get_trop(dlat,dlon)
-    stec=cs.get_stec(dlat,dlon)
     
+    trop_hs,trop_wet,z=tropmodel(t,pos)
+    trop_hs0,trop_wet0,z=tropmodel(t,[pos[0],pos[1],0])
+    r_hs=trop_hs/trop_hs0;r_wet=trop_wet/trop_wet0  
+    
+    stec=cs.get_stec(dlat,dlon)
+    sat_n=cs.decode_local_sat(cs.lc[inet].netmask)
+    
+    for i in range(n):
+        sat=obs.sat[i]
+        sys,prn=gn.sat2prn(sat)
+        if sys not in nav.gnss_t or sat in nav.excl_sat or sat not in sat_n:
+            continue
+        idx_n=np.where(cs.sat_n==sat)[0][0]
+        kidx=[-1]*nav.nf;nsig=0
+        for k,sig in enumerate(cs.sig_n[idx_n]):
+            for f in range(nav.nf):
+                if sig==nav.cs_sig_idx[sys][f]:
+                    kidx[f]=k;nsig+=1               
+        if nsig<nav.nf:      
+            continue
+
+        r,e[i,:]=gn.geodist(rs[i,:],rr_)
+        az,el[i]=gn.satazel(pos,e[i,:])
+        if el[i]<nav.elmin:
+            continue
+
+        freq=np.zeros(nav.nf)
+        lam=np.zeros(nav.nf)
+        iono=np.zeros(nav.nf)
+        for f in range(nav.nf):
+            freq[f]=nav.obs_freq[f][sys]
+            lam[f]=gn.rCST.CLIGHT/freq[f]
+            iono[f]=40.3e16/(freq[f]*freq[f])*stec[idx_n]
+        
+        # global/local signal bias
+        cbias=np.zeros(nav.nf)
+        pbias=np.zeros(nav.nf)
+        
+        if cs.lc[0].cbias is not None:        
+            cbias+=cs.lc[0].cbias[idx_n][kidx]
+        if cs.lc[0].pbias is not None:
+            pbias+=cs.lc[0].pbias[idx_n][kidx]
+        if cs.lc[inet].cbias is not None:
+            cbias+=cs.lc[inet].cbias[idx_n][kidx]
+        if cs.lc[inet].pbias is not None:
+            pbias+=cs.lc[inet].pbias[idx_n][kidx]
+        
+        # relativity effect
+        relatv=shapiro(rs[i,:],rr_)
+
+        # tropospheric delay                
+        mapfh,mapfw=gn.tropmapf(obs.t,pos,el[i])
+        trop=mapfh*trph*r_hs+mapfw*trpw*r_wet
+        
+        # phase wind-up effect    
+        nav.phw[sat-1]=windupcorr(obs.t,rs[i,:],vs[i,:],rr_,nav.phw[sat-1])
+        phw=lam*nav.phw[sat-1]
+        
+        antr=antmodel(nav,el[i],nav.nf)
+        
+        prc=trop+relatv+antr+iono+cbias
+        cpc=trop+relatv+antr-iono+pbias+phw
+        
+        r+=-_c*dts[i]
+        
+        for f in range(nav.nf):
+            k=nav.obs_idx[f][sys]
+            y[i,f]=obs.L[i,k]*lam[f]-(r+cpc[f])
+            y[i,f+nav.nf]=obs.P[i,k]-(r+prc[f])
+
+        if sys==gn.uGNSS.QZS:
+            print(k)
+
+    return y,e,el
+
+def relpos(nav,obs,cs):
+    rs,vs,dts,svh=satposs(obs,nav,cs)
+    
+    # Kalman filter time propagation
+    udstate_ppp(nav,obs)
+        
     xa=np.zeros(nav.nx)
     xp=nav.x.copy()
-    bias=np.zeros(nav.nx)
 
     # non-differencial residual for rover 
-    y,e,el=zdres(nav,obs,rs,dts,xp[0:3])
-    
-    
-    #y[:ns,:]=yu[iu,:]
-    #e[:ns,:]=eu[iu,:]
-    #el = el[iu]
-    sat=obs.sat
+    yu,eu,elu=zdres(nav,obs,rs,vs,dts,xp[0:3],cs)
+    iu=np.where(elu>0)[0]
+    sat=obs.sat[iu]
+    y=yu[iu,:]
+    e=eu[iu,:]
+    el=elu[iu]
     # DD residual
     v,H,R=ddres(nav,xp,y,e,sat,el)
     Pp=nav.P.copy()
@@ -186,41 +271,25 @@ def relpos(nav,obs,cs):
     
     if True:
         # non-differencial residual for rover after measurement update
-        yu,eu,elr=zdres(nav,obs,rs,dts,xp[0:3])
-        y[:ns,:]=yu[:,:]
-        e[:ns,:]=eu[:,:]
+        yu,eu,elu=zdres(nav,obs,rs,vs,dts,xp[0:3],cs)
+        y=yu[iu,:]
+        e=eu[iu,:]
         # reisdual for float solution
         v,H,R=ddres(nav,xp,y,e,sat,el)
         if valpos(nav,v,R):
             nav.x=xp
             nav.P=Pp
     
-    nb,xa=resamb_lambda(nav,bias)
+    nb,xa=resamb_lambda(nav)
     if nb>0:
-        yu,eu,elr=zdres(nav,obs,rs,dts,xa[0:3])
-        y[:ns,:]=yu[:,:]
-        e[:ns,:]=eu[:,:]
+        yu,eu,elu=zdres(nav,obs,rs,vs,dts,xa[0:3],cs)
+        y=yu[iu,:]
+        e=eu[iu,:]
         v,H,R=ddres(nav,xa,y,e,sat,el)
         if valpos(nav,v,R):
             holdamb(nav,xa)
     
     return 0
-
-def estpos(obs,nav,rs,dts,svh,rr):
-    x=np.zeros(NX)
-    dx=np.zeros(NX)  
-    x[0:3]=rr
-    
-    for itr in range(MAXITR):
-        v,H,nv,az,el=rescode(itr,obs,nav,rs,dts,svh,x)
-        if itr==0:
-            x[3]=np.mean(v)
-            v-=x[3]
-        dx=np.linalg.lstsq(H,v,rcond=None)[0]
-        x+=dx
-        if np.linalg.norm(dx)<1e-4:
-            break
-    return x,az,el
 
 if __name__ == '__main__':
     bdir='../data/'
