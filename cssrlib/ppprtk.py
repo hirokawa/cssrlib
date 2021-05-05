@@ -32,8 +32,9 @@ def rtkinit(nav,pos0=np.zeros(3)):
     nav.xa=np.zeros(nav.na)
     nav.Pa=np.zeros((nav.na,nav.na))
     nav.nfix=nav.neb=0
-    nav.eratio=[100,100]
-    nav.err=[0,0.003,0.003]
+    nav.eratio=[50,50]
+    #nav.err=[0,0.003,0.003]
+    nav.err=[100,0.00707,0.00354]
     nav.sig_p0 = 30.0
     nav.sig_v0 = 10.0
     nav.sig_n0 = 30.0
@@ -236,10 +237,10 @@ def zdres(nav,obs,rs,vs,dts,rr,cs):
         
         r+=-_c*dts[i]
         
-        for f in range(nav.nf):
+        for f in range(nf):
             k=nav.obs_idx[f][sys]
             y[i,f]=obs.L[i,k]*lam[f]-(r+cpc[f])
-            y[i,f+nav.nf]=obs.P[i,k]-(r+prc[f])
+            y[i,f+nf]=obs.P[i,k]-(r+prc[f])
 
         if sys==gn.uGNSS.QZS:
             print(k)
@@ -280,7 +281,7 @@ def relpos(nav,obs,cs):
             nav.x=xp
             nav.P=Pp
     
-    nb,xa=resamb_lambda(nav)
+    nb,xa=resamb_lambda(nav,sat)
     if nb>0:
         yu,eu,elu=zdres(nav,obs,rs,vs,dts,xa[0:3],cs)
         y=yu[iu,:]

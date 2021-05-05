@@ -123,10 +123,15 @@ def ddres(nav,x,y,e,sat,el):
                     lami=_c/freq
                     v[nv]-=lami*(x[idx_i]-x[idx_j])
                     H[nv,idx_i]=lami
-                    H[nv,idx_j]=-lami
-                Ri[nv]=varerr(nav,sat[i],sys,el[i],f)
-                Rj[nv]=varerr(nav,sat[j],sys,el[j],f)
-                
+                    H[nv,idx_j]=-lami                    
+                    Ri[nv]=varerr(nav,sat[i],sys,el[i],f)
+                    Rj[nv]=varerr(nav,sat[j],sys,el[j],f)
+                    if f==1:
+                        Ri[nv]*=(2.55/1.55)**2
+                        Rj[nv]*=(2.55/1.55)**2
+                else:
+                    Ri[nv]=varerr(nav,sat[i],sys,el[i],f)
+                    Rj[nv]=varerr(nav,sat[j],sys,el[j],f)                    
                 nb[b]+=1
                 nv+=1
             b+=1
@@ -146,7 +151,7 @@ def valpos(nav,v,R,thres=4.0):
         print("%i is large : %f"%(i,v[i]))
     return True
 
-def ddidx(nav):
+def ddidx(nav,sat):
     """ index for SD to DD transformation matrix D """
     nb=0
     n=gn.uGNSS.MAXSAT
@@ -157,18 +162,20 @@ def ddidx(nav):
         k=na
         for f in range(nav.nf):
             for i in range(k,k+n):
-                sys,prn=gn.sat2prn(i-k+1)
+                sat_i=i-k+1
+                sys,prn=gn.sat2prn(sat_i)
                 if (sys!=m) or sys not in nav.gnss_t:
                     continue
-                if nav.x[i]==0.0:
+                if sat_i not in sat or nav.x[i]==0.0:
                     continue
                 nav.fix[i-k,f]=2
                 break
             for j in range(k,k+n):
-                sys,prn=gn.sat2prn(j-k+1)
+                sat_j=j-k+1
+                sys,prn=gn.sat2prn(sat_j)
                 if (sys!=m) or sys not in nav.gnss_t:
                     continue
-                if i==j or nav.x[j]==0.0:
+                if i==j or sat_j not in sat or nav.x[j]==0.0:
                     continue
                 ix[nb,:]=[i,j]
                 nb+=1
@@ -201,9 +208,10 @@ def restamb(nav,bias,nb):
                 nv+=1
     return xa
 
-def resamb_lambda(nav):
+def resamb_lambda(nav,sat):
     nx=nav.nx;na=nav.na
-    ix=ddidx(nav)
+    xa=np.zeros(na)
+    ix=ddidx(nav,sat)
     nb=len(ix)
     if nb<=0:
         print("no valid DD")
