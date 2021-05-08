@@ -60,8 +60,7 @@ def rtkinit(nav,pos0=np.zeros(3)):
     nav.obs_freq=[freq0,freq1]
     nav.cs_sig_idx={gn.uGNSS.GPS:[sSigGPS.L1C,sSigGPS.L2W],
                     gn.uGNSS.GAL:[sSigGAL.L1X,sSigGAL.L5X],
-                    gn.uGNSS.QZS:[sSigQZS.L1C,sSigQZS.L2X]
-                    }
+                    gn.uGNSS.QZS:[sSigQZS.L1C,sSigQZS.L2X]}
     # antenna type: TRM59800.80     NONE [mm] 0:5:90 [deg]
     nav.ant_pcv=[[+0.00,-0.22,-0.86,-1.87,-3.17,-4.62,-6.03,-7.21,-7.98,
                   -8.26,-8.02,-7.32,-6.20,-4.65,-2.54,+0.37,+4.34,+9.45,+15.42],

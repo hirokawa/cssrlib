@@ -94,7 +94,25 @@ class Nav():
         self.rb=[0,0,0] # base station position in ECEF [m]
         self.gnss_t=[uGNSS.GPS]
         #self.gnss_t=[uGNSS.GPS,uGNSS.GAL,uGNSS.QZS]
-    
+
+        # antenna type:  JAVAD RINGANT SCIT
+        self.ant_pcv=[[+0.00,-0.38,-1.46,-3.06,-4.94,-6.81,-8.45,-9.66,-10.31,-10.35,
+                      -9.77,-8.62,-6.97,-4.85,-2.22,+1.11,+5.45,+11.03,+17.84],
+                     [+0.00,-0.16,-0.60,-1.26,-2.06,-2.91,-3.77,-4.57,-5.21,-5.54,
+                      -5.43,-4.81,-3.69,-2.21,-0.46,+1.58,+4.16,+7.70,+12.53],
+                     [+0.00,-0.16,-0.60,-1.26,-2.06,-2.91,-3.77,-4.57,-5.21,-5.54,
+                      -5.43,-4.81,-3.69,-2.21,-0.46,+1.58,+4.16,+7.70,+12.53]]
+        self.ant_pco=[+85.44, +115.05, +115.05]
+        
+        # antenna type: TRM59800.80     NONE [mm] 0:5:90 [deg]
+        self.ant_pcv_b=[[+0.00,-0.22,-0.86,-1.87,-3.17,-4.62,-6.03,-7.21,-7.98,
+                      -8.26,-8.02,-7.32,-6.20,-4.65,-2.54,+0.37,+4.34,+9.45,+15.42],
+                     [+0.00,-0.14,-0.53,-1.13,-1.89,-2.74,-3.62,-4.43,-5.07,
+                      -5.40,-5.32,-4.79,-3.84,-2.56,-1.02,+0.84,+3.24,+6.51,+10.84],
+                     [+0.00,-0.14,-0.53,-1.13,-1.89,-2.74,-3.62,-4.43,-5.07,
+                      -5.40,-5.32,-4.79,-3.84,-2.56,-1.02,+0.84,+3.24,+6.51,+10.84]]
+        self.ant_pco_b=[+89.51,+117.13,+117.13]
+
 def leaps(tgps):
     return -18.0
 
@@ -344,14 +362,20 @@ def interpc(coef,lat):
     d=lat/15.0-i
     return coef[:,i-1]*(1.0-d)+coef[:,i]*d
 
-def antmodel(nav,el=0,nf=2):
+def antmodel(nav,el=0,nf=2,rtype=1):
     sE=sin(el)
     za=90-np.rad2deg(el)
     za_t=np.arange(0,90.1,5)
     dant=np.zeros(nf)
+    if rtype==1: # for rover
+        pcv_t=nav.ant_pcv
+        pco_t=nav.ant_pco
+    else: # for base
+        pcv_t=nav.ant_pcv_b
+        pco_t=nav.ant_pco_b
     for f in range(nf):
-        pcv=np.interp(za,za_t,nav.ant_pcv[f])
-        pco=-nav.ant_pco[f]*sE
+        pcv=np.interp(za,za_t,pcv_t[f])
+        pco=-pco_t[f]*sE
         dant[f]=(pco+pcv)*1e-3
     return dant        
     
@@ -402,10 +426,29 @@ def tropmodel(t,pos,el=np.pi/2,humi=0.7):
     return trop_hs,trop_wet,z
 
 if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    
     t=epoch2time([2021,3,19,12,0,0])
     ep=time2epoch(t)
     #t=gpst2time(2151,554726)
     week,tow=time2gpst(t)
     t1=timeadd(t,300)
     
+    nav=Nav()
         
+    el_t=np.arange(10,90)
+    nf=2
+    ofst_r=np.zeros((len(el_t),nf))
+    ofst_b=np.zeros((len(el_t),nf))
+    for k,el in enumerate(el_t):
+        ofst_r[k,:]=antmodel(nav,np.deg2rad(el),nf,1)
+        ofst_b[k,:]=antmodel(nav,np.deg2rad(el),nf,0)
+        
+    plt.figure()
+    plt.plot(el_t,ofst_b[:,0]*100,label='Trimble TRM59800.80')
+    plt.plot(el_t,ofst_r[:,0]*100,label='JAVAD RINGANT')
+    plt.grid()
+    plt.legend()
+    plt.xlabel('elevation[deg]')
+    plt.ylabel('range correction for antenna offset [cm]')
+    

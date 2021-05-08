@@ -15,7 +15,7 @@ from mlambda import mlambda
 
 VAR_HOLDAMB=0.001
 
-def zdres(nav,obs,rs,dts,rr):
+def zdres(nav,obs,rs,dts,rr,rtype=1):
     """ non-differencial residual """
     _c=gn.rCST.CLIGHT
     nf=nav.nf
@@ -38,15 +38,17 @@ def zdres(nav,obs,rs,dts,rr):
         if el[i]<nav.elmin:
             continue
         r+=-_c*dts[i]
-        zhd=gn.tropmodel(obs.t,pos,np.deg2rad(90.0),0.0)
+        zhd,zwd,z=gn.tropmodel(obs.t,pos,np.deg2rad(90.0),0.0)
         mapfh,mapfw=gn.tropmapf(obs.t,pos,el[i])
         r+=mapfh*zhd
         
-        j=2 if sys==gn.uGNSS.GAL else 1
-        y[i,0]=obs.L[i,0]*_c/nav.freq[0]-r
-        y[i,1]=obs.L[i,j]*_c/nav.freq[j]-r
-        y[i,2]=obs.P[i,0]-r
-        y[i,3]=obs.P[i,j]-r
+        dant=gn.antmodel(nav,el[i],nav.nf,rtype)
+        
+        for f in range(nf):
+            j=nav.obs_idx[f][sys]
+            y[i,f]=obs.L[i,j]*_c/nav.freq[f]-r-dant[f]
+            y[i,f+nf]=obs.P[i,j]-r-dant[f]
+
     return y,e,el
 
 def ddcov(nb,n,Ri,Rj,nv):
@@ -299,8 +301,8 @@ def rtkinit(nav,pos0=np.zeros(3)):
     freq0={gn.uGNSS.GPS:nav.freq[0],gn.uGNSS.GAL:nav.freq[0],gn.uGNSS.QZS:nav.freq[0]}
     freq1={gn.uGNSS.GPS:nav.freq[1],gn.uGNSS.GAL:nav.freq[2],gn.uGNSS.QZS:nav.freq[1]}
     nav.obs_idx=[i0,i1]
-    nav.obs_freq=[freq0,freq1]
-        
+    nav.obs_freq=[freq0,freq1]    
+    
 def udstate(nav,obs,obsb,iu,ir):
     tt=1.0
 
@@ -401,7 +403,7 @@ def relpos(nav,obs,obsb):
     rsb,vsb,dtsb,svhb=satposs(obsb,nav)
     
     # non-differencial residual for base 
-    yr,er,el=zdres(nav,obsb,rsb,dtsb,nav.rb)
+    yr,er,el=zdres(nav,obsb,rsb,dtsb,nav.rb,0)
     
     ns,iu,ir=selsat(nav,obs,obsb,el)
     
@@ -442,7 +444,7 @@ def relpos(nav,obs,obsb):
             nav.x=xp
             nav.P=Pp
     
-    nb,xa=resamb_lambda(nav)
+    nb,xa=resamb_lambda(nav,sat)
     if nb>0:
         yu,eu,elr=zdres(nav,obs,rs,dts,xa[0:3])
         y[:ns,:]=yu[iu,:]
