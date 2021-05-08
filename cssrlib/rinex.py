@@ -182,6 +182,7 @@ class rnxdec:
             obs.P=np.zeros((nsat,self.nf))
             obs.L=np.zeros((nsat,self.nf))
             obs.S=np.zeros((nsat,self.nf))
+            obs.lli=np.zeros((nsat,self.nf),dtype=int)
             obs.mag=np.zeros((nsat,self.nf))
             obs.sat=np.zeros(nsat,dtype=int)
             #print("%2d %2d %6.1f %2d" % (hour,minute,sec,nsat))
@@ -207,6 +208,8 @@ class rnxdec:
                         obs.P[k,ifreq]=float(obs_)
                     elif self.typeid[sys][i]==1: # carrier
                         obs.L[k,ifreq]=float(obs_)
+                        if line[16*i+17]=='1':
+                            obs.lli[k,ifreq]=1
                     elif self.typeid[sys][i]==2: # C/No
                         obs.S[k,ifreq]=float(obs_)
                     obs.data[k,ifreq*self.nf+self.typeid[sys][i]]=float(obs_)

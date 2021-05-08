@@ -46,7 +46,7 @@ def zdres(nav,obs,rs,dts,rr,rtype=1):
         
         for f in range(nf):
             j=nav.obs_idx[f][sys]
-            y[i,f]=obs.L[i,j]*_c/nav.freq[f]-r-dant[f]
+            y[i,f]=obs.L[i,j]*_c/nav.freq[j]-r-dant[f]
             y[i,f+nf]=obs.P[i,j]-r-dant[f]
 
     return y,e,el
@@ -120,8 +120,8 @@ def ddres(nav,x,y,e,sat,el):
                     v[nv]=y[i,f]-y[j,f]                    
                 H[nv,0:3]=-e[i,:]+e[j,:]
                 if f<nf: # carrier
-                    idx_i=IB(sat[i],f)
-                    idx_j=IB(sat[j],f)
+                    idx_i=IB(sat[i],f,nav.na)
+                    idx_j=IB(sat[j],f,nav.na)
                     lami=_c/freq
                     v[nv]-=lami*(x[idx_i]-x[idx_j])
                     H[nv,idx_i]=lami
@@ -159,7 +159,7 @@ def ddidx(nav,sat):
     n=gn.uGNSS.MAXSAT
     na=nav.na
     ix=np.zeros((n,2),dtype=int)
-    nav.fix=np.zeros((n,nav.nf))
+    nav.fix=np.zeros((n,nav.nf),dtype=int)
     for m in range(gn.uGNSS.GNSSMAX):
         k=na
         for f in range(nav.nf):
@@ -198,7 +198,7 @@ def restamb(nav,bias,nb):
             index=[]
             for i in range(gn.uGNSS.MAXSAT):
                 sys,prn=gn.sat2prn(i+1)
-                if sys!=m or nav.fix[i,f]!=2:
+                if sys!=m or (sys not in nav.gnss_t) or nav.fix[i,f]!=2:
                     continue
                 index.append(IB(i+1,f))
                 n+=1
@@ -325,6 +325,14 @@ def udstate(nav,obs,obsb,iu,ir):
         nav.P[0:na,0:na]=Px
     # bias
     for f in range(nav.nf):
+        # cycle slip check by LLI
+        for i in range(ns):
+            if sys[i] not in nav.gnss_t:
+                continue
+            j=nav.obs_idx[f][sys[i]]
+            if obsb.lli[ir[i],j]&1==0 and obs.lli[iu[i],j]&1==0:
+                continue
+            nav.x[IB(sat[i],f,nav.na)]=0
         bias=np.zeros(ns)
         offset=0
         na=0
@@ -379,9 +387,9 @@ def holdamb(nav,xa):
                 sys,prn=gn.sat2prn(i+1)
                 if sys!=m or nav.fix[i,f]!=2:
                     continue
-                index.append(IB(i+1,f))
+                index.append(IB(i+1,f,nav.na))
                 n+=1
-                nav.fix[i,f]==3 # hold
+                nav.fix[i,f]=3 # hold
             # constraint to fixed ambiguity
             for i in range(1,n):
                 v[nv]=(xa[index[0]]-xa[index[i]])-(nav.x[index[0]]-nav.x[index[i]])
@@ -479,7 +487,7 @@ if __name__ == '__main__':
     decb.decode_obsh(basefile)
     dec.decode_obsh(obsfile)
  
-    nep=60
+    nep=120
     #nep=10
     # GSI 3034 fujisawa
     nav.rb=[-3959400.631,3385704.533,3667523.111]
