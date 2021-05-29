@@ -14,10 +14,28 @@ import matplotlib.pyplot as plt
 from cssrlib.cssrlib import cssr,sSigGPS,sSigGAL,sSigQZS
 from ppp import tidedisp,shapiro,windupcorr
 from rtk import IB,ddres,kfupdate,resamb_lambda,valpos,holdamb
+from pntpos import pntpos
 
 MAXITR=10
 ELMIN=10
 NX=4
+
+def logmon(nav,sat,cs,iu=None):
+    week,tow=gn.time2gpst(obs.t)
+    if iu is None:
+        cpc=cs.cpc;prc=cs.prc
+    else:
+        cpc=cs.cpc[iu,:]
+        prc=cs.prc[iu,:]
+    if nav.loglevel>=2:
+        n = cpc.shape
+        for i in range(n[0]):
+            if cpc[i,0]==0 and cpc[i,1]==0:
+                continue
+            nav.fout.write("%6d\t%3d\t%8.3f\t%8.3f\t%8.3f\t%8.3f\t%2d\n" 
+                           % (tow,sat[i],cpc[i,0],cpc[i,1],prc[i,0],prc[i,1],cs.iodssr))
+    
+    return 0
 
 def rtkinit(nav,pos0=np.zeros(3)):
     nav.nf=2
@@ -32,8 +50,10 @@ def rtkinit(nav,pos0=np.zeros(3)):
     nav.xa=np.zeros(nav.na)
     nav.Pa=np.zeros((nav.na,nav.na))
     nav.nfix=nav.neb=0
+    nav.phw=np.zeros(gn.uGNSS.MAXSAT)
+    
+    # parameter for PPP-RTK
     nav.eratio=[50,50]
-    #nav.err=[0,0.003,0.003]
     nav.err=[100,0.00707,0.00354]
     nav.sig_p0 = 30.0
     nav.sig_v0 = 10.0
@@ -41,7 +61,8 @@ def rtkinit(nav,pos0=np.zeros(3)):
     nav.sig_qp=0.1
     nav.sig_qv=0.01
     nav.tidecorr=True
-    nav.phw=np.zeros(gn.uGNSS.MAXSAT)
+    nav.armode = 1 # 1:contunous,2:instantaneous,3:fix-and-hold
+    
     #
     nav.x[0:3]=pos0
     di = np.diag_indices(6)
@@ -61,14 +82,14 @@ def rtkinit(nav,pos0=np.zeros(3)):
     nav.cs_sig_idx={gn.uGNSS.GPS:[sSigGPS.L1C,sSigGPS.L2W],
                     gn.uGNSS.GAL:[sSigGAL.L1X,sSigGAL.L5X],
                     gn.uGNSS.QZS:[sSigQZS.L1C,sSigQZS.L2X]}
-    # antenna type: TRM59800.80     NONE [mm] 0:5:90 [deg]
-    nav.ant_pcv=[[+0.00,-0.22,-0.86,-1.87,-3.17,-4.62,-6.03,-7.21,-7.98,
-                  -8.26,-8.02,-7.32,-6.20,-4.65,-2.54,+0.37,+4.34,+9.45,+15.42],
-                 [+0.00,-0.14,-0.53,-1.13,-1.89,-2.74,-3.62,-4.43,-5.07,
-                  -5.40,-5.32,-4.79,-3.84,-2.56,-1.02,+0.84,+3.24,+6.51,+10.84],
-                 [+0.00,-0.14,-0.53,-1.13,-1.89,-2.74,-3.62,-4.43,-5.07,
-                  -5.40,-5.32,-4.79,-3.84,-2.56,-1.02,+0.84,+3.24,+6.51,+10.84]]
-    nav.ant_pco=[+89.51,+117.13,+117.13]
+    
+    nav.fout=None
+    nav.logfile='log.txt'
+    if nav.loglevel>=2:
+       nav.fout=open(nav.logfile,'w') 
+    
+    
+
 
 def rescode(itr,obs,nav,rs,dts,svh,x):
     nv=0
@@ -120,6 +141,15 @@ def udstate_ppp(nav,obs):
         nav.P[0:na,0:na]=Px
     # bias
     for f in range(nav.nf):
+        # cycle slip check by LLI
+        for i in range(ns):
+            if sys[i] not in nav.gnss_t:
+                continue
+            j=nav.obs_idx[f][sys[i]]
+            if obs.lli[i,j]&1==0:
+                continue
+            nav.x[IB(sat[i],f,nav.na)]=0
+        
         bias=np.zeros(ns)
         offset=0
         na=0
@@ -178,6 +208,9 @@ def zdres(nav,obs,rs,vs,dts,rr,cs):
     stec=cs.get_stec(dlat,dlon)
     sat_n=cs.decode_local_sat(cs.lc[inet].netmask)
     
+    cs.cpc=np.zeros((n,nf))
+    cs.prc=np.zeros((n,nf))
+    
     for i in range(n):
         sat=obs.sat[i]
         sys,prn=gn.sat2prn(sat)
@@ -231,18 +264,16 @@ def zdres(nav,obs,rs,vs,dts,rr,cs):
         
         antr=antmodel(nav,el[i],nav.nf)
         
-        prc=trop+relatv+antr+iono+cbias
-        cpc=trop+relatv+antr-iono+pbias+phw
+        # range correction
+        cs.prc[i,:]=trop+relatv+antr+iono+cbias
+        cs.cpc[i,:]=trop+relatv+antr-iono+pbias+phw
         
         r+=-_c*dts[i]
         
         for f in range(nf):
             k=nav.obs_idx[f][sys]
-            y[i,f]=obs.L[i,k]*lam[f]-(r+cpc[f])
-            y[i,f+nf]=obs.P[i,k]-(r+prc[f])
-
-        if sys==gn.uGNSS.QZS:
-            print(k)
+            y[i,f]=obs.L[i,k]*lam[f]-(r+cs.cpc[i,f])
+            y[i,f+nf]=obs.P[i,k]-(r+cs.prc[i,f])
 
     return y,e,el
 
@@ -257,11 +288,15 @@ def relpos(nav,obs,cs):
 
     # non-differencial residual for rover 
     yu,eu,elu=zdres(nav,obs,rs,vs,dts,xp[0:3],cs)
+    
     iu=np.where(elu>0)[0]
     sat=obs.sat[iu]
     y=yu[iu,:]
     e=eu[iu,:]
     el=elu[iu]
+    
+    logmon(nav,sat,cs,iu)
+    
     # DD residual
     v,H,R=ddres(nav,xp,y,e,sat,el)
     Pp=nav.P.copy()
@@ -281,14 +316,16 @@ def relpos(nav,obs,cs):
             nav.P=Pp
     
     nb,xa=resamb_lambda(nav,sat)
+    nav.smode=5
     if nb>0:
         yu,eu,elu=zdres(nav,obs,rs,vs,dts,xa[0:3],cs)
         y=yu[iu,:]
         e=eu[iu,:]
         v,H,R=ddres(nav,xa,y,e,sat,el)
         if valpos(nav,v,R):
-            holdamb(nav,xa)
-    
+            if nav.armode==3:
+                holdamb(nav,xa) # TODO: fix-and-hold
+            nav.smode=4
     return 0
 
 if __name__ == '__main__':
@@ -313,11 +350,12 @@ if __name__ == '__main__':
     nav = Nav()
     nav=dec.decode_nav(navfile,nav)
     #nep=3600//30
-    nep=30
+    nep=90
     t=np.zeros(nep)
-    enu=np.zeros((nep,3))
+    enu=np.ones((nep,3))*np.nan
     sol=np.zeros((nep,4))
     dop=np.zeros((nep,4))
+    smode=np.zeros(nep,dtype=int)
     if dec.decode_obsh(obsfile)>=0:
         rr=dec.pos
         rtkinit(nav,dec.pos)
@@ -328,33 +366,79 @@ if __name__ == '__main__':
         if not fc:
             print("L6 messsage file cannot open."); exit(-1)
         for ne in range(nep):
-            cs.decode_l6msg(fc.read(250),0)
-            if cs.fcnt==5:
-                cs.decode_cssr(cs.buff,0)            
             obs=dec.decode_obs()
             week,tow=time2gpst(obs.t)
+            
+            cs.decode_l6msg(fc.read(250),0)
+            if cs.fcnt==5: # end of sub-frame
+                cs.week=week
+                cs.decode_cssr(cs.buff,0)            
 
             if ne==0:
+                nav.sol=1
+                sol,az,el=pntpos(obs,nav,rr)
+                nav.x[0:3]=sol[0:3] # initial estimation
                 t0=obs.t
             t[ne]=timediff(obs.t,t0)
+            week,tow=time2gpst(obs.t)
+    
+            cstat=cs.chk_stat()
+            
+            if tow>=475234:
+                tow
 
-            if ne>=20:
+            if cstat or tow>=475220:
+                # for debug
+                #nav.x[0:3]=rr
+            
                 relpos(nav,obs,cs)
+            
+            sol=nav.x[0:3]
+            enu[ne,:]=gn.ecef2enu(pos_ref,sol-xyz_ref)
+            smode[ne]=nav.smode
             
         fc.close()
         dec.fobs.close()
     
-    plt.plot(t,enu)
-    plt.ylabel('pos err[m]')
-    plt.xlabel('time[s]')
-    plt.legend(['east','north','up'])
-    plt.grid()
-    plt.axis([0,3600,-6,6])
+
+    fig_type=1
+    ylim=0.2
+    
+    if fig_type==1:    
+        plt.plot(t,enu,'.')
+        plt.xticks(np.arange(0,nep+1, step=30))
+        plt.ylabel('position error [m]')
+        plt.xlabel('time[s]')
+        plt.legend(['east','north','up'])
+        plt.grid()
+        plt.axis([0,ne,-ylim,ylim])    
+    elif fig_type==2:
+        plt.plot(enu[:,0],enu[:,1],'.')
+        plt.xlabel('easting [m]')
+        plt.ylabel('northing [m]')
+        plt.grid()
+        plt.axis([-ylim,ylim,-ylim,ylim])   
     
 
+    if nav.fout is not None:
+        nav.fout.close()
 
-    
-    
+    if True:
+        dtype0 = (float,int,float,float,float,float)
+        d = np.genfromtxt(nav.logfile)
+        t=d[:,0]-d[0,0]
+        sat=d[:,1]
+        cpc1=d[:,2];cpc2=d[:,3];prc1=d[:,4];prc2=d[:,5]
+        plt.figure()
+        sats=np.unique(sat)
+        for sat0 in sats:
+            if sat0!=17:
+                continue
+            idx=np.where(sat==sat0)
+            plt.plot(t[idx],cpc1[idx])
+        plt.grid()
+        
+        
 
 
 

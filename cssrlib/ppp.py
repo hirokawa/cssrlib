@@ -382,6 +382,6 @@ if __name__ == '__main__':
         plt.xlabel('time [h]')
         plt.ylabel('delta range [m]')
         plt.grid()
-        plt.axis([0,24,0,0.4])
+        plt.axis([0,24,-0.2,0.2])
         plt.legend()        
         

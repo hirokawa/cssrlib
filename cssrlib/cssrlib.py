@@ -8,7 +8,7 @@ Created on Sun Nov 15 20:03:45 2020
 import cbitstruct as bs
 import numpy as np
 from enum import IntEnum
-from gnss import gpst2time,rCST,ecef2pos,prn2sat,uGNSS
+from gnss import gpst2time,rCST,ecef2pos,prn2sat,uGNSS,gtime_t
 
 class sGNSS(IntEnum):
     GPS=0;GLO=1;GAL=2;BDS=3
@@ -18,6 +18,10 @@ class sCSSR(IntEnum):
     MASK=1;ORBIT=2;CLOCK=3;CBIAS=4
     PBIAS=5;BIAS=6;URA=7;STEC=8
     GRID=9;SI=10;COMBINED=11;ATMOS=12
+
+class sCType(IntEnum):
+    MASK=0;ORBIT=1;CLOCK=2;CBIAS=3;PBIAS=4
+    STEC=5;TROP=6;URA=7;MAX=8
 
 class sSigGPS(IntEnum):
     L1C=0;L1P=1;L1W=2;L1S=3;L1L=4
@@ -64,6 +68,10 @@ class local_corr:
         self.ct=None
         self.quality_trp=None
         self.quality_stec=None
+        self.t0=[]
+        for k in range(sCType.MAX):
+            self.t0.append(gtime_t())
+        self.cstat=0            # status for receiving CSSR message
 
 class cssr:
     CSSR_MSGTYPE=4073
@@ -89,14 +97,22 @@ class cssr:
         self.dorb=[]
         self.iode=[]
         self.dclk=[]
+        self.sat_n_p=[]
+        self.dorb_d=[]
+        self.dclk_d=[]
+        self.cbias_d=[]
         self.ura=[]
         self.cbias=[]
         self.pbias=[]
         self.inet=-1
         self.facility_p=-1
+        self.cstat=0
+        self.local_pbias=True # for QZS CLAS
         self.buff=bytearray(250*5)
         self.sinfo=bytearray(160)
         self.grid=None
+        self.prc=None
+        self.cpc=None
         self.lc=[]
         for inet in range(self.MAXNET+1):
             self.lc.append(local_corr())
@@ -122,7 +138,7 @@ class cssr:
             y=(3**cl*(1+val*0.25)-1)*1e-3 # [m]
         return y
 
-    def gnss2sys(self,gnss):
+    def gnss2sys(self,gnss:sGNSS):
         tbl={sGNSS.GPS:uGNSS.GPS,sGNSS.GLO:uGNSS.GLO,sGNSS.GAL:uGNSS.GAL,
              sGNSS.BDS:uGNSS.BDS,sGNSS.QZS:uGNSS.QZS,sGNSS.SBS:uGNSS.SBS}
         if gnss not in tbl:
@@ -153,7 +169,7 @@ class cssr:
             self.tow0=self.tow
         else:
             dtow=bs.unpack_from('u12',msg,i)[0];i+=12
-            if self.tow0>=0:
+            if self.tow>=0:
                 self.tow=self.tow0+dtow
         if self.week>=0:
             self.time=gpst2time(self.week,self.tow)
@@ -168,6 +184,11 @@ class cssr:
         self.flg_net=False
         i+=4
         self.iodssr=head['iodssr']
+        #if self.iodssr!=iodssr_p:
+        #    for inet in range(self.MAXNET+1): 
+        #        self.lc[inet].cstat=0
+        self.sat_n_p=self.sat_n
+        
         self.nsat_n=0
         self.nsig_n=[]
         self.sys_n=[]
@@ -205,6 +226,8 @@ class cssr:
                     self.nsig_n.append(nsig)
                     self.nsig_total=self.nsig_total+nsig
                     self.sig_n.append(sig)
+        self.lc[0].cstat |= (1<<sCType.MASK)
+        self.lc[0].t0[sCType.MASK] = self.time
         return i    
 
     def decode_orb_sat(self,msg,i,k,sys,inet=0):
@@ -241,10 +264,19 @@ class cssr:
         self.flg_net=False
         if self.iodssr!=head['iodssr']:
             return -1
+        dorb_p=self.lc[inet].dorb
+        iode_p=self.lc[inet].iode
         self.lc[inet].dorb = np.zeros((self.nsat_n,3))
         self.lc[inet].iode = np.zeros(self.nsat_n,dtype=int)
+        self.lc[inet].dorb_d = np.ones((self.nsat_n,3))*np.nan
         for k in range(0,self.nsat_n):
             i=self.decode_orb_sat(msg,i,k,self.sys_n[k],inet)
+            if self.sat_n[k] in self.sat_n_p:
+                j=self.sat_n_p.index(self.sat_n[k])
+                self.lc[inet].dorb_d[k,:]=self.lc[inet].dorb[k,:]-dorb_p[j,:]
+            
+        self.lc[inet].cstat |= (1<<sCType.ORBIT)
+        self.lc[inet].t0[sCType.ORBIT] = self.time
         return i
     
     def decode_cssr_clk(self,msg,i,inet=0):
@@ -253,9 +285,17 @@ class cssr:
         self.flg_net=False
         if self.iodssr!=head['iodssr']:
             return -1
+        dclk_p=self.lc[inet].dclk
         self.lc[inet].dclk = np.zeros(self.nsat_n)
+        self.lc[inet].dclk_d = np.ones(self.nsat_n)*np.nan
         for k in range(0,self.nsat_n):
             i=self.decode_clk_sat(msg,i,k,inet)
+            if self.sat_n[k] in self.sat_n_p:
+                j=self.sat_n_p.index(self.sat_n[k])
+                self.lc[inet].dclk_d[k]=self.lc[inet].dclk[k]-dclk_p[j]
+
+        self.lc[inet].cstat |= (1<<sCType.CLOCK)
+        self.lc[inet].t0[sCType.CLOCK] = self.time
         return i    
 
     def decode_cssr_cbias(self,msg,i,inet=0):
@@ -264,10 +304,18 @@ class cssr:
         self.flg_net=False
         if self.iodssr!=head['iodssr']:
             return -1      
+        cbias_p=self.lc[inet].cbias
         self.lc[inet].cbias = np.zeros((self.nsat_n,self.nsig_max))
+        self.lc[inet].cbias_d = np.ones((self.nsat_n,self.nsig_max))*np.nan
         for k in range(0,self.nsat_n):
             for j in range(0,self.nsig_n[k]):
-                i=self.decode_cbias_sat(msg,i,k,j,inet)       
+                i=self.decode_cbias_sat(msg,i,k,j,inet)
+            if self.sat_n[k] in self.sat_n_p:
+                j=self.sat_n_p.index(self.sat_n[k])
+                self.lc[inet].cbias_d[k,:]=self.lc[inet].cbias[k,:]-cbias_p[j,:]
+                
+        self.lc[inet].cstat |= (1<<sCType.CBIAS)
+        self.lc[inet].t0[sCType.CBIAS] = self.time
         return i  
 
     def decode_cssr_pbias(self,msg,i,inet=0):
@@ -280,6 +328,9 @@ class cssr:
         for k in range(0,self.nsat_n):
             for j in range(0,self.nsig_n[k]):
                 i=self.decode_pbias_sat(msg,i,k,j,inet)
+    
+        self.lc[inet].cstat |= (1<<sCType.PBIAS)
+        self.lc[inet].t0[sCType.PBIAS] = self.time
         return i  
 
     def decode_cssr_bias(self,msg,i,inet=0):
@@ -308,6 +359,13 @@ class cssr:
                     i=self.decode_cbias_sat(msg,i,k,j,inet)
                 if dfm['pb']:
                     i=self.decode_pbias_sat(msg,i,k,j,inet)
+        
+        if dfm['cb']:
+            self.lc[inet].cstat |= (1<<sCType.CBIAS)
+            self.lc[inet].t0[sCType.CBIAS] = self.time
+        if dfm['pb']:
+            self.lc[inet].cstat |= (1<<sCType.PBIAS)
+            self.lc[inet].t0[sCType.PBIAS] = self.time        
         return i 
 
     def decode_cssr_ura(self,msg,i):
@@ -320,6 +378,8 @@ class cssr:
             v=bs.unpack_from_dict('u3u3',['class','val'],msg,i)
             self.ura[k]=self.quality_idx(v['class'],v['val'])
             i+=6
+        self.lc[0].cstat |= (1<<sCType.URA)
+        self.lc[0].t0[sCType.URA] = self.time
         return i 
 
     def decode_cssr_stec_coeff(self,msg,stype,i):
@@ -363,6 +423,8 @@ class cssr:
             i+=6
             ci,i=self.decode_cssr_stec_coeff(msg,dfm['stype'],i)
             self.lc[inet].ci[k,:] = ci
+        self.lc[inet].cstat |= (1<<sCType.STEC)
+        self.lc[inet].t0[sCType.STEC] = self.time
         return i 
 
     def decode_cssr_grid(self,msg,i):
@@ -397,9 +459,12 @@ class cssr:
                     continue
                 dstec=bs.unpack_from(fmt,msg,i)[0];i+=sz
                 self.lc[inet].stec[j,k]=self.sval(dstec,sz,0.04)
+        self.lc[inet].cstat |= (1<<sCType.TROP)
+        self.lc[inet].t0[sCType.TROP] = self.time
         return i
 
     def parse_sinfo(self):
+        """decode content of service info """
         # TBD
         return 0
 
@@ -444,6 +509,12 @@ class cssr:
                 i=self.decode_orb_sat(msg,i,k,self.sys_n[k],inet)
             if dfm['clk']:
                 i=self.decode_clk_sat(msg,i,k,inet)
+        if dfm['clk']:
+            self.lc[inet].cstat |= (1<<sCType.CLOCK)
+            self.lc[inet].t0[sCType.CLOCK] = self.time
+        if dfm['orb']:
+            self.lc[inet].cstat |= (1<<sCType.ORBIT)
+            self.lc[inet].t0[sCType.ORBIT] = self.time
         return i
 
     def decode_cssr_atmos(self,msg,i):
@@ -494,15 +565,17 @@ class cssr:
         netmask=bs.unpack_from('u'+str(self.nsat_n),msg,i)[0];i+=self.nsat_n
         self.lc[inet].netmask=netmask
         #loc,nsat_l=self.decode_mask(netmask,self.nsat_n)
-        self.lc[inet].stec_quality=np.zeros(self.nsat_n,dtype=int)
+        self.lc[inet].stec_quality=np.zeros(self.nsat_n)
         if dfm['stec']&2>0:
             self.lc[inet].ci=np.zeros((self.nsat_n,6))
             self.lc[inet].stype=np.zeros(self.nsat_n,dtype=int)
         if dfm['stec']&1>0:
             self.lc[inet].dstec=np.zeros((self.nsat_n,ng))
+        self.lc[inet].sat_n=[]
         for k in range(0,self.nsat_n):
             if not self.isset(netmask,self.nsat_n,k):
                 continue
+            self.lc[inet].sat_n.append(self.sat_n[k])
             if dfm['stec']>0:
                 v=bs.unpack_from_dict('u3u3',['class','value'],msg,i)
                 i+=6
@@ -519,6 +592,13 @@ class cssr:
                 v=bs.unpack_from(('s'+str(sz))*ng,msg,i);i+=sz*ng
                 for j in range(ng):
                     self.lc[inet].dstec[k,j]=self.sval(v[j],sz,scl)
+        
+        if dfm['trop']>0:
+            self.lc[inet].cstat |= (1<<sCType.TROP)
+            self.lc[inet].t0[sCType.TROP] = self.time
+        if dfm['stec']>0:
+            self.lc[inet].cstat |= (1<<sCType.STEC)
+            self.lc[inet].t0[sCType.STEC] = self.time        
         return i
 
     def decode_cssr(self,msg,i):
@@ -562,30 +642,18 @@ class cssr:
                           format(self.tow,self.subtype,self.inet))
                 else:
                     print("tow={:6d} subtype={:2d}".format(self.tow,self.subtype))                    
-
-    def decode_l6msg(self,msg,ofst):
-        """decode QZS L6 message """
-        fmt = 'u32u8u3u2u2u1u1'
-        names = ['preamble','prn','vendor','facility','res','sid','alert']
-        i=ofst*8
-        l6head = bs.unpack_from_dict(fmt,names,msg,i)
-        i=i+49
-        if l6head['sid']==1:
-            self.fcnt=0
-        if self.facility_p>=0 and l6head['facility']!=self.facility_p:
-            self.fcnt=-1
-        self.facility_p=l6head['facility']
-        if self.fcnt<0:
-            return -1
-        j=1695*self.fcnt
-        for k in range(53):
-            sz=32 if k<52 else 31
-            fmt='u'+str(sz)
-            b=bs.unpack_from(fmt,msg,i)
-            i+=sz
-            bs.pack_into(fmt,self.buff,j,b[0])
-            j+=sz
-        self.fcnt=self.fcnt+1
+        
+    def chk_stat(self):
+        cs_global = self.lc[0].cstat
+        cs_local  = self.lc[self.inet_ref].cstat
+        
+        if (cs_global & 0x0f) != 0x0f: # mask,orb,clk,cbias
+            return False
+        if (cs_local & 0x60) != 0x60:  # stec,trop
+            return False
+        if self.local_pbias and (cs_local & 0x10) != 0x10: # pbias(loc)
+            return False
+        return True
         
     def read_griddef(self,file):
         """load grid coordinates from file """
@@ -637,7 +705,9 @@ class cssr:
         inet=self.inet_ref
         stec=np.zeros(self.nsat_n)
         for i in range(self.nsat_n):
-            if not self.isset(self.lc[inet].netmask,self.nsat_n,i):
+            #if not self.isset(self.lc[inet].netmask,self.nsat_n,i):
+            #    continue
+            if self.sat_n[i] not in self.lc[inet].sat_n:
                 continue
             if self.lc[inet].flg_stec&2:            
                 ci=self.lc[inet].ci[i,:]
@@ -646,7 +716,33 @@ class cssr:
                 dstec=self.lc[inet].dstec[i,self.grid_index]@self.grid_weight              
                 stec[i]+=dstec
         return stec
-            
+     
+    #     
+    # QZS CLAS specific function
+    #
+    def decode_l6msg(self,msg,ofst):
+        """decode QZS L6 message """
+        fmt = 'u32u8u3u2u2u1u1'
+        names = ['preamble','prn','vendor','facility','res','sid','alert']
+        i=ofst*8
+        l6head = bs.unpack_from_dict(fmt,names,msg,i)
+        i=i+49
+        if l6head['sid']==1:
+            self.fcnt=0
+        if self.facility_p>=0 and l6head['facility']!=self.facility_p:
+            self.fcnt=-1
+        self.facility_p=l6head['facility']
+        if self.fcnt<0:
+            return -1
+        j=1695*self.fcnt
+        for k in range(53):
+            sz=32 if k<52 else 31
+            fmt='u'+str(sz)
+            b=bs.unpack_from(fmt,msg,i)
+            i+=sz
+            bs.pack_into(fmt,self.buff,j,b[0])
+            j+=sz
+        self.fcnt=self.fcnt+1
         
 
         

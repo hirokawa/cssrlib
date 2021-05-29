@@ -127,8 +127,12 @@ def satposs(obs,nav,cs=None):
         if cs is not None:
             if sat not in cs.sat_n:
                 continue
-            idx=np.where(cs.sat_n==sat)[0][0]
+            idx=cs.sat_n.index(sat)
             iode=cs.lc[0].iode[idx]
+            dorb=cs.lc[0].dorb[idx,:]
+            dclk=cs.lc[0].dclk[idx]
+            dt_=timediff(t,cs.lc[cs.inet_ref].t0[5])
+            
         eph=findeph(nav.eph,t,sat,iode)
         if eph is None:
             svh[i]=1;continue
@@ -141,9 +145,9 @@ def satposs(obs,nav,cs=None):
             rc=np.cross(rs[i,:],vs[i,:])
             ec=rc/np.linalg.norm(rc)
             er=np.cross(ea,ec)
-            dorb=-cs.lc[0].dorb[idx,:]@[er,ea,ec]
-            rs[i,:]+=dorb
-            dts[i]+=cs.lc[0].dclk[idx]/rCST.CLIGHT
+            dorb_e=-dorb@[er,ea,ec]
+            rs[i,:]+=dorb_e
+            dts[i]+=dclk/rCST.CLIGHT
     return rs,vs,dts,svh
 
 

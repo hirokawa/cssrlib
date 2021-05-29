@@ -8,12 +8,55 @@ Created on Sun Nov 15 20:03:45 2020
 import numpy as np
 import gnss as gn
 import rinex as rn
-from pntpos import pntpos
-from ephemeris import findeph,eph2pos,satposs
+from ephemeris import satposs
 from ppp import tidedisp
 from mlambda import mlambda
+from pntpos import pntpos
 
 VAR_HOLDAMB=0.001
+
+def rtkinit(nav,pos0=np.zeros(3)):
+    """ initalize RTK-GNSS parameters """
+    nav.nf=2
+    nav.pmode=0 # 0:static, 1:kinematic
+
+    nav.na=3 if nav.pmode==0 else 6
+    nav.ratio=0
+    nav.thresar=[2]
+    nav.nx=nav.na+gn.uGNSS.MAXSAT*nav.nf
+    nav.x=np.zeros(nav.nx)
+    nav.P=np.zeros((nav.nx,nav.nx))
+    nav.xa=np.zeros(nav.na)
+    nav.Pa=np.zeros((nav.na,nav.na))
+    nav.nfix=nav.neb=0
+    
+    # parameter for RTK
+    nav.eratio=[100,100]
+    nav.err=[0,0.003,0.003]
+    nav.sig_p0 = 30.0
+    nav.sig_v0 = 10.0
+    nav.sig_n0 = 30.0
+    nav.sig_qp=0.1
+    nav.sig_qv=0.01
+    
+    nav.armode = 1 # 1:contunous,2:instantaneous,3:fix-and-hold
+    #
+    
+    nav.x[0:3]=pos0
+    di = np.diag_indices(6)
+    nav.P[di[0:3]]=nav.sig_p0**2
+    nav.q=np.zeros(nav.nx)
+    nav.q[0:3]=nav.sig_qp**2    
+    if nav.pmode>=1:
+        nav.P[di[3:6]]=nav.sig_v0**2
+        nav.q[3:6]=nav.sig_qv**2 
+    # obs index
+    i0={gn.uGNSS.GPS:0,gn.uGNSS.GAL:0,gn.uGNSS.QZS:0}
+    i1={gn.uGNSS.GPS:1,gn.uGNSS.GAL:2,gn.uGNSS.QZS:1}
+    freq0={gn.uGNSS.GPS:nav.freq[0],gn.uGNSS.GAL:nav.freq[0],gn.uGNSS.QZS:nav.freq[0]}
+    freq1={gn.uGNSS.GPS:nav.freq[1],gn.uGNSS.GAL:nav.freq[2],gn.uGNSS.QZS:nav.freq[1]}
+    nav.obs_idx=[i0,i1]
+    nav.obs_freq=[freq0,freq1]    
 
 def zdres(nav,obs,rs,dts,rr,rtype=1):
     """ non-differencial residual """
@@ -73,10 +116,12 @@ def sysidx(satlist,sys_ref):
     return idx
 
 def IB(s,f,na=3):
+    """ return index of phase ambguity """
     idx=na+gn.uGNSS.MAXSAT*f+s-1
     return idx
 
 def varerr(nav,sat,sys,el,f):
+    """ variation of measurement """
     s_el=np.sin(el)
     if s_el<=0.0:
         return 0.0
@@ -91,12 +136,10 @@ def ddres(nav,x,y,e,sat,el):
     nf=nav.nf
     ns=len(el)
     mode=1 if len(y)==ns else 0 # 0:DD,1:SD
-#    posu=gn.ecef2pos(x)
-#    posr=gn.ecef2pos(nav.rb)
     nb=np.zeros(2*4*2+2,dtype=int)
     Ri=np.zeros(ns*nf*2+2)
     Rj=np.zeros(ns*nf*2+2)
-#    im=np.zeros(ns)
+
     nv=0;b=0
     H=np.zeros((ns*nf*2,nav.nx))
     v=np.zeros(ns*nf*2)
@@ -200,7 +243,7 @@ def restamb(nav,bias,nb):
                 sys,prn=gn.sat2prn(i+1)
                 if sys!=m or (sys not in nav.gnss_t) or nav.fix[i,f]!=2:
                     continue
-                index.append(IB(i+1,f))
+                index.append(IB(i+1,f,nav.na))
                 n+=1
             if n<2:
                 continue
@@ -244,6 +287,7 @@ def resamb_lambda(nav,sat):
     return nb,xa
 
 def kfupdate(x,P,H,v,R):
+    """ kalmanf filter measurement update """
     n=len(x)
     ix=[]
     k=0
@@ -265,45 +309,9 @@ def kfupdate(x,P,H,v,R):
            P[i,j] = P_[k1,k2]
        
     return x,P
-
-def rtkinit(nav,pos0=np.zeros(3)):
-    nav.nf=2
-    nav.pmode=0 # 0:static, 1:kinematic
-
-    nav.na=3 if nav.pmode==0 else 6
-    nav.ratio=0
-    nav.thresar=[2]
-    nav.nx=nav.na+gn.uGNSS.MAXSAT*nav.nf
-    nav.x=np.zeros(nav.nx)
-    nav.P=np.zeros((nav.nx,nav.nx))
-    nav.xa=np.zeros(nav.na)
-    nav.Pa=np.zeros((nav.na,nav.na))
-    nav.nfix=nav.neb=0
-    nav.eratio=[100,100]
-    nav.err=[0,0.003,0.003]
-    nav.sig_p0 = 30.0
-    nav.sig_v0 = 10.0
-    nav.sig_n0 = 30.0
-    nav.sig_qp=0.1
-    nav.sig_qv=0.01
-    #
-    nav.x[0:3]=pos0
-    di = np.diag_indices(6)
-    nav.P[di[0:3]]=nav.sig_p0**2
-    nav.q=np.zeros(nav.nx)
-    nav.q[0:3]=nav.sig_qp**2    
-    if nav.pmode>=1:
-        nav.P[di[3:6]]=nav.sig_v0**2
-        nav.q[3:6]=nav.sig_qv**2 
-    # obs index
-    i0={gn.uGNSS.GPS:0,gn.uGNSS.GAL:0,gn.uGNSS.QZS:0}
-    i1={gn.uGNSS.GPS:1,gn.uGNSS.GAL:2,gn.uGNSS.QZS:1}
-    freq0={gn.uGNSS.GPS:nav.freq[0],gn.uGNSS.GAL:nav.freq[0],gn.uGNSS.QZS:nav.freq[0]}
-    freq1={gn.uGNSS.GPS:nav.freq[1],gn.uGNSS.GAL:nav.freq[2],gn.uGNSS.QZS:nav.freq[1]}
-    nav.obs_idx=[i0,i1]
-    nav.obs_freq=[freq0,freq1]    
     
 def udstate(nav,obs,obsb,iu,ir):
+    """ states propagation for filter """
     tt=1.0
 
     ns=len(iu)
@@ -365,6 +373,7 @@ def udstate(nav,obs,obsb,iu,ir):
                 
 
 def selsat(nav,obs,obsb,elb):
+    """ select common satellite between rover and base station """
     idx0=np.where(elb>=nav.elmin)
     idx=np.intersect1d(obs.sat,obsb.sat[idx0],return_indices=True)
     k=len(idx[0])
@@ -403,6 +412,7 @@ def holdamb(nav,xa):
     return 0
 
 def relpos(nav,obs,obsb):
+    """ relative positioning for RTK-GNSS """
     nf=nav.nf
     if gn.timediff(obs.t,obsb.t)!=0:
         return -1
@@ -440,6 +450,7 @@ def relpos(nav,obs,obsb):
     
     # Kalman filter measurement update
     xp,Pp=kfupdate(xp,Pp,H,v,R)
+    #Pp=0.5*(Pp+Pp.T)
     
     if True:
         # non-differencial residual for rover after measurement update
@@ -453,19 +464,19 @@ def relpos(nav,obs,obsb):
             nav.P=Pp
     
     nb,xa=resamb_lambda(nav,sat)
+    nav.smode=5
     if nb>0:
         yu,eu,elr=zdres(nav,obs,rs,dts,xa[0:3])
         y[:ns,:]=yu[iu,:]
         e[:ns,:]=eu[iu,:]
         v,H,R=ddres(nav,xa,y,e,sat,el)
         if valpos(nav,v,R):
-            holdamb(nav,xa)
+            if nav.armode==3:
+                holdamb(nav,xa) # TODO: fix-and-hold
+            nav.smode=4 # fix
     
     return 0
-    
-    
-
-            
+                
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     
@@ -487,38 +498,49 @@ if __name__ == '__main__':
     decb.decode_obsh(basefile)
     dec.decode_obsh(obsfile)
  
-    nep=120
+    nep=600
     #nep=10
     # GSI 3034 fujisawa
     nav.rb=[-3959400.631,3385704.533,3667523.111]
     t=np.zeros(nep)
     enu=np.zeros((nep,3))
+    smode=np.zeros(nep,dtype=int)
     if True:
         rtkinit(nav,dec.pos)
         rr=dec.pos  
         for ne in range(nep):
             obs=dec.decode_obs()
             obsb=decb.decode_obs()
-            
-            #sol,az,el=pntpos(obs,nav,rr)
             if ne==0:
-                nav.x[0:3]=dec.pos # initial estimation
+                nav.smode=1
+                sol,az,el=pntpos(obs,nav,rr)
+                nav.x[0:3]=sol[0:3] # initial estimation
                 t0=obs.t
             t[ne]=gn.timediff(obs.t,t0)
             relpos(nav,obs,obsb)
             sol=nav.x[0:3]
             enu[ne,:]=gn.ecef2enu(pos_ref,sol-xyz_ref)
-
+            smode[ne]=nav.smode
         
         dec.fobs.close()
         decb.fobs.close()
     
-    plt.plot(t,enu)
-    plt.ylabel('pos err[m]')
-    plt.xlabel('time[s]')
-    plt.legend(['east','north','up'])
-    plt.grid()
-    plt.axis([0,ne,-0.1,0.1])    
+    fig_type=1
+    ylim=0.2
     
+    if fig_type==1:    
+        plt.plot(t,enu)
+        plt.xticks(np.arange(0,nep+1, step=30))
+        plt.ylabel('position error [m]')
+        plt.xlabel('time[s]')
+        plt.legend(['east','north','up'])
+        plt.grid()
+        plt.axis([0,ne,-ylim,ylim])    
+    else:
+        plt.plot(enu[:,0],enu[:,1])
+        plt.xlabel('easting [m]')
+        plt.ylabel('northing [m]')
+        plt.grid()
+        plt.axis([-ylim,ylim,-ylim,ylim])        
     
     

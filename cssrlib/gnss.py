@@ -33,11 +33,12 @@ class rCST():
     CENTURY_SEC=DAY_SEC*36525.0
 
 class uGNSS(IntEnum):
-    GPS=0;SBS=1;GAL=2;BDS=3;QZS=5;GLO=6;GNSSMAX=7
+    GPS=0;SBS=1;GAL=2;BDS=3;QZS=5;GLO=6;IRN=7;GNSSMAX=8
     GPSMAX=32;GALMAX=36;BDSMAX=63;QZSMAX=10;
-    GLOMAX=24;SBSMAX=24
+    GLOMAX=24;SBSMAX=24;IRNMAX=10
     NONE=-1
     MAXSAT=GPSMAX+GLOMAX+GALMAX+BDSMAX+QZSMAX
+    #MAXSAT=GPSMAX+GLOMAX+GALMAX+BDSMAX+QZSMAX+SBSMAX+IRNMAX
 
 class uSIG(IntEnum):
     GPS_L1CA=0;GPS_L2W=2;GPS_L2CL=3;GPS_L2CM=4;GPS_L5Q=6
@@ -94,8 +95,10 @@ class Nav():
         self.excl_sat=[]
         self.freq=[1.57542e9,1.22760e9,1.17645e9,1.20714e9]
         self.rb=[0,0,0] # base station position in ECEF [m]
-        self.gnss_t=[uGNSS.GPS,uGNSS.GAL]
+        self.gnss_t=[uGNSS.GPS]
+        self.smode = 0 # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
         #self.gnss_t=[uGNSS.GPS,uGNSS.GAL,uGNSS.QZS]
+        self.loglevel=2
 
         # antenna type:  JAVAD RINGANT SCIT
         self.ant_pcv=[[+0.00,-0.38,-1.46,-3.06,-4.94,-6.81,-8.45,-9.66,-10.31,-10.35,
@@ -114,6 +117,7 @@ class Nav():
                      [+0.00,-0.14,-0.53,-1.13,-1.89,-2.74,-3.62,-4.43,-5.07,
                       -5.40,-5.32,-4.79,-3.84,-2.56,-1.02,+0.84,+3.24,+6.51,+10.84]]
         self.ant_pco_b=[+89.51,+117.13,+117.13]
+        
 
 def leaps(tgps):
     return -18.0
@@ -138,7 +142,7 @@ def gpst2utc(tgps,leaps=-18):
     tutc=timeadd(tgps,leaps)
     return tutc
 
-def timeadd(t:gtime_t,sec):
+def timeadd(t:gtime_t,sec:float):
     tr=deepcopy(t)
     tr.sec+=sec
     tt=floor(tr.sec)
@@ -233,12 +237,34 @@ def sat2prn(sat):
 def sat2id(sat):
     id=[]
     sys,prn=sat2prn(sat)
-    gnss_tbl='GSECIJR'
+    #gnss_tbl='GSECIJR'
+    gnss_tbl={uGNSS.GPS:'G',uGNSS.GAL:'E',uGNSS.BDS:'C',
+              uGNSS.QZS:'J',uGNSS.GLO:'R'}
+    if sys not in gnss_tbl:
+        return -1
     if sys==uGNSS.QZS:
         prn-=192
+    elif sys==uGNSS.SBS:
+        prn-=100
     id='%s%02d' %(gnss_tbl[sys],prn)
     return id
 
+def id2sat(id):
+    #gnss_tbl={'G':uGNSS.GPS,'S':uGNSS.SBS,'E':uGNSS.GAL,'C':uGNSS.BDS,
+    #          'I':uGNSS.IRN,'J':uGNSS.QZS,'R':uGNSS.GLO}
+    gnss_tbl={'G':uGNSS.GPS,'E':uGNSS.GAL,'C':uGNSS.BDS,
+              'J':uGNSS.QZS,'R':uGNSS.GLO}
+    if id[0] not in gnss_tbl:
+        return -1
+    sys=gnss_tbl[id[0]]
+    prn=int(id[1:3])
+    if sys==uGNSS.QZS:
+        prn+=192
+    elif sys==uGNSS.SBS:
+        prn+=100
+    sat=prn2sat(sys,prn)
+    return sat
+    
 def vnorm(r):
     return r/np.linalg.norm(r)
 
@@ -429,6 +455,7 @@ def tropmodel(t,pos,el=np.pi/2,humi=0.7):
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
+    igfont = {'family':'Meiryo'}
     
     t=epoch2time([2021,3,19,12,0,0])
     ep=time2epoch(t)
@@ -446,11 +473,44 @@ if __name__ == '__main__':
         ofst_r[k,:]=antmodel(nav,np.deg2rad(el),nf,1)
         ofst_b[k,:]=antmodel(nav,np.deg2rad(el),nf,0)
         
+    flg_ant=False
+    flg_trop=True
+        
     plt.figure()
-    plt.plot(el_t,ofst_b[:,0]*100,label='Trimble TRM59800.80')
-    plt.plot(el_t,ofst_r[:,0]*100,label='JAVAD RINGANT')
-    plt.grid()
-    plt.legend()
-    plt.xlabel('elevation[deg]')
-    plt.ylabel('range correction for antenna offset [cm]')
+    if flg_ant:
+        plt.plot(el_t,ofst_b[:,0]*100,label='Trimble TRM59800.80')
+        plt.plot(el_t,ofst_r[:,0]*100,label='JAVAD RINGANT')
+        plt.grid()
+        plt.legend()
+        plt.xlabel('elevation[deg]')
+        plt.ylabel('range correction for antenna offset [cm]')
+    if flg_trop:
+        ep=[2021,4,1,0,0,0]
+        t=epoch2time(ep)        
+        el_t = np.arange(0.01,np.pi/2,0.01)
+        n=len(el_t)
+        trop = np.zeros(n)
+        trop_hs = np.zeros(n)
+        trop_wet = np.zeros(n)
+        lat_t = [45]
+        for lat in lat_t:
+            pos=[np.deg2rad(lat),0,0]
+            for k,el in enumerate(el_t):
+                ths,twet,z=tropmodel(t,pos,el)
+                mapfh,mapfw=tropmapf(t,pos,el)  
+                trop_hs[k]=mapfh*ths
+                trop_wet[k]=mapfw*twet
+                
+            trop=trop_hs+trop_wet
+            plt.plot(np.rad2deg(el_t),trop)
+            plt.plot(np.rad2deg(el_t),trop_hs)
+            plt.plot(np.rad2deg(el_t),trop_wet)
+          
+        
+        plt.grid()
+        plt.axis([0,90,0,10])
+        plt.legend(['全体','静水圧項','湿潤項'],prop=igfont)
+        plt.xlabel('仰角 [deg]',**igfont)
+        plt.ylabel('対流圏遅延 [m]',**igfont)
+        
     
