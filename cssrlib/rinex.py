@@ -5,9 +5,8 @@ Created on Mon Nov 23 20:10:51 2020
 @author: ruihi
 """
 
-import datetime
 import numpy as np
-from gnss import uGNSS,rSIG,rCST,sat2prn,Eph,prn2sat,gpst2time,Obs,Nav,gtime_t,epoch2time
+from gnss import uGNSS,rSIG,Eph,prn2sat,gpst2time,Obs,epoch2time
 
 class rnxdec:
     MAXSAT=uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX

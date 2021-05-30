@@ -24,7 +24,7 @@ def loadname(file):
 
 def loadTLE(tle_file,satlst=None):
     with open(tle_file,'r') as f:
-        satlist = []; prn = []
+        satlist = []
         for l1 in f:
             l2 = f.readline()
             l3 = f.readline()
@@ -39,7 +39,7 @@ def loadTLE(tle_file,satlst=None):
             sat = readtle(name,l2,l3)
             satlist.append(sat)
 
-    return satlist,prn
+    return satlist
 
 def tleorb(sat,dates,obs=None):
     nsat=len(sat);nd=len(dates)
@@ -65,19 +65,18 @@ def tleorb(sat,dates,obs=None):
 
 if __name__ == '__main__':
     from plot import skyplot,plot_elv,plot_nsat
-    import matplotlib.pyplot as plt
     
-    #satlst=loadname('../data/TLE_GNSS_PRN-GEJ.txt')
-    satlst=loadname('../data/TLE_GNSS_PRN.txt')
-    sats,prn=loadTLE('../data/gnss.txt',satlst)
-    start_day='2021-05-14T00:00:00Z'
-    end_day='2021-05-15T00:00:00Z'    
-    #start_day='2021-05-15T06:00:00Z'
-    #end_day='2021-05-15T06:00:00Z' 
+    satlst=loadname('../data/TLE_GNSS_PRN-GEJ.txt')
+    #satlst=loadname('../data/TLE_GNSS_PRN.txt')
+    sats=loadTLE('../data/gnss.txt',satlst)
+    st='2021-05-14T00:00:00Z'
+    ed='2021-05-15T00:00:00Z'    
+    #st='2021-05-15T06:00:00Z'
+    #ed='2021-05-15T06:30:00Z' 
     period=1 # minutes
     elmask = np.deg2rad(15)
     
-    dates = date_range(start=start_day, end=end_day,  freq='{}T'.format(period))
+    dates = date_range(start=st,end=ed,freq='{}T'.format(period))
     t0=dates[0]
     t=(dates-t0).total_seconds()
     obs = Observer()

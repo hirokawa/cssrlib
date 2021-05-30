@@ -97,7 +97,7 @@ class Nav():
         self.rb=[0,0,0] # base station position in ECEF [m]
         self.gnss_t=[uGNSS.GPS]
         self.smode = 0 # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
-        #self.gnss_t=[uGNSS.GPS,uGNSS.GAL,uGNSS.QZS]
+        self.gnss_t=[uGNSS.GPS,uGNSS.GAL,uGNSS.QZS]
         self.loglevel=2
 
         # antenna type:  JAVAD RINGANT SCIT
@@ -274,6 +274,31 @@ def geodist(rs,rr):
     e=e/r
     r+=rCST.OMGE*(rs[0]*rr[1]-rs[1]*rr[0])/rCST.CLIGHT
     return r,e
+
+def kfupdate(x,P,H,v,R):
+    """ kalmanf filter measurement update """
+    n=len(x)
+    ix=[]
+    k=0
+    for i in range(n):
+        if P[i,i]>0.0:
+#               if x[i]!=0.0 and P[i,i]>0.0:
+            ix.append(i);k+=1
+    x_=x[ix]
+    P_=P[ix,:][:,ix]
+    H_=H[:,ix]
+    PHt=P_@H_.T
+    S=H_@PHt+R
+    K=PHt@np.linalg.inv(S)
+    x_+=K@v
+    P_-=K@H_@P_
+    x[ix]=x_
+    
+    for k1,i in enumerate(ix):
+       for k2,j in enumerate(ix):
+           P[i,j] = P_[k1,k2]
+       
+    return x,P
 
 # TBD
 def dops_h(H):

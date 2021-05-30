@@ -37,6 +37,8 @@ def plot_nsat(t,nsat):
 
 def plot_elv(t,elv,elmask=0,satlist=None):
     # elevation plot
+    if satlist is None:
+        satlist=range(1,uGNSS.MAXSAT)
     nsat=np.zeros((len(t),uGNSS.GNSSMAX),dtype=int)
     col_tbl='bygmkrc'
     fig=plt.figure('elevation')
@@ -47,10 +49,11 @@ def plot_elv(t,elv,elmask=0,satlist=None):
         idx=elv[:,k]>elmask
         nsat[idx,sys]+=1         
         plt.plot(t/3600,np.rad2deg(elv[:,k]),'-'+col_tbl[sys])
+    tmax=t[-1]//3600+1
     plt.ylabel('elevation [deg]')
     plt.xlabel('time [h]')
     plt.grid()
-    plt.axis([0,24,0,90])
+    plt.axis([0,tmax,0,90])
     plt.show()
     return nsat
 
@@ -68,7 +71,7 @@ def skyplot(azm,elv,elmask=0,satlist=None):
     col_tbl='bygmkrc'
 
     if satlist is None:
-        satlist=range(uGNSS.MAXSAT)
+        satlist=range(1,uGNSS.MAXSAT)
 
     nsat=0
     for k,sat in enumerate(satlist):
