@@ -6,7 +6,7 @@ Created on Sun Nov 15 20:03:45 2020
 """
 
 import numpy as np
-import gnss as gn
+import cssrlib.gnss as gn
 from math import sin,cos,atan2,asin
 
 def nut_iau1980(t,f):

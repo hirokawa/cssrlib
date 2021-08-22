@@ -6,8 +6,7 @@ Created on Mon Nov 23 20:10:51 2020
 """
 
 import numpy as np
-from gnss import uGNSS,rCST,sat2prn,Eph,ecef2pos,prn2sat,Nav,timediff,timeadd,epoch2time,time2gpst,vnorm
-#import datetime
+from cssrlib.gnss import uGNSS,rCST,sat2prn,Eph,ecef2pos,prn2sat,Nav,timediff,timeadd,epoch2time,time2gpst,vnorm
 
 MAX_ITER_KEPLER=30
 RTOL_KEPLER=1e-13
@@ -164,62 +163,3 @@ def satposs(obs,nav,cs=None):
         nav.time_p=cs.lc[0].t0[1]
         
     return rs,vs,dts,svh
-
-
-if __name__ == '__main__':
-    import cartopy.crs as ccrs
-    import matplotlib.pyplot as plt
-    from rinex import rnxdec 
-
-    bdir='../data/'
-    #navfile=bdir+'SEPT078M.21P'
-    navfile=bdir+'30340780.21q'
-    
-    nav = Nav()
-    dec = rnxdec()
-    nav=dec.decode_nav(navfile,nav)
-
-    n=24*3600//300
-    t0=epoch2time([2021,3,19,0,0,0])
-
-    flg_plot=True
-    
-    if True:
-        t=t0
-        sat=prn2sat(uGNSS.QZS,194)
-        eph=findeph(nav.eph,t,sat)
-        rs,vs,dts=eph2pos(t,eph,True)
-
-    if flg_plot:
-        lon0=135    
-        plt.figure(figsize=(6, 6))
-        ax = plt.axes(projection=ccrs.Orthographic(central_longitude=lon0,central_latitude=0))
-        ax.coastlines(resolution='50m')
-        ax.gridlines()
-        ax.stock_img()        
-        pos=np.zeros((n,3))
-    
-        for k in range(uGNSS.MAXSAT):
-            sat=k+1
-            sys,prn=sat2prn(sat)
-            if sys!=uGNSS.QZS:
-                continue
-            for i in range(n):
-                t=timeadd(t0,i*300)
-                if eph==None:
-                    continue
-                rs,dts=eph2pos(t,eph)    
-                pos[i,:]=ecef2pos(rs)
-                pos[i,0]=np.rad2deg(pos[i,0])
-                pos[i,1]=np.rad2deg(pos[i,1])
-                
-            plt.plot(pos[:,1],pos[:,0],'m-',transform=ccrs.Geodetic())
-        
-
-    
-    
-    
-    
-    
-
-        

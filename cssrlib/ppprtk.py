@@ -6,15 +6,15 @@ Created on Sun Nov 15 20:03:45 2020
 """
 
 import numpy as np
-import gnss as gn
-from gnss import rCST,sat2prn,time2gpst,ecef2pos,geodist,satazel,ionmodel,tropmodel,dops,ecef2enu,Nav,timediff,vnorm,antmodel,uGNSS
-from ephemeris import findeph,satposs
-from rinex import rnxdec    
+import cssrlib.gnss as gn
+from cssrlib.gnss import rCST,sat2prn,time2gpst,ecef2pos,geodist,satazel,ionmodel,tropmodel,dops,ecef2enu,Nav,timediff,vnorm,antmodel,uGNSS
+from cssrlib.ephemeris import findeph,satposs
+from cssrlib.rinex import rnxdec    
 import matplotlib.pyplot as plt
 from cssrlib.cssrlib import cssr,sSigGPS,sSigGAL,sSigQZS,sCType
-from ppp import tidedisp,shapiro,windupcorr
-from rtk import IB,ddres,kfupdate,resamb_lambda,valpos,holdamb
-from pntpos import pntpos
+from cssrlib.ppp import tidedisp,shapiro,windupcorr
+from cssrlib.rtk import IB,ddres,kfupdate,resamb_lambda,valpos,holdamb
+from cssrlib.pntpos import pntpos
 
 MAXITR=10
 ELMIN=10
@@ -348,169 +348,3 @@ def relpos(nav,obs,cs):
             nav.smode=4 # fix
     return 0
 
-if __name__ == '__main__':
-    bdir='../data/'
-    l6file=bdir+'2021078M.l6'
-    griddef=bdir+'clas_grid.def'
-    
-    # based on GSI F5 solution
-    xyz_ref=[-3962108.673,   3381309.574,   3668678.638]
-    pos_ref=ecef2pos(xyz_ref)
-
-    bdir='../data/'
-    navfile=bdir+'SEPT078M.21P'
-    obsfile=bdir+'SEPT078M.21O'
-
-    cs=cssr()
-    cs.monlevel=2
-    cs.week=2149
-    cs.read_griddef(griddef)
-
-    dec = rnxdec()
-    nav = Nav()
-    nav=dec.decode_nav(navfile,nav)
-    #nep=3600//30
-    nep=300
-    t=np.zeros(nep)
-    tc=np.zeros(nep)
-    enu=np.ones((nep,3))*np.nan
-    sol=np.zeros((nep,4))
-    dop=np.zeros((nep,4))
-    smode=np.zeros(nep,dtype=int)
-    if dec.decode_obsh(obsfile)>=0:
-        rr=dec.pos
-        rtkinit(nav,dec.pos)
-        pos=ecef2pos(rr)
-        inet=cs.find_grid_index(pos)
-        
-        fc=open(bdir+l6file,'rb')
-        if not fc:
-            print("L6 messsage file cannot open."); exit(-1)
-        for ne in range(nep):
-            obs=dec.decode_obs()
-            week,tow=time2gpst(obs.t)
-            
-            cs.decode_l6msg(fc.read(250),0)
-            if cs.fcnt==5: # end of sub-frame
-                cs.week=week
-                cs.decode_cssr(cs.buff,0)            
-
-            if ne==0:
-                #nav.sol=1
-                #sol,az,el=pntpos(obs,nav,rr)
-                #nav.x[0:3]=sol[0:3] # initial estimation
-                t0=obs.t
-                t0.time=t0.time//30*30
-                cs.time=obs.t
-                nav.time_p=t0
-            t[ne]=timediff(obs.t,t0)
-            tc[ne] = timediff(cs.time,t0)
-            
-            week,tow=time2gpst(obs.t)
-    
-            cstat=cs.chk_stat()
-            
-            if tow>=475413:
-                tow
-
-            if cstat or tow>=475220:
-                # for debug
-                #nav.x[0:3]=rr
-            
-                relpos(nav,obs,cs)
-            
-            sol=nav.x[0:3]
-            enu[ne,:]=gn.ecef2enu(pos_ref,sol-xyz_ref)
-            smode[ne]=nav.smode
-            
-        fc.close()
-        dec.fobs.close()
-    
-
-    fig_type=1
-    ylim=0.2
-    
-    if fig_type==1:    
-        plt.plot(t,enu,'.')
-        plt.xticks(np.arange(0,nep+1, step=30))
-        plt.ylabel('position error [m]')
-        plt.xlabel('time[s]')
-        plt.legend(['east','north','up'])
-        plt.grid()
-        plt.axis([0,ne,-ylim,ylim])    
-    elif fig_type==2:
-        plt.plot(enu[:,0],enu[:,1],'.')
-        plt.xlabel('easting [m]')
-        plt.ylabel('northing [m]')
-        plt.grid()
-        plt.axis([-ylim,ylim,-ylim,ylim])   
-    
-
-    if nav.fout is not None:
-        nav.fout.close()
-
-    if True:
-        gnss_tbl={uGNSS.GPS:1,uGNSS.GAL:8,uGNSS.QZS:16}
-        
-        fname='C:/work/clas_test_library/util/rnx2rtkp/2021078M.nmea.osr'
-        names=['tow','sys','prn','cpc1','cpc2','prc1','prc2','dorb','dclk']
-        vr = np.genfromtxt('%s'%(fname),delimiter=',',skip_header=1,usecols=[1,2,3,23,24,26,27,29,30],names=names)
-        
-        dtype0 = (float,int,float,float,float,float)
-        d = np.genfromtxt(nav.logfile)
-        tow0=(d[0,0]//30)*30
-        t=d[:,0]-tow0
-        sat=d[:,1]
-        cpc1=d[:,2];cpc2=d[:,3];prc1=d[:,4];prc2=d[:,5]
-
-        sats=np.unique(sat)
-        #tofst=0
-        tofst=4
-        tr=vr['tow']-tow0
-        #cpc1_=vr['cpc1']+vr['dorb']-vr['dclk']
-        cpc1_=vr['cpc1'];prc1_=vr['prc1'];cpc2_=vr['cpc2'];prc2_=vr['prc2']
-        
-        plt.figure()
-        for sat0 in sats:
-            sys,prn=sat2prn(sat0)
-            gnss = gnss_tbl[sys]
-            #if sat0!=64:
-            #    continue
-            idx=np.where(sat==sat0)[0]
-            plt.plot(t[idx]-tofst,prc1[idx]-prc1[idx[0]],label=gn.sat2id(sat0))
-            
-            idx1=np.where(np.logical_and(vr['sys']==gnss,vr['prn']==prn))[0]
-            if len(idx1)==0:
-                continue
-            plt.plot(tr[idx1],prc1_[idx1]-prc1_[idx1[0]],'--',label=gn.sat2id(sat0))
-
-        plt.grid()
-        plt.xticks(np.arange(0,nep+1, step=30))
-        plt.legend()
-        plt.xlim([0,nep])
-        plt.show()
-    
-        plt.figure()
-        for sat0 in sats:
-            sys,prn=sat2prn(sat0)
-            gnss = gnss_tbl[sys]
-            if sat0!=9:
-                continue
-            idx=np.where(sat==sat0)[0]
-            plt.plot(t[idx]-tofst,cpc1[idx]-cpc1[idx[0]],label=gn.sat2id(sat0))
-            
-            idx1=np.where(np.logical_and(vr['sys']==gnss,vr['prn']==prn))[0]
-            if len(idx1)==0:
-                continue
-            plt.plot(tr[idx1],cpc1_[idx1]-cpc1_[idx1[0]],'--',label=gn.sat2id(sat0))
-
-        plt.grid()
-        plt.xticks(np.arange(0,nep+1, step=30))
-        plt.legend()
-        plt.xlim([0,nep])
-        plt.show()
-
-
-
-
-                    

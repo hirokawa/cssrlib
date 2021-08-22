@@ -10,7 +10,7 @@ import numpy as np
 import datetime
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-from gnss import uGNSS,rCST,prn2sat,sat2prn,Eph,gpst2time,time2gpst,sat2id
+from cssrlib.gnss import uGNSS,rCST,prn2sat,sat2prn,Eph,gpst2time,time2gpst,sat2id
 
 # GPS=0;SBS=1;GAL=2;BDS=3;QZS=5;GLO=6
 
