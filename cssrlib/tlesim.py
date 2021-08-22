@@ -65,15 +65,19 @@ def tleorb(sat,dates,obs=None):
 
 if __name__ == '__main__':
     from plot import skyplot,plot_elv,plot_nsat
+    import matplotlib.pyplot as plt
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature
+    import cartopy.io.img_tiles as cimgt
     
-    satlst=loadname('../data/TLE_GNSS_PRN-GEJ.txt')
-    #satlst=loadname('../data/TLE_GNSS_PRN.txt')
+    #satlst=loadname('../data/TLE_GNSS_PRN-GEJ.txt')
+    satlst=loadname('../data/TLE_GNSS_PRN.txt')
     sats=loadTLE('../data/gnss.txt',satlst)
     st='2021-05-14T00:00:00Z'
     ed='2021-05-15T00:00:00Z'    
     #st='2021-05-15T06:00:00Z'
     #ed='2021-05-15T06:30:00Z' 
-    period=1 # minutes
+    period=30 # minutes
     elmask = np.deg2rad(15)
     
     dates = date_range(start=st,end=ed,freq='{}T'.format(period))
@@ -81,12 +85,13 @@ if __name__ == '__main__':
     t=(dates-t0).total_seconds()
     obs = Observer()
     obs.lat,obs.lon='35.6804','139.769'
+        
+    mode=3 # 1: skyplot, 2: elevation, 3: hot-map
     
-    lat,lon,azm,elv,sats_=tleorb(sats,dates,obs)
-    idx=np.where(sats_>0)[0]
-    
-    mode=2 # 1: skyplot, 2: elevation
-    
+    if mode<3:
+        lat,lon,azm,elv,sats_=tleorb(sats,dates,obs)
+        idx=np.where(sats_>0)[0]
+
     if mode==1:
         nsat=skyplot(azm[:,idx],elv[:,idx],elmask,sats_[idx])
     elif mode==2:
@@ -97,6 +102,60 @@ if __name__ == '__main__':
         #nidx=[uGNSS.GPS,uGNSS.GAL,uGNSS.QZS,uGNSS.GLO] # mean:22.7
         #nidx=[uGNSS.GPS,uGNSS.GAL,uGNSS.QZS,uGNSS.GLO,uGNSS.BDS] # mean:41.3
         nsat_mean=np.mean(np.sum(nsat[:,nidx],1))
-    
-    
+
+    elif mode==3:
+        lat_t = np.arange(-85,90,2); 
+        lon_t = np.arange(-180,180,2); 
+        elmask = np.deg2rad(10)
         
+        nlat=len(lat_t)
+        nlon=len(lon_t)
+        if True:
+            nsat_t = np.zeros((nlat,nlon))
+            nep=len(dates)
+            for k,lat in enumerate(lat_t):
+                for j,lon in enumerate(lon_t):
+                    obs.lat='%.4f' % (lat)
+                    obs.lon='%.4f' % (lon)
+                    lat_,lon_,azm,elv,sats_=tleorb(sats,dates,obs)
+                    nsat=np.zeros(nep)
+                    idx=np.where(sats_>0)[0]
+                    el=elv[:,idx]
+                    for i,sat in enumerate(sats_[idx]):
+                        if np.all(np.isnan(el[:,i])):
+                            continue
+                        idx=el[:,i]>elmask
+                        nsat[idx]+=1
+                    nsat_t[k,j]=np.mean(nsat)
+            np.save('nsat_t',nsat_t)
+ 
+        if True:
+ 
+            stamen_terrain = cimgt.Stamen('terrain-background') 
+           
+ 
+            fig=plt.figure(figsize=(12,8))
+            ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
+            #ax.add_image(stamen_terrain, 8)
+            
+            lons, lats = np.meshgrid(lon_t, lat_t)
+            nsat_t=np.load('nsat_t.npy')
+
+            
+            #ax.add_feature(cfeature.LAND)
+            #ax.add_feature(cfeature.COASTLINE)
+            #ax.add_feature(cfeature.BORDERS)
+            #ax.add_feature(states_provinces, edgecolor='gray')
+            #ax.add_image(tiler, 7)
+            #ax.gridlines()
+            #ax.stock_img()
+            cm=plt.cm.jet
+
+            lebels=np.arange(np.floor(np.min(nsat_t))-2,np.ceil(np.max(nsat_t))+2,2)
+            cs=ax.contourf(lons,lats, nsat_t,lebels,transform=ccrs.PlateCarree(),cmap=cm)
+            fig.colorbar(cs, shrink=0.5)
+            ax.coastlines() 
+            plt.show()
+            
+            
+            

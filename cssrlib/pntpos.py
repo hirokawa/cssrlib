@@ -15,6 +15,7 @@ def varerr(nav,el):
 
 def stdinit():
     nav=Nav()
+    nav.na=6
     nav.nx=8
     nav.x=np.zeros(nav.nx)
     sig_p0=100.0*np.ones(3)
@@ -33,7 +34,7 @@ def stdinit():
 def rescode(obs,nav,rs,dts,svh,x):
     n=obs.sat.shape[0]
     rr=x[0:3]
-    dtr=x[6]
+    dtr=x[nav.na]
     pos=ecef2pos(rr)
     v=np.zeros(n); H=np.zeros((n,nav.nx))
     azv=np.zeros(n); elv=np.zeros(n)
@@ -52,7 +53,7 @@ def rescode(obs,nav,rs,dts,svh,x):
         mapfh,mapfw=tropmapf(obs.t,pos,el)
         dtrp=mapfh*trop_hs+mapfw*trop_wet
         v[nv]=P-(r+dtr-rCST.CLIGHT*dts[i]+dion+dtrp)
-        H[nv,0:3]=-e; H[nv,6]=1
+        H[nv,0:3]=-e; H[nv,nav.na]=1
         azv[nv]=az; elv[nv]=el
         nv+=1
     v=v[0:nv]; H=H[0:nv,:]
@@ -67,8 +68,8 @@ def pntpos(obs,nav):
     P=nav.Phi@P@nav.Phi.T+nav.Q
     v,H,nv,az,el=rescode(obs,nav,rs,dts,svh,x)
     if abs(np.mean(v))>100:
-        x[6]=np.mean(v)
-        v-=x[6]
+        x[nav.na]=np.mean(v)
+        v-=x[nav.na]
     n=len(v)
     R=np.zeros((n,n))  
     for k in range(n):

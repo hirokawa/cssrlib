@@ -6,7 +6,7 @@ Created on Mon Nov 23 20:10:51 2020
 """
 
 import numpy as np
-from gnss import uGNSS,rCST,sat2prn,Eph,ecef2pos,prn2sat,Nav,timediff,timeadd,epoch2time
+from gnss import uGNSS,rCST,sat2prn,Eph,ecef2pos,prn2sat,Nav,timediff,timeadd,epoch2time,time2gpst,vnorm
 #import datetime
 
 MAX_ITER_KEPLER=30
@@ -141,13 +141,28 @@ def satposs(obs,nav,cs=None):
         t=timeadd(t,-dt)
         rs[i,:],vs[i,:],dts[i]=eph2pos(t,eph,True)
         if cs is not None: # apply SSR correction
-            ea=vs[i,:]/np.linalg.norm(vs[i,:])
+            ea=vnorm(vs[i,:])
             rc=np.cross(rs[i,:],vs[i,:])
-            ec=rc/np.linalg.norm(rc)
+            ec=vnorm(rc)
             er=np.cross(ea,ec)
             dorb_e=-dorb@[er,ea,ec]
+            
             rs[i,:]+=dorb_e
             dts[i]+=dclk/rCST.CLIGHT
+            
+            ers=vnorm(rs[i,:]-nav.x[0:3])
+            dorb=ers@dorb_e
+            sis = dclk-dorb
+            if cs.lc[0].t0[1].time % 30 == 0 and timediff(cs.lc[0].t0[1],nav.time_p)>0:
+                if abs(nav.sis[sat])>0:
+                    nav.dsis[sat] = sis - nav.sis[sat]    
+                nav.sis[sat] = sis
+                
+            nav.dorb[sat] = dorb
+            nav.dclk[sat] = dclk
+    if cs is not None:
+        nav.time_p=cs.lc[0].t0[1]
+        
     return rs,vs,dts,svh
 
 

@@ -113,11 +113,15 @@ class cssr:
         self.grid=None
         self.prc=None
         self.cpc=None
+        self.tow=0
         self.lc=[]
         for inet in range(self.MAXNET+1):
             self.lc.append(local_corr())
             self.lc[inet].inet=inet
-
+            self.lc[inet].flg_trop=0
+            self.lc[inet].flg_stec=0
+            self.lc[inet].nsat_n=0
+            
     def sval(self,u,n,scl):
         invalid=-2**(n-1)
         y=np.nan if u==invalid else u*scl
@@ -166,7 +170,7 @@ class cssr:
     def decode_head(self,msg,i,st=-1):
         if st==sCSSR.MASK:
             self.tow=bs.unpack_from('u20',msg,i)[0];i+=20
-            self.tow0=self.tow
+            self.tow0=self.tow//3600*3600
         else:
             dtow=bs.unpack_from('u12',msg,i)[0];i+=12
             if self.tow>=0:
@@ -255,6 +259,7 @@ class cssr:
     def decode_pbias_sat(self,msg,i,k,j,inet=0):
         v=bs.unpack_from_dict('s15u2',['pbias','di'],msg,i)
         self.lc[inet].pbias[k,j]=self.sval(v['pbias'],15,0.001)
+        self.lc[inet].di[k,j]=v['di']
         i+=17 
         return i
 
@@ -301,18 +306,14 @@ class cssr:
     def decode_cssr_cbias(self,msg,i,inet=0):
         """decode MT4073,4 Code Bias Correction message """
         head,i=self.decode_head(msg,i)
+        nsat=self.nsat_n
         self.flg_net=False
         if self.iodssr!=head['iodssr']:
             return -1      
-        cbias_p=self.lc[inet].cbias
-        self.lc[inet].cbias = np.zeros((self.nsat_n,self.nsig_max))
-        self.lc[inet].cbias_d = np.ones((self.nsat_n,self.nsig_max))*np.nan
-        for k in range(0,self.nsat_n):
+        self.lc[inet].cbias = np.zeros((nsat,self.nsig_max))
+        for k in range(nsat):
             for j in range(0,self.nsig_n[k]):
                 i=self.decode_cbias_sat(msg,i,k,j,inet)
-            if self.sat_n[k] in self.sat_n_p:
-                j=self.sat_n_p.index(self.sat_n[k])
-                self.lc[inet].cbias_d[k,:]=self.lc[inet].cbias[k,:]-cbias_p[j,:]
                 
         self.lc[inet].cstat |= (1<<sCType.CBIAS)
         self.lc[inet].t0[sCType.CBIAS] = self.time
@@ -321,11 +322,13 @@ class cssr:
     def decode_cssr_pbias(self,msg,i,inet=0):
         """decode MT4073,5 Phase Bias Correction message """
         head,i=self.decode_head(msg,i)
+        nsat=self.nsat_n
         self.flg_net=False
         if self.iodssr!=head['iodssr']:
             return -1
-        self.lc[inet].pbias = np.zeros((self.nsat_n,self.nsig_max))        
-        for k in range(0,self.nsat_n):
+        self.lc[inet].pbias = np.zeros((nsat,self.nsig_max))        
+        self.lc[inet].di = np.zeros((nsat,self.nsig_max),dtype=int)  
+        for k in range(nsat):
             for j in range(0,self.nsig_n[k]):
                 i=self.decode_pbias_sat(msg,i,k,j,inet)
     
@@ -346,19 +349,24 @@ class cssr:
             v=bs.unpack_from_dict('u5u'+str(nsat),['inet','svmaskn'],msg,i)
             self.inet=inet=v['inet']
             i+=5+nsat
+            self.lc[inet].sat_n=self.decode_local_sat(v['svmaskn'])
+            self.lc[inet].nsat_n=nsat=len(self.lc[inet].sat_n)
             
         if dfm['cb']:
             self.lc[inet].cbias = np.zeros((nsat,self.nsig_max))
         if dfm['pb']:
             self.lc[inet].pbias = np.zeros((nsat,self.nsig_max))
-        for k in range(nsat):
-            if not self.isset(v['svmaskn'],nsat,k):
+            self.lc[inet].di = np.zeros((nsat,self.nsig_max),dtype=int)  
+        ki=0
+        for k in range(self.nsat_n):
+            if not self.isset(v['svmaskn'],self.nsat_n,k):
                 continue
             for j in range(self.nsig_n[k]):
                 if dfm['cb']:
-                    i=self.decode_cbias_sat(msg,i,k,j,inet)
+                    i=self.decode_cbias_sat(msg,i,ki,j,inet)
                 if dfm['pb']:
-                    i=self.decode_pbias_sat(msg,i,k,j,inet)
+                    i=self.decode_pbias_sat(msg,i,ki,j,inet)
+            ki+=1
         
         if dfm['cb']:
             self.lc[inet].cstat |= (1<<sCType.CBIAS)
@@ -412,12 +420,12 @@ class cssr:
         dfm = bs.unpack_from_dict('u2u5u'+str(self.nsat_n),['stype','inet','svmaskn'],msg,i)
         self.inet=inet=dfm['inet']
         self.netmask[inet]=netmask=dfm['svmaskn']
+        self.lc[inet].sat_n=self.decode_local_sat(netmask)
+        self.lc[inet].nsat_n=nsat=len(self.lc[inet].sat_n)
         i+=7+self.nsat_n
-        self.lc[inet].stec_quality=np.zeros(self.nsat_n)
-        self.lc[inet].ci=np.zeros((self.nsat_n,6))
-        for k in range(self.nsat_n):
-            if not self.isset(netmask,self.nsat_n,k):
-                continue
+        self.lc[inet].stec_quality=np.zeros(nsat)
+        self.lc[inet].ci=np.zeros((nsat,6))
+        for k in range(nsat):
             v=bs.unpack_from_dict('u3u3',['class','val'],msg,i)
             self.lc[inet].stec_quality[k]=self.quality_idx(v['class'],v['val'])
             i+=6
@@ -437,13 +445,15 @@ class cssr:
         self.flg_net=True
         self.inet=inet=dfm['inet']
         self.netmask[inet]=netmask=dfm['svmaskn']
+        self.lc[inet].sat_n=self.decode_local_sat(netmask)
+        self.lc[inet].nsat_n=nsat=len(self.lc[inet].sat_n)
         ng=dfm['ng']
         self.lc[inet].ng=ng
         self.lc[inet].trop_quality=self.quality_idx(dfm['class'],dfm['value'])
         i+=20+self.nsat_n
         sz=7 if dfm['range']==0 else 16
         fmt='s'+str(sz)
-        self.lc[inet].stec=np.zeros((ng,self.nsat_n))
+        self.lc[inet].stec=np.zeros((ng,nsat))
         self.lc[inet].dtd=np.zeros(ng)
         self.lc[inet].dtw=np.zeros(ng)
 
@@ -454,9 +464,7 @@ class cssr:
                 self.lc[inet].dtd[j]=self.sval(vd['dtd'],9,0.004)+2.3
                 self.lc[inet].dtw[j]=self.sval(vd['dtw'],8,0.004)            
             
-            for k in range(self.nsat_n):
-                if not self.isset(netmask,self.nsat_n,k):
-                    continue
+            for k in range(nsat):
                 dstec=bs.unpack_from(fmt,msg,i)[0];i+=sz
                 self.lc[inet].stec[j,k]=self.sval(dstec,sz,0.04)
         self.lc[inet].cstat |= (1<<sCType.TROP)
@@ -564,18 +572,17 @@ class cssr:
         # STEC
         netmask=bs.unpack_from('u'+str(self.nsat_n),msg,i)[0];i+=self.nsat_n
         self.lc[inet].netmask=netmask
-        #loc,nsat_l=self.decode_mask(netmask,self.nsat_n)
-        self.lc[inet].stec_quality=np.zeros(self.nsat_n)
+        self.lc[inet].sat_n=self.decode_local_sat(netmask)
+        self.lc[inet].nsat_n=nsat=len(self.lc[inet].sat_n)
+        
+        self.lc[inet].stec_quality=np.zeros(nsat)
         if dfm['stec']&2>0:
-            self.lc[inet].ci=np.zeros((self.nsat_n,6))
-            self.lc[inet].stype=np.zeros(self.nsat_n,dtype=int)
+            self.lc[inet].ci=np.zeros((nsat,6))
+            self.lc[inet].stype=np.zeros(nsat,dtype=int)
         if dfm['stec']&1>0:
-            self.lc[inet].dstec=np.zeros((self.nsat_n,ng))
-        self.lc[inet].sat_n=[]
-        for k in range(0,self.nsat_n):
-            if not self.isset(netmask,self.nsat_n,k):
-                continue
-            self.lc[inet].sat_n.append(self.sat_n[k])
+            self.lc[inet].dstec=np.zeros((nsat,ng))
+
+        for k in range(nsat):
             if dfm['stec']>0:
                 v=bs.unpack_from_dict('u3u3',['class','value'],msg,i)
                 i+=6
@@ -703,12 +710,9 @@ class cssr:
  
     def get_stec(self,dlat=0.0,dlon=0.0):
         inet=self.inet_ref
-        stec=np.zeros(self.nsat_n)
-        for i in range(self.nsat_n):
-            #if not self.isset(self.lc[inet].netmask,self.nsat_n,i):
-            #    continue
-            if self.sat_n[i] not in self.lc[inet].sat_n:
-                continue
+        nsat=self.lc[inet].nsat_n
+        stec=np.zeros(nsat)
+        for i in range(nsat):
             if self.lc[inet].flg_stec&2:            
                 ci=self.lc[inet].ci[i,:]
                 stec[i]=[1,dlat,dlon,dlat*dlon,dlat**2,dlon**2]@ci
@@ -733,6 +737,7 @@ class cssr:
             self.fcnt=-1
         self.facility_p=l6head['facility']
         if self.fcnt<0:
+            print("facility changed.")
             return -1
         j=1695*self.fcnt
         for k in range(53):

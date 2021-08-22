@@ -18,7 +18,7 @@ VAR_HOLDAMB=0.001
 def rtkinit(nav,pos0=np.zeros(3)):
     """ initalize RTK-GNSS parameters """
     nav.nf=2
-    nav.pmode=0 # 0:static, 1:kinematic
+    nav.pmode=1 # 0:static, 1:kinematic
 
     nav.na=3 if nav.pmode==0 else 6
     nav.ratio=0
@@ -462,6 +462,8 @@ def relpos(nav,obs,obsb):
         if valpos(nav,v,R):
             nav.x=xp
             nav.P=Pp
+        else:
+            nav.smode=0
     
     nb,xa=resamb_lambda(nav,sat)
     nav.smode=5
@@ -498,7 +500,7 @@ if __name__ == '__main__':
     decb.decode_obsh(basefile)
     dec.decode_obsh(obsfile)
  
-    nep=600
+    nep=120
     #nep=10
     # GSI 3034 fujisawa
     nav.rb=[-3959400.631,3385704.533,3667523.111]
@@ -512,9 +514,9 @@ if __name__ == '__main__':
             obs=dec.decode_obs()
             obsb=decb.decode_obs()
             if ne==0:
-                nav.smode=1
-                sol,az,el=pntpos(obs,nav,rr)
-                nav.x[0:3]=sol[0:3] # initial estimation
+                #nav.smode=1
+                #sol,az,el=pntpos(obs,nav,rr)
+                #nav.x[0:3]=sol[0:3] # initial estimation
                 t0=obs.t
             t[ne]=gn.timediff(obs.t,t0)
             relpos(nav,obs,obsb)

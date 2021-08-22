@@ -6,7 +6,7 @@ Created on Mon Nov 23 20:10:51 2020
 """
 
 from enum import IntEnum,Enum
-from math import floor,sin,cos,sqrt,asin,atan2
+from math import floor,sin,cos,sqrt,asin,atan2,atan,fabs
 import numpy as np
 from copy import deepcopy
 from scipy.interpolate import interp1d
@@ -91,11 +91,10 @@ class Nav():
             [0.1167E+06,-0.2294E+06,-0.1311E+06, 0.1049E+07]])
         self.elmin=np.deg2rad(15.0)
         self.tidecorr=False
-        self.nf=2
+        self.nf=2 
         self.excl_sat=[]
         self.freq=[1.57542e9,1.22760e9,1.17645e9,1.20714e9]
         self.rb=[0,0,0] # base station position in ECEF [m]
-        self.gnss_t=[uGNSS.GPS]
         self.smode = 0 # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
         self.gnss_t=[uGNSS.GPS,uGNSS.GAL,uGNSS.QZS]
         self.loglevel=2
@@ -118,6 +117,11 @@ class Nav():
                       -5.40,-5.32,-4.79,-3.84,-2.56,-1.02,+0.84,+3.24,+6.51,+10.84]]
         self.ant_pco_b=[+89.51,+117.13,+117.13]
         
+        # SSR correction placeholder
+        self.dorb = np.zeros(uGNSS.MAXSAT)
+        self.dclk = np.zeros(uGNSS.MAXSAT)
+        self.dsis = np.zeros(uGNSS.MAXSAT)
+        self.sis = np.zeros(uGNSS.MAXSAT)
 
 def leaps(tgps):
     return -18.0
@@ -374,6 +378,18 @@ def ecef2enu(pos,r):
     e=E@r
     return e
 
+def deg2dms(deg):
+    if deg<0.0:
+        sign=-1
+    else:
+        sign=1
+    a=fabs(deg)
+    dms=np.zeros(3)
+    dms[0]=floor(a);a=(a-dms[0])*60.0
+    dms[1]=floor(a);a=(a-dms[1])*60.0
+    dms[2]=a; dms[0]*=sign
+    return dms
+
 def satazel(pos,e):
     enu=ecef2enu(pos,e)
     az=atan2(enu[0],enu[1])
@@ -497,6 +513,9 @@ if __name__ == '__main__':
     for k,el in enumerate(el_t):
         ofst_r[k,:]=antmodel(nav,np.deg2rad(el),nf,1)
         ofst_b[k,:]=antmodel(nav,np.deg2rad(el),nf,0)
+        
+        
+    #llh=ecef2pos([-1132915.982,6092526.361,1504641.4506])
         
     flg_ant=False
     flg_trop=True

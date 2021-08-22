@@ -7,11 +7,11 @@ Created on Sun Nov 15 20:03:45 2020
 
 import numpy as np
 import gnss as gn
-from gnss import rCST,sat2prn,time2gpst,ecef2pos,geodist,satazel,ionmodel,tropmodel,dops,ecef2enu,Nav,timediff,vnorm,antmodel
+from gnss import rCST,sat2prn,time2gpst,ecef2pos,geodist,satazel,ionmodel,tropmodel,dops,ecef2enu,Nav,timediff,vnorm,antmodel,uGNSS
 from ephemeris import findeph,satposs
 from rinex import rnxdec    
 import matplotlib.pyplot as plt
-from cssrlib.cssrlib import cssr,sSigGPS,sSigGAL,sSigQZS
+from cssrlib.cssrlib import cssr,sSigGPS,sSigGAL,sSigQZS,sCType
 from ppp import tidedisp,shapiro,windupcorr
 from rtk import IB,ddres,kfupdate,resamb_lambda,valpos,holdamb
 from pntpos import pntpos
@@ -23,23 +23,27 @@ NX=4
 def logmon(nav,sat,cs,iu=None):
     week,tow=gn.time2gpst(obs.t)
     if iu is None:
-        cpc=cs.cpc;prc=cs.prc
+        cpc=cs.cpc;prc=cs.prc;osr=cs.osr
     else:
         cpc=cs.cpc[iu,:]
         prc=cs.prc[iu,:]
+        osr=cs.osr[iu,:]
     if nav.loglevel>=2:
         n = cpc.shape
         for i in range(n[0]):
             if cpc[i,0]==0 and cpc[i,1]==0:
                 continue
-            nav.fout.write("%6d\t%3d\t%8.3f\t%8.3f\t%8.3f\t%8.3f\t%2d\n" 
+            nav.fout.write("%6d\t%3d\t%8.3f\t%8.3f\t%8.3f\t%8.3f\t%2d\t" 
                            % (tow,sat[i],cpc[i,0],cpc[i,1],prc[i,0],prc[i,1],cs.iodssr))
-    
+            nav.fout.write("%8.3f\t%8.3f\t%8.3f\t%8.3f\t%8.3f\t" 
+                           % (osr[i,0],osr[i,1],osr[i,2],osr[i,3],osr[i,4]))
+            nav.fout.write("%8.3f\t%8.3f\t%8.3f\t%8.3f\n" 
+                           % (osr[i,5],osr[i,6],osr[i,7],osr[i,8]))    
     return 0
 
 def rtkinit(nav,pos0=np.zeros(3)):
     nav.nf=2
-    nav.pmode=0 # 0:static, 1:kinematic
+    nav.pmode=1 # 0:static, 1:kinematic
 
     nav.na=3 if nav.pmode==0 else 6
     nav.ratio=0
@@ -62,6 +66,7 @@ def rtkinit(nav,pos0=np.zeros(3)):
     nav.sig_qv=0.01
     nav.tidecorr=True
     nav.armode = 1 # 1:contunous,2:instantaneous,3:fix-and-hold
+    nav.gnss_t=[uGNSS.GPS,uGNSS.GAL,uGNSS.QZS]
     
     #
     nav.x[0:3]=pos0
@@ -184,6 +189,7 @@ def udstate_ppp(nav,obs):
 
 def zdres(nav,obs,rs,vs,dts,rr,cs):
     """ non-differencial residual """
+    week,tow=gn.time2gpst(obs.t)
     _c=gn.rCST.CLIGHT
     nf=nav.nf
     n=len(obs.P)
@@ -206,17 +212,21 @@ def zdres(nav,obs,rs,vs,dts,rr,cs):
     r_hs=trop_hs/trop_hs0;r_wet=trop_wet/trop_wet0  
     
     stec=cs.get_stec(dlat,dlon)
-    sat_n=cs.decode_local_sat(cs.lc[inet].netmask)
+    #sat_n=cs.decode_local_sat(cs.lc[inet].netmask)
     
     cs.cpc=np.zeros((n,nf))
     cs.prc=np.zeros((n,nf))
+    cs.osr=np.zeros((n,2*nf+5))
     
     for i in range(n):
         sat=obs.sat[i]
         sys,prn=gn.sat2prn(sat)
-        if sys not in nav.gnss_t or sat in nav.excl_sat or sat not in sat_n:
+        if sys not in nav.gnss_t or sat in nav.excl_sat:
             continue
-        idx_n=np.where(cs.sat_n==sat)[0][0]
+        if sat not in cs.lc[inet].sat_n:
+            continue
+        idx_n=np.where(cs.sat_n==sat)[0][0] # global
+        idx_l=np.where(cs.lc[inet].sat_n==sat)[0][0] # local
         kidx=[-1]*nav.nf;nsig=0
         for k,sig in enumerate(cs.sig_n[idx_n]):
             for f in range(nav.nf):
@@ -236,7 +246,8 @@ def zdres(nav,obs,rs,vs,dts,rr,cs):
         for f in range(nav.nf):
             freq[f]=nav.obs_freq[f][sys]
             lam[f]=gn.rCST.CLIGHT/freq[f]
-            iono[f]=40.3e16/(freq[f]*freq[f])*stec[idx_n]
+            iono[f]=40.3e16/(freq[f]*freq[f])*stec[idx_l]
+        iono_ = 40.3e16/(freq[0]*freq[1])*stec[idx_l]
         
         # global/local signal bias
         cbias=np.zeros(nav.nf)
@@ -247,9 +258,14 @@ def zdres(nav,obs,rs,vs,dts,rr,cs):
         if cs.lc[0].pbias is not None:
             pbias+=cs.lc[0].pbias[idx_n][kidx]
         if cs.lc[inet].cbias is not None:
-            cbias+=cs.lc[inet].cbias[idx_n][kidx]
+            cbias+=cs.lc[inet].cbias[idx_l][kidx]
         if cs.lc[inet].pbias is not None:
-            pbias+=cs.lc[inet].pbias[idx_n][kidx]
+            pbias+=cs.lc[inet].pbias[idx_l][kidx]
+            t1=timediff(obs.t,cs.lc[0].t0[sCType.ORBIT])
+            t2=timediff(obs.t,cs.lc[inet].t0[sCType.PBIAS])
+            if t1>=0 and t1<30 and t2>=30:
+                pbias+=nav.dsis[sat]*0
+                
         
         # relativity effect
         relatv=shapiro(rs[i,:],rr_)
@@ -265,8 +281,11 @@ def zdres(nav,obs,rs,vs,dts,rr,cs):
         antr=antmodel(nav,el[i],nav.nf)
         
         # range correction
-        cs.prc[i,:]=trop+relatv+antr+iono+cbias
-        cs.cpc[i,:]=trop+relatv+antr-iono+pbias+phw
+        prc_c = trop+relatv+antr
+        #prc_c += nav.dorb[sat]-nav.dclk[sat]
+        cs.prc[i,:]=prc_c+iono+cbias
+        cs.cpc[i,:]=prc_c-iono+pbias+phw
+        cs.osr[i,:]=[pbias[0],pbias[1],cbias[0],cbias[1],trop,iono_,relatv,nav.dorb[sat],nav.dclk[sat]]
         
         r+=-_c*dts[i]
         
@@ -289,7 +308,7 @@ def relpos(nav,obs,cs):
     # non-differencial residual for rover 
     yu,eu,elu=zdres(nav,obs,rs,vs,dts,xp[0:3],cs)
     
-    iu=np.where(elu>0)[0]
+    iu=np.where(elu>=nav.elmin)[0]
     sat=obs.sat[iu]
     y=yu[iu,:]
     e=eu[iu,:]
@@ -303,7 +322,7 @@ def relpos(nav,obs,cs):
     
     # Kalman filter measurement update
     xp,Pp=kfupdate(xp,Pp,H,v,R)
-    
+        
     if True:
         # non-differencial residual for rover after measurement update
         yu,eu,elu=zdres(nav,obs,rs,vs,dts,xp[0:3],cs)
@@ -316,16 +335,17 @@ def relpos(nav,obs,cs):
             nav.P=Pp
     
     nb,xa=resamb_lambda(nav,sat)
-    nav.smode=5
+    nav.smode=5 # float
     if nb>0:
         yu,eu,elu=zdres(nav,obs,rs,vs,dts,xa[0:3],cs)
         y=yu[iu,:]
         e=eu[iu,:]
         v,H,R=ddres(nav,xa,y,e,sat,el)
-        if valpos(nav,v,R):
-            if nav.armode==3:
-                holdamb(nav,xa) # TODO: fix-and-hold
-            nav.smode=4
+        if valpos(nav,v,R): # R <= Q=H'PH+R  rtk->sol.chisq<max_inno[3] (0.5)
+            if nav.armode==3: # fix and hold
+                holdamb(nav,xa) # hold fixed ambiguity
+            # if rtk->sol.chisq<max_inno[4] (5)
+            nav.smode=4 # fix
     return 0
 
 if __name__ == '__main__':
@@ -350,8 +370,9 @@ if __name__ == '__main__':
     nav = Nav()
     nav=dec.decode_nav(navfile,nav)
     #nep=3600//30
-    nep=90
+    nep=300
     t=np.zeros(nep)
+    tc=np.zeros(nep)
     enu=np.ones((nep,3))*np.nan
     sol=np.zeros((nep,4))
     dop=np.zeros((nep,4))
@@ -375,16 +396,21 @@ if __name__ == '__main__':
                 cs.decode_cssr(cs.buff,0)            
 
             if ne==0:
-                nav.sol=1
-                sol,az,el=pntpos(obs,nav,rr)
-                nav.x[0:3]=sol[0:3] # initial estimation
+                #nav.sol=1
+                #sol,az,el=pntpos(obs,nav,rr)
+                #nav.x[0:3]=sol[0:3] # initial estimation
                 t0=obs.t
+                t0.time=t0.time//30*30
+                cs.time=obs.t
+                nav.time_p=t0
             t[ne]=timediff(obs.t,t0)
+            tc[ne] = timediff(cs.time,t0)
+            
             week,tow=time2gpst(obs.t)
     
             cstat=cs.chk_stat()
             
-            if tow>=475234:
+            if tow>=475413:
                 tow
 
             if cstat or tow>=475220:
@@ -424,21 +450,66 @@ if __name__ == '__main__':
         nav.fout.close()
 
     if True:
+        gnss_tbl={uGNSS.GPS:1,uGNSS.GAL:8,uGNSS.QZS:16}
+        
+        fname='C:/work/clas_test_library/util/rnx2rtkp/2021078M.nmea.osr'
+        names=['tow','sys','prn','cpc1','cpc2','prc1','prc2','dorb','dclk']
+        vr = np.genfromtxt('%s'%(fname),delimiter=',',skip_header=1,usecols=[1,2,3,23,24,26,27,29,30],names=names)
+        
         dtype0 = (float,int,float,float,float,float)
         d = np.genfromtxt(nav.logfile)
-        t=d[:,0]-d[0,0]
+        tow0=(d[0,0]//30)*30
+        t=d[:,0]-tow0
         sat=d[:,1]
         cpc1=d[:,2];cpc2=d[:,3];prc1=d[:,4];prc2=d[:,5]
-        plt.figure()
+
         sats=np.unique(sat)
+        #tofst=0
+        tofst=4
+        tr=vr['tow']-tow0
+        #cpc1_=vr['cpc1']+vr['dorb']-vr['dclk']
+        cpc1_=vr['cpc1'];prc1_=vr['prc1'];cpc2_=vr['cpc2'];prc2_=vr['prc2']
+        
+        plt.figure()
         for sat0 in sats:
-            if sat0!=17:
+            sys,prn=sat2prn(sat0)
+            gnss = gnss_tbl[sys]
+            #if sat0!=64:
+            #    continue
+            idx=np.where(sat==sat0)[0]
+            plt.plot(t[idx]-tofst,prc1[idx]-prc1[idx[0]],label=gn.sat2id(sat0))
+            
+            idx1=np.where(np.logical_and(vr['sys']==gnss,vr['prn']==prn))[0]
+            if len(idx1)==0:
                 continue
-            idx=np.where(sat==sat0)
-            plt.plot(t[idx],cpc1[idx])
+            plt.plot(tr[idx1],prc1_[idx1]-prc1_[idx1[0]],'--',label=gn.sat2id(sat0))
+
         plt.grid()
-        
-        
+        plt.xticks(np.arange(0,nep+1, step=30))
+        plt.legend()
+        plt.xlim([0,nep])
+        plt.show()
+    
+        plt.figure()
+        for sat0 in sats:
+            sys,prn=sat2prn(sat0)
+            gnss = gnss_tbl[sys]
+            if sat0!=9:
+                continue
+            idx=np.where(sat==sat0)[0]
+            plt.plot(t[idx]-tofst,cpc1[idx]-cpc1[idx[0]],label=gn.sat2id(sat0))
+            
+            idx1=np.where(np.logical_and(vr['sys']==gnss,vr['prn']==prn))[0]
+            if len(idx1)==0:
+                continue
+            plt.plot(tr[idx1],cpc1_[idx1]-cpc1_[idx1[0]],'--',label=gn.sat2id(sat0))
+
+        plt.grid()
+        plt.xticks(np.arange(0,nep+1, step=30))
+        plt.legend()
+        plt.xlim([0,nep])
+        plt.show()
+
 
 
 
