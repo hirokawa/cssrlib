@@ -20,8 +20,8 @@ MAXITR=10
 ELMIN=10
 NX=4
 
-def logmon(nav,sat,cs,iu=None):
-    week,tow=gn.time2gpst(obs.t)
+def logmon(nav,t,sat,cs,iu=None):
+    week,tow=gn.time2gpst(t)
     if iu is None:
         cpc=cs.cpc;prc=cs.prc;osr=cs.osr
     else:
@@ -207,8 +207,8 @@ def zdres(nav,obs,rs,vs,dts,rr,cs):
     dlat,dlon=cs.get_dpos(pos)
     trph,trpw=cs.get_trop(dlat,dlon)
     
-    trop_hs,trop_wet,z=tropmodel(t,pos)
-    trop_hs0,trop_wet0,z=tropmodel(t,[pos[0],pos[1],0])
+    trop_hs,trop_wet,z=tropmodel(obs.t,pos)
+    trop_hs0,trop_wet0,z=tropmodel(obs.t,[pos[0],pos[1],0])
     r_hs=trop_hs/trop_hs0;r_wet=trop_wet/trop_wet0  
     
     stec=cs.get_stec(dlat,dlon)
@@ -314,7 +314,7 @@ def relpos(nav,obs,cs):
     e=eu[iu,:]
     el=elu[iu]
     
-    logmon(nav,sat,cs,iu)
+    logmon(nav,obs.t,sat,cs,iu)
     
     # DD residual
     v,H,R=ddres(nav,xp,y,e,sat,el)

@@ -10,7 +10,7 @@ import numpy as np
 import cssrlib.gnss as gn
 from cssrlib.cssrlib import cssr
 from cssrlib.gnss import ecef2pos,Nav,time2gpst,timediff,uGNSS,sat2prn
-from cssrlib.rtk import rtkinit,relpos
+from cssrlib.ppprtk import rtkinit,relpos
 from cssrlib.rinex import rnxdec
 
 bdir='./data/'
@@ -45,7 +45,7 @@ if dec.decode_obsh(obsfile)>=0:
     pos=ecef2pos(rr)
     inet=cs.find_grid_index(pos)
     
-    fc=open(bdir+l6file,'rb')
+    fc=open(l6file,'rb')
     if not fc:
         print("L6 messsage file cannot open."); exit(-1)
     for ne in range(nep):
@@ -99,6 +99,8 @@ elif fig_type==2:
     plt.ylabel('northing [m]')
     plt.grid()
     plt.axis([-ylim,ylim,-ylim,ylim])   
+
+plt.show()
 
 if nav.fout is not None:
     nav.fout.close()
