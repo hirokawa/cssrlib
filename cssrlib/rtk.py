@@ -152,7 +152,8 @@ def ddres(nav,x,y,e,sat,el):
                 freq=nav.freq[idx_f[f]]
             # reference satellite
             idx=sysidx(sat,sys)
-            i=idx[np.argmax(el[idx])]
+            if len(idx)>0:
+                i=idx[np.argmax(el[idx])]
             for j in idx:
                 if i==j:
                     continue
@@ -235,7 +236,7 @@ def restamb(nav,bias,nb):
     xa=nav.x
     xa[0:nav.na]=nav.xa[0:nav.na]
     
-    for m in range(5):
+    for m in range(gn.uGNSS.GNSSMAX):
         for f in range(nav.nf):
             n=0
             index=[]
@@ -260,7 +261,7 @@ def resamb_lambda(nav,sat):
     nb=len(ix)
     if nb<=0:
         print("no valid DD")
-        return -1
+        return -1,-1
 
     # y=D*xc, Qb=D*Qc*D', Qab=Qac*D'
     y=nav.x[ix[:,0]]-nav.x[ix[:,1]]

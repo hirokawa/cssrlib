@@ -14,8 +14,8 @@ import matplotlib.pyplot as plt
 from ephem import Observer
 
 #satlst=loadname('../data/TLE_GNSS_PRN-GEJ.txt')
-satlst=loadname('./data/TLE_GNSS_PRN.txt')
-sats=loadTLE('./data/gnss.txt',satlst)
+satlst=loadname('../data/TLE_GNSS_PRN.txt')
+sats=loadTLE('../data/gnss.txt',satlst)
 st='2021-05-14T00:00:00Z'
 ed='2021-05-15T00:00:00Z'    
 #st='2021-05-15T06:00:00Z'

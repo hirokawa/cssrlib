@@ -96,6 +96,7 @@ class Nav():
         self.smode = 0 # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
         self.gnss_t=[uGNSS.GPS,uGNSS.GAL,uGNSS.QZS]
         self.loglevel=2
+        self.cnr_min = 35
 
         # antenna type:  JAVAD RINGANT SCIT
         self.ant_pcv=[[+0.00,-0.38,-1.46,-3.06,-4.94,-6.81,-8.45,-9.66,-10.31,-10.35,

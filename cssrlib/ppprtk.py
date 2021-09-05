@@ -167,6 +167,8 @@ def udstate_ppp(nav,obs):
             #pr=obs.P[iu[i],j]-obsb.P[ir[i],j]
             cp=obs.L[i,j]
             pr=obs.P[i,j]
+            if cp==0.0 or pr==0.0:
+                continue
             bias[i]=cp-pr*freq/gn.rCST.CLIGHT   
             amb=nav.x[IB(sat[i],f,nav.na)]
             if amb!=0.0:
@@ -234,6 +236,21 @@ def zdres(nav,obs,rs,vs,dts,rr,cs):
                     kidx[f]=k;nsig+=1               
         if nsig<nav.nf:      
             continue
+        
+        # check for measurement consistency
+        if True:
+            flg_m=True
+            for f in range(nav.nf):
+                k=nav.obs_idx[f][sys]            
+                if obs.P[i,k]==0.0 or obs.L[i,k]==0.0 or obs.lli[i,k]==1:
+                    flg_m=False
+            if obs.S[i,0]<nav.cnr_min:
+                flg_m=False
+            if flg_m==False:
+                continue
+        else:
+            if obs.P[i,0]==0.0 or obs.L[i,0]==0.0:
+                continue
 
         r,e[i,:]=gn.geodist(rs[i,:],rr_)
         az,el[i]=gn.satazel(pos,e[i,:])
@@ -313,8 +330,15 @@ def relpos(nav,obs,cs):
     y=yu[iu,:]
     e=eu[iu,:]
     el=elu[iu]
+    nav.sat=sat;nav.y=y
     
     logmon(nav,obs.t,sat,cs,iu)
+    
+    ny = y.shape[0]
+    if ny<6:
+        nav.P[np.diag_indices(3)]=1.0
+        nav.smode=5
+        return -1
     
     # DD residual
     v,H,R=ddres(nav,xp,y,e,sat,el)
@@ -328,6 +352,10 @@ def relpos(nav,obs,cs):
         yu,eu,elu=zdres(nav,obs,rs,vs,dts,xp[0:3],cs)
         y=yu[iu,:]
         e=eu[iu,:]
+        ny = y.shape[0]
+        nav.y2=y
+        if ny<6:
+            return -1
         # reisdual for float solution
         v,H,R=ddres(nav,xp,y,e,sat,el)
         if valpos(nav,v,R):

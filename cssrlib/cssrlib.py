@@ -115,6 +115,7 @@ class cssr:
         self.cpc=None
         self.tow=0
         self.lc=[]
+        self.fcnt=-1
         for inet in range(self.MAXNET+1):
             self.lc.append(local_corr())
             self.lc[inet].inet=inet
@@ -730,6 +731,8 @@ class cssr:
         names = ['preamble','prn','vendor','facility','res','sid','alert']
         i=ofst*8
         l6head = bs.unpack_from_dict(fmt,names,msg,i)
+        if l6head['preamble']!=0x1acffc1d:
+            return -1
         i=i+49
         if l6head['sid']==1:
             self.fcnt=0

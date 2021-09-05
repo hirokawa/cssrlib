@@ -11,7 +11,7 @@ import cssrlib.rinex as rn
 import cssrlib.gnss as gn
 from cssrlib.rtk import rtkinit,relpos
 
-bdir='./data/'
+bdir='../data/'
 navfile=bdir+'SEPT078M.21P'
 obsfile=bdir+'SEPT078M.21O'
 basefile=bdir+'3034078M.21O'

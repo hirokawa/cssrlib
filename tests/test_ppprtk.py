@@ -13,7 +13,7 @@ from cssrlib.gnss import ecef2pos,Nav,time2gpst,timediff,uGNSS,sat2prn
 from cssrlib.ppprtk import rtkinit,relpos
 from cssrlib.rinex import rnxdec
 
-bdir='./data/'
+bdir='../data/'
 l6file=bdir+'2021078M.l6'
 griddef=bdir+'clas_grid.def'
 navfile=bdir+'SEPT078M.21P'
@@ -69,10 +69,7 @@ if dec.decode_obsh(obsfile)>=0:
 
         cstat=cs.chk_stat()
         
-        if tow>=475413:
-            tow
-
-        if cstat or tow>=475220:        
+        if cstat:        
             relpos(nav,obs,cs)
         
         sol=nav.x[0:3]
@@ -85,20 +82,43 @@ if dec.decode_obsh(obsfile)>=0:
 fig_type=1
 ylim=0.2
 
-if fig_type==1:    
-    plt.plot(t,enu,'.')
-    plt.xticks(np.arange(0,nep+1, step=30))
-    plt.ylabel('position error [m]')
-    plt.xlabel('time[s]')
-    plt.legend(['east','north','up'])
-    plt.grid()
-    plt.axis([0,ne,-ylim,ylim])    
+idx4=np.where(smode==4)[0]
+idx5=np.where(smode==5)[0]
+idx0=np.where(smode==0)[0]
+
+fig=plt.figure(figsize=[7,9]);
+
+if fig_type==1:
+    lbl_t=['east[m]','north[m]','up[m]']    
+    for k in range(3):
+        plt.subplot(3,1,k+1)
+        plt.plot(t[idx0],enu[idx0,k],'r.')
+        plt.plot(t[idx5],enu[idx5,k],'y.')
+        plt.plot(t[idx4],enu[idx4,k],'g.')
+
+        # plt.plot(t,enu,'.')
+        plt.xticks(np.arange(0,nep+1, step=30))
+        #plt.ylabel('position error [m]')
+        if k==2:
+            plt.xlabel('time[s]')
+        plt.ylabel(lbl_t[k])
+        #plt.legend(['east','north','up'])
+        plt.grid()
+        plt.axis([0,ne,-ylim,ylim])    
 elif fig_type==2:
-    plt.plot(enu[:,0],enu[:,1],'.')
+    ax=fig.add_subplot(111)
+
+    plt.plot(enu[idx0,0],enu[idx0,1],'r.',label='stdpos')
+    plt.plot(enu[idx5,0],enu[idx5,1],'y.',label='float')
+    plt.plot(enu[idx4,0],enu[idx4,1],'g.',label='fix')
+
     plt.xlabel('easting [m]')
     plt.ylabel('northing [m]')
     plt.grid()
-    plt.axis([-ylim,ylim,-ylim,ylim])   
+    plt.axis('equal')
+    ax.set(xlim=(-ylim,ylim),ylim=(-ylim,ylim))
+    #plt.legend()
+    #fig.tight_layout()
 
 plt.show()
 
