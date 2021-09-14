@@ -1,2 +1,6 @@
-requests ~= 2.23.0
-
+cbitstruct==1.0.7
+ephem==4.0.0.2
+matplotlib==3.4.3
+numpy==1.21.2
+requests==2.23.0
+scipy==1.7.1

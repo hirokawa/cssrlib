@@ -14,12 +14,15 @@ setuptools.setup(
         "ephem",
     ],
     author='Rui Hirokawa',
-    author_email="",
+    author_email="rui.hirokawa@gmail.com",
     description="Compact SSR Library for PPP/PPP-RTK",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/hirokawa/cssrlib",
     packages=setuptools.find_packages(),
+    package_data={
+     "cssrlib": ["data/*.*","tests/*.py"],
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

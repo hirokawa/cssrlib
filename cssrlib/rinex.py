@@ -122,8 +122,8 @@ class rnxdec:
         return nav
 
     def decode_obsh(self,obsfile):
-        self.sigid=np.ones((uGNSS.GNSSMAX,rSIG.SIGMAX),dtype=int)*rSIG.NONE
-        self.typeid=np.ones((uGNSS.GNSSMAX,rSIG.SIGMAX),dtype=int)*rSIG.NONE
+        self.sigid=np.ones((uGNSS.GNSSMAX,rSIG.SIGMAX*3),dtype=int)*rSIG.NONE
+        self.typeid=np.ones((uGNSS.GNSSMAX,rSIG.SIGMAX*3),dtype=int)*rSIG.NONE
         self.nsig=np.zeros((uGNSS.GNSSMAX),dtype=int)        
         self.fobs=open(obsfile,'rt')
         self.pos=np.array([0,0,0])
@@ -144,8 +144,15 @@ class rnxdec:
                 else:
                     continue
                 self.nsig[sys]=int(line[3:6])
+                if self.nsig[sys]>=14:
+                    line2=self.fobs.readline()
+                    
                 for k in range(self.nsig[sys]):
-                    sig=line[7+4*k:10+4*k]
+                    if k<14:
+                        sig=line[7+4*k:10+4*k]
+                    else:
+                        k1=k-14
+                        sig=line2[7+4*k1:10+4*k1]
                     if sig[0]=='C':
                         self.typeid[sys][k] = 0
                     elif sig[0]=='L':
