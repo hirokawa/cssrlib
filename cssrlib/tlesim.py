@@ -5,24 +5,25 @@ Created on Sat May 15 09:36:59 2021
 @author: ruihi
 """
 
-from ephem import readtle,Observer
+from ephem import readtle
 import numpy as np
-from cssrlib.gnss import id2sat,uGNSS,sat2prn
-from datetime import timedelta
+from cssrlib.gnss import id2sat
+
 
 def loadname(file):
-    satlist={}
-    with open(file,'r') as f:
+    satlist = {}
+    with open(file, 'r') as f:
         for line in f:
-            if line[0]=='#':
+            if line[0] == '#':
                 continue
-            v=line.split()
-            if len(v)>=2:
-                satlist[v[1]]=v[0]
+            v = line.split()
+            if len(v) >= 2:
+                satlist[v[1]] = v[0]
     return satlist
 
-def loadTLE(tle_file,satlst=None):
-    with open(tle_file,'r') as f:
+
+def loadTLE(tle_file, satlst=None):
+    with open(tle_file, 'r') as f:
         satlist = []
         for l1 in f:
             l2 = f.readline()
@@ -35,30 +36,33 @@ def loadTLE(tle_file,satlst=None):
                     continue
             else:
                 name = l1
-            sat = readtle(name,l2,l3)
+            sat = readtle(name, l2, l3)
             satlist.append(sat)
 
     return satlist
 
-def tleorb(sat,dates,obs=None):
-    nsat=len(sat);nd=len(dates)
-    lat=np.zeros((nd,nsat))
-    lon=np.zeros((nd,nsat))
-    el=np.zeros((nd,nsat))
-    az=np.zeros((nd,nsat))
-    sats=np.zeros(nsat,dtype=int)
-    for k,sv in enumerate(sat):
-        sat_=id2sat(sv.name)
-        if sat_<=0:
-            continue
-        sats[k]=sat_
-        for i,t in enumerate(dates):
-            sv.compute(t)
-            lat[i,k] = sv.sublat;lon[i,k] = sv.sublong
-            if obs is not None:
-                obs.date=t
-                sv.compute(obs)
-                el[i,k] = sv.alt;az[i,k] = sv.az
-                
-    return lat,lon,az,el,sats
 
+def tleorb(sat, dates, obs=None):
+    nsat = len(sat)
+    nd = len(dates)
+    lat = np.zeros((nd, nsat))
+    lon = np.zeros((nd, nsat))
+    el = np.zeros((nd, nsat))
+    az = np.zeros((nd, nsat))
+    sats = np.zeros(nsat, dtype=int)
+    for k, sv in enumerate(sat):
+        sat_ = id2sat(sv.name)
+        if sat_ <= 0:
+            continue
+        sats[k] = sat_
+        for i, t in enumerate(dates):
+            sv.compute(t)
+            lat[i, k] = sv.sublat
+            lon[i, k] = sv.sublong
+            if obs is not None:
+                obs.date = t
+                sv.compute(obs)
+                el[i, k] = sv.alt
+                az[i, k] = sv.az
+
+    return lat, lon, az, el, sats

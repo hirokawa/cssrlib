@@ -1,8 +1,8 @@
 import setuptools
 
-with open("README.md","r") as f:
+with open("README.md", "r") as f:
     long_description = f.read()
-    
+
 setuptools.setup(
     name="cssrlib",
     version="0.0.1",
@@ -21,7 +21,7 @@ setuptools.setup(
     url="https://github.com/hirokawa/cssrlib",
     packages=setuptools.find_packages(),
     package_data={
-     "cssrlib": ["data/*.*","tests/*.py"],
+        "cssrlib": ["data/*.*", "tests/*.py"],
     },
     classifiers=[
         "Programming Language :: Python :: 3",
@@ -30,6 +30,3 @@ setuptools.setup(
     ],
     python_requires='>=3.8',
 )
-
-
-

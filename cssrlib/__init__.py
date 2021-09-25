@@ -6,4 +6,3 @@ from cssrlib.rinex import (rnxdec)
 
 __version__ = '2021.08.21'
 __author__ = 'Rui Hirokawa'
-
