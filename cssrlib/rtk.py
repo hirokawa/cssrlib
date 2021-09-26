@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Nov 15 20:03:45 2020
-
-@author: ruihi
-"""
-
 import numpy as np
 import cssrlib.gnss as gn
 from cssrlib.ephemeris import satposs
@@ -59,7 +52,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.obs_freq = [freq0, freq1]
 
 
-def zdres(nav, obs, rs, dts, rr, rtype=1):
+def zdres(nav, obs, rs, dts, svh, rr, rtype=1):
     """ non-differencial residual """
     _c = gn.rCST.CLIGHT
     nf = nav.nf
@@ -75,7 +68,7 @@ def zdres(nav, obs, rs, dts, rr, rtype=1):
     pos = gn.ecef2pos(rr_)
     for i in range(n):
         sys, prn = gn.sat2prn(obs.sat[i])
-        if sys not in nav.gnss_t or obs.sat[i] in nav.excl_sat:
+        if svh[i] > 0 or sys not in nav.gnss_t or obs.sat[i] in nav.excl_sat:
             continue
         r, e[i, :] = gn.geodist(rs[i, :], rr_)
         az, el[i] = gn.satazel(pos, e[i, :])
@@ -90,9 +83,14 @@ def zdres(nav, obs, rs, dts, rr, rtype=1):
 
         for f in range(nf):
             j = nav.obs_idx[f][sys]
-            y[i, f] = obs.L[i, j]*_c/nav.freq[j]-r-dant[f]
-            y[i, f+nf] = obs.P[i, j]-r-dant[f]
-
+            if obs.L[i, j] == 0.0:
+                y[i, f] = 0.0
+            else:
+                y[i, f] = obs.L[i, j]*_c/nav.freq[j]-r-dant[f]
+            if obs.P[i, j] == 0.0:
+                y[i, f+nf] == 0.0
+            else:
+                y[i, f+nf] = obs.P[i, j]-r-dant[f]
     return y, e, el
 
 
@@ -164,8 +162,12 @@ def ddres(nav, x, y, e, sat, el):
             for j in idx:
                 if i == j:
                     continue
+                if y[i, f] == 0.0 or y[j, f] == 0.0:
+                    continue
                 #  DD residual
                 if mode == 0:
+                    if y[i+ns, f] == 0.0 or y[j+ns, f] == 0.0:
+                        continue
                     v[nv] = (y[i, f]-y[i+ns, f])-(y[j, f]-y[j+ns, f])
                 else:
                     v[nv] = y[i, f]-y[j, f]
@@ -438,7 +440,7 @@ def relpos(nav, obs, obsb):
     rsb, vsb, dtsb, svhb = satposs(obsb, nav)
 
     # non-differencial residual for base
-    yr, er, el = zdres(nav, obsb, rsb, dtsb, nav.rb, 0)
+    yr, er, el = zdres(nav, obsb, rsb, dtsb, svhb, nav.rb, 0)
     ns, iu, ir = selsat(nav, obs, obsb, el)
     y = np.zeros((ns*2, nf*2))
     e = np.zeros((ns*2, 3))
@@ -453,7 +455,7 @@ def relpos(nav, obs, obsb):
     xp = nav.x.copy()
 
     # non-differencial residual for rover
-    yu, eu, el = zdres(nav, obs, rs, dts, xp[0:3])
+    yu, eu, el = zdres(nav, obs, rs, dts, svh, xp[0:3])
 
     y[:ns, :] = yu[iu, :]
     e[:ns, :] = eu[iu, :]
@@ -468,7 +470,7 @@ def relpos(nav, obs, obsb):
 
     if True:
         # non-differencial residual for rover after measurement update
-        yu, eu, elr = zdres(nav, obs, rs, dts, xp[0:3])
+        yu, eu, elr = zdres(nav, obs, rs, dts, svh, xp[0:3])
         y[:ns, :] = yu[iu, :]
         e[:ns, :] = eu[iu, :]
         # reisdual for float solution
@@ -482,7 +484,7 @@ def relpos(nav, obs, obsb):
     nb, xa = resamb_lambda(nav, sat)
     nav.smode = 5
     if nb > 0:
-        yu, eu, elr = zdres(nav, obs, rs, dts, xa[0:3])
+        yu, eu, elr = zdres(nav, obs, rs, dts, svh, xa[0:3])
         y[:ns, :] = yu[iu, :]
         e[:ns, :] = eu[iu, :]
         v, H, R = ddres(nav, xa, y, e, sat, el)
@@ -490,5 +492,4 @@ def relpos(nav, obs, obsb):
             if nav.armode == 3:
                 holdamb(nav, xa)  # TODO: fix-and-hold
             nav.smode = 4  # fix
-
     return 0

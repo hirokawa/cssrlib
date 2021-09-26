@@ -13,6 +13,7 @@ RTOL_KEPLER = 1e-13
 
 
 def findeph(nav, t, sat, iode=-1):
+    """ find ephemeric for sat """
     dt_p = 3600*4
     eph = None
     sys, prn = sat2prn(sat)
@@ -32,6 +33,7 @@ def findeph(nav, t, sat, iode=-1):
 
 
 def dtadjust(t1, t2, tw=604800):
+    """ calculate delta time considering week-rollover """
     dt = timediff(t1, t2)
     if dt > tw:
         dt -= tw
@@ -41,6 +43,7 @@ def dtadjust(t1, t2, tw=604800):
 
 
 def eph2pos(t, eph, flg_v=False):
+    """ calculate satellite position based on ephemeris """
     sys, prn = sat2prn(eph.sat)
     if sys == uGNSS.GAL:
         mu = rCST.MU_GAL
@@ -108,6 +111,7 @@ def eph2pos(t, eph, flg_v=False):
 
 
 def eph2clk(time, eph):
+    """ calculate clock offset based on ephemeris """
     t = timediff(time, eph.toc)
     for i in range(2):
         t -= eph.af0+eph.af1*t+eph.af2*t**2
@@ -121,6 +125,7 @@ def ephclk(t, eph, sat):
 
 
 def satposs(obs, nav, cs=None):
+    """ calculate pos/vel/clk for observed satellites  """
     n = obs.sat.shape[0]
     rs = np.zeros((n, 3))
     vs = np.zeros((n, 3))

@@ -194,7 +194,7 @@ def udstate_ppp(nav, obs):
     return 0
 
 
-def zdres(nav, obs, rs, vs, dts, rr, cs):
+def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
     """ non-differencial residual """
     week, tow = gn.time2gpst(obs.t)
     _c = gn.rCST.CLIGHT
@@ -228,7 +228,7 @@ def zdres(nav, obs, rs, vs, dts, rr, cs):
     for i in range(n):
         sat = obs.sat[i]
         sys, prn = gn.sat2prn(sat)
-        if sys not in nav.gnss_t or sat in nav.excl_sat:
+        if svh[i] > 0 or sys not in nav.gnss_t or sat in nav.excl_sat:
             continue
         if sat not in cs.lc[inet].sat_n:
             continue
@@ -326,7 +326,7 @@ def relpos(nav, obs, cs):
     xp = nav.x.copy()
 
     # non-differencial residual for rover
-    yu, eu, elu = zdres(nav, obs, rs, vs, dts, xp[0:3], cs)
+    yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xp[0:3], cs)
 
     iu = np.where(elu >= nav.elmin)[0]
     sat = obs.sat[iu]
@@ -352,7 +352,7 @@ def relpos(nav, obs, cs):
 
     if True:
         # non-differencial residual for rover after measurement update
-        yu, eu, elu = zdres(nav, obs, rs, vs, dts, xp[0:3], cs)
+        yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xp[0:3], cs)
         y = yu[iu, :]
         e = eu[iu, :]
         ny = y.shape[0]
@@ -368,7 +368,7 @@ def relpos(nav, obs, cs):
     nb, xa = resamb_lambda(nav, sat)
     nav.smode = 5  # float
     if nb > 0:
-        yu, eu, elu = zdres(nav, obs, rs, vs, dts, xa[0:3], cs)
+        yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xa[0:3], cs)
         y = yu[iu, :]
         e = eu[iu, :]
         v, H, R = ddres(nav, xa, y, e, sat, el)

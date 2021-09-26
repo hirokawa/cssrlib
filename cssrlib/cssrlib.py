@@ -163,12 +163,14 @@ class local_corr:
 
 
 class cssr:
+    """ class to process Compact SSR messages """
     CSSR_MSGTYPE = 4073
     MAXNET = 32
     stec_sz_t = [4, 4, 5, 7]
     stec_scl_t = [0.04, 0.12, 0.16, 0.24]
 
     def __init__(self):
+        """ constructor of cssr """
         self.monlevel = 0
         self.week = -1
         self.tow0 = -1
@@ -213,17 +215,20 @@ class cssr:
             self.lc[inet].nsat_n = 0
 
     def sval(self, u, n, scl):
+        """ calculate signed value based on n-bit int, lsb """
         invalid = -2**(n-1)
         y = np.nan if u == invalid else u*scl
         return y
 
     def isset(self, mask, nbit, k):
+        """ check if k-th bit in nbit mask is set """
         if (mask >> (nbit-k-1)) & 1:
             return True
         else:
             return False
 
     def quality_idx(self, cl, val):
+        """ calculate quality index """
         if cl == 7 and val == 7:
             y = 5.4665
         elif cl == 0 and val == 0:  # undefined/unknown
@@ -233,6 +238,7 @@ class cssr:
         return y
 
     def gnss2sys(self, gnss: sGNSS):
+        """ convert from sGNSS to sys """
         tbl = {sGNSS.GPS: uGNSS.GPS, sGNSS.GLO: uGNSS.GLO,
                sGNSS.GAL: uGNSS.GAL, sGNSS.BDS: uGNSS.BDS,
                sGNSS.QZS: uGNSS.QZS, sGNSS.SBS: uGNSS.SBS}
@@ -242,6 +248,7 @@ class cssr:
         return sys
 
     def decode_local_sat(self, netmask):
+        """ decode netmask, and return list of local sats """
         sat = []
         for k in range(self.nsat_n):
             if not self.isset(netmask, self.nsat_n, k):
@@ -250,6 +257,7 @@ class cssr:
         return sat
 
     def decode_mask(self, din, bitlen, ofst=1):
+        """ decode n-bit mask with offset """
         v = []
         n = 0
         for k in range(0, bitlen):
@@ -259,6 +267,7 @@ class cssr:
         return (v, n)
 
     def decode_head(self, msg, i, st=-1):
+        """ decode header of cssr message """
         if st == sCSSR.MASK:
             self.tow = bs.unpack_from('u20', msg, i)[0]
             i += 20
@@ -283,9 +292,6 @@ class cssr:
         self.flg_net = False
         i += 4
         self.iodssr = head['iodssr']
-        # if self.iodssr!=iodssr_p:
-        #    for inet in range(self.MAXNET+1):
-        #        self.lc[inet].cstat=0
         self.sat_n_p = self.sat_n
 
         self.nsat_n = 0
@@ -331,6 +337,7 @@ class cssr:
         return i
 
     def decode_orb_sat(self, msg, i, k, sys, inet=0):
+        """ decoder orbit correction of cssr """
         n = 10 if sys == uGNSS.GAL else 8
         v = bs.unpack_from_dict('u'+str(n)+'s15s13s13',
                                 ['iode', 'dx', 'dy', 'dz'], msg, i)
@@ -342,18 +349,21 @@ class cssr:
         return i
 
     def decode_clk_sat(self, msg, i, k, inet=0):
+        """ decoder clock correction of cssr """
         v = bs.unpack_from_dict('s15', ['dclk'], msg, i)
         self.lc[inet].dclk[k] = self.sval(v['dclk'], 15, 0.0016)
         i += 15
         return i
 
     def decode_cbias_sat(self, msg, i, k, j, inet=0):
+        """ decoder code bias correction of cssr """
         v = bs.unpack_from_dict('s11', ['cbias'], msg, i)
         self.lc[inet].cbias[k, j] = self.sval(v['cbias'], 11, 0.02)
         i += 11
         return i
 
     def decode_pbias_sat(self, msg, i, k, j, inet=0):
+        """ decoder phase bias correction of cssr """
         v = bs.unpack_from_dict('s15u2', ['pbias', 'di'], msg, i)
         self.lc[inet].pbias[k, j] = self.sval(v['pbias'], 15, 0.001)
         self.lc[inet].di[k, j] = v['di']
@@ -489,6 +499,7 @@ class cssr:
         return i
 
     def decode_cssr_stec_coeff(self, msg, stype, i):
+        """ decode coefficient of STEC correction """
         ci = np.zeros(6)
         v = bs.unpack_from('s14', msg, i)
         ci[0] = self.sval(v[0], 14, 0.05)
@@ -650,7 +661,7 @@ class cssr:
             self.lc[inet].trop_quality = self.quality_idx(v['class'],
                                                           v['value'])
             i += 6
-        if dfm['trop'] & 2:  # function
+        if dfm['trop'] & 2:  # functional term
             self.lc[inet].ttype = ttype = bs.unpack_from('u2', msg, i)[0]
             i += 2
             names = ['t00', 't01', 't10', 't11']
@@ -668,7 +679,7 @@ class cssr:
                 i += 7
                 self.lc[inet].ct[3] = self.sval(vt['t11'], 7, 0.001)
 
-        if dfm['trop'] & 1:  # residual
+        if dfm['trop'] & 1:  # residual term
             vh = bs.unpack_from_dict('u1u4', ['sz', 'ofst'], msg, i)
             i += 5
             trop_ofst = vh['ofst']*0.02
@@ -767,6 +778,7 @@ class cssr:
                                                            self.subtype))
 
     def chk_stat(self):
+        """ check status for received messages """
         cs_global = self.lc[0].cstat
         cs_local = self.lc[self.inet_ref].cstat
 
@@ -786,6 +798,7 @@ class cssr:
                                   skip_footer=0, encoding='utf8')
 
     def find_grid_index(self, pos):
+        """ find index/weight of surounding grid   """
         self.rngmin = 5e3
         lat = np.deg2rad(self.grid['lat'])
         lon = np.deg2rad(self.grid['lon'])
@@ -810,6 +823,7 @@ class cssr:
         return self.inet_ref
 
     def get_dpos(self, pos):
+        """ calculate position offset from reference """
         inet = self.inet_ref
         posd = np.rad2deg(pos[0:2])
         grid = self.grid[self.grid['nid'] == inet]
@@ -818,6 +832,7 @@ class cssr:
         return dlat, dlon
 
     def get_trop(self, dlat=0.0, dlon=0.0):
+        """ calculate trop delay correction by interporation """
         inet = self.inet_ref
         trph = 0
         trpw = 0
@@ -828,6 +843,7 @@ class cssr:
         return trph, trpw
 
     def get_stec(self, dlat=0.0, dlon=0.0):
+        """ calculate STEC correction by interporation """
         inet = self.inet_ref
         nsat = self.lc[inet].nsat_n
         stec = np.zeros(nsat)

@@ -6,7 +6,8 @@ Created on Mon Nov 23 20:10:51 2020
 """
 
 import numpy as np
-from cssrlib.gnss import uGNSS, rSIG, Eph, prn2sat, gpst2time, Obs, epoch2time
+from cssrlib.gnss import uGNSS, rSIG, Eph, prn2sat, gpst2time, Obs, \
+    epoch2time, timediff
 
 
 class rnxdec:
@@ -149,21 +150,21 @@ class rnxdec:
                 else:
                     continue
                 self.nsig[sys] = int(line[3:6])
+                s = line[7:7+4*13]
                 if self.nsig[sys] >= 14:
                     line2 = self.fobs.readline()
+                    s += line2[7:7+4*13]
 
                 for k in range(self.nsig[sys]):
-                    if k < 14:
-                        sig = line[7+4*k:10+4*k]
-                    else:
-                        k1 = k-14
-                        sig = line2[7+4*k1:10+4*k1]
+                    sig = s[4*k:3+4*k]
                     if sig[0] == 'C':
                         self.typeid[sys][k] = 0
                     elif sig[0] == 'L':
                         self.typeid[sys][k] = 1
                     elif sig[0] == 'S':
                         self.typeid[sys][k] = 2
+                    elif sig[0] == 'D':
+                        self.typeid[sys][k] = 3
                     else:
                         continue
                     if sig[1:3] in self.sig_tbl:
@@ -203,7 +204,7 @@ class rnxdec:
                 if sys == uGNSS.QZS:
                     prn += 192
                 obs.sat[k] = prn2sat(sys, prn)
-                nsig_max = (len(line)-4)//16
+                nsig_max = (len(line)-4+2)//16
                 for i in range(self.nsig[sys]):
                     if i >= nsig_max:
                         break
@@ -224,3 +225,18 @@ class rnxdec:
 
             break
         return obs
+
+
+def sync_obs(dec, decb, dt_th=0.1):
+    """ sync obseverbation beteen rover and base """
+    obs = dec.decode_obs()
+    obsb = decb.decode_obs()
+    while True:
+        dt = timediff(obs.t, obsb.t)
+        if np.abs(dt) <= dt_th:
+            break
+        if dt > dt_th:
+            obsb = decb.decode_obs()
+        elif dt < dt_th:
+            obs = dec.decode_obs()
+    return obs, obsb

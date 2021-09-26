@@ -28,7 +28,7 @@ def stdinit():
     nav.Phi[6, 7] = dt
     nav.elmin = np.deg2rad(10)
     sq = 1e-2
-    nav.Q = np.diag([0, 0, 0, sq, sq, sq, 0, 1e-4])
+    nav.Q = np.diag([0, 0, 0, sq, sq, sq, 0, 1e-6])
     nav.err = [0, 0.3, 0.3]
     return nav
 
@@ -51,6 +51,8 @@ def rescode(obs, nav, rs, dts, svh, x):
         if el < nav.elmin:
             continue
         eph = findeph(nav.eph, obs.t, obs.sat[i])
+        if obs.P[i, 0] == 0:
+            continue
         P = obs.P[i, 0]-eph.tgd*rCST.CLIGHT
         dion = ionmodel(obs.t, pos, az, el, nav.ion)
         trop_hs, trop_wet, z = tropmodel(obs.t, pos, el)

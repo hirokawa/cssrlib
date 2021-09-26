@@ -14,6 +14,7 @@ gpst0 = [1980, 1, 6, 0, 0, 0]
 
 
 class rCST():
+    """ class for constants """
     CLIGHT = 299792458.0
     MU_GPS = 3.9860050E14
     MU_GAL = 3.986004418E14
@@ -32,6 +33,7 @@ class rCST():
 
 
 class uGNSS(IntEnum):
+    """ class for GNSS constants """
     GPS = 0
     SBS = 1
     GAL = 2
@@ -53,6 +55,7 @@ class uGNSS(IntEnum):
 
 
 class uSIG(IntEnum):
+    """ class for GNSS signals """
     GPS_L1CA = 0
     GPS_L2W = 2
     GPS_L2CL = 3
@@ -93,12 +96,16 @@ class rSIG(IntEnum):
 
 
 class gtime_t():
+    """ class to define the time """
+
     def __init__(self, time=0, sec=0.0):
         self.time = time
         self.sec = sec
 
 
 class Obs():
+    """ class to define the observation """
+
     def __init__(self):
         self.nm = 0
         self.t = gtime_t()
@@ -111,6 +118,7 @@ class Obs():
 
 
 class Eph():
+    """ class to define ephemeris """
     sat = 0
     iode = 0
     iodc = 0
@@ -148,6 +156,8 @@ class Eph():
 
 
 class Nav():
+    """ class to define the navigation message """
+
     def __init__(self):
         self.eph = []
         self.ion = np.array([
@@ -161,6 +171,7 @@ class Nav():
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
         self.gnss_t = [uGNSS.GPS, uGNSS.GAL, uGNSS.QZS]
+        # self.gnss_t = [uGNSS.GPS, uGNSS.GAL]
         self.loglevel = 2
         self.cnr_min = 35
 
@@ -196,10 +207,12 @@ class Nav():
 
 
 def leaps(tgps):
+    """ return leap seconds (TBD) """
     return -18.0
 
 
 def epoch2time(ep):
+    """ calculate time from epoch """
     doy = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]
     time = gtime_t()
     year = int(ep[0])
@@ -218,11 +231,13 @@ def epoch2time(ep):
 
 
 def gpst2utc(tgps, leaps=-18):
+    """ calculate UTC-time from gps-time """
     tutc = timeadd(tgps, leaps)
     return tutc
 
 
 def timeadd(t: gtime_t, sec: float):
+    """ return time added with sec """
     tr = deepcopy(t)
     tr.sec += sec
     tt = floor(tr.sec)
@@ -232,12 +247,14 @@ def timeadd(t: gtime_t, sec: float):
 
 
 def timediff(t1: gtime_t, t2: gtime_t):
+    """ return time difference """
     dt = t1.time-t2.time
     dt += t1.sec-t2.sec
     return dt
 
 
 def gpst2time(week, tow):
+    """ convert to time from gps-time """
     t = epoch2time(gpst0)
     if tow < -1e9 or 1e9 < tow:
         tow = 0.0
@@ -247,6 +264,7 @@ def gpst2time(week, tow):
 
 
 def time2gpst(t: gtime_t):
+    """ convert to gps-time from time """
     t0 = epoch2time(gpst0)
     sec = t.time-t0.time
     week = int(sec/(86400*7))
@@ -255,6 +273,7 @@ def time2gpst(t: gtime_t):
 
 
 def time2epoch(t):
+    """ convert time to epoch """
     mday = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 31, 28, 31, 30, 31,
             30, 31, 31, 30, 31, 30, 31, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31,
             30, 31, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
@@ -278,6 +297,7 @@ def time2epoch(t):
 
 
 def time2doy(t):
+    """ convert time to epoch """
     ep = time2epoch(t)
     ep[1] = ep[2] = 1.0
     ep[3] = ep[4] = ep[5] = 0.0
@@ -285,6 +305,7 @@ def time2doy(t):
 
 
 def prn2sat(sys, prn):
+    """ convert sys+prn to sat """
     if sys == uGNSS.GPS:
         sat = prn
     elif sys == uGNSS.GLO:
@@ -301,6 +322,7 @@ def prn2sat(sys, prn):
 
 
 def sat2prn(sat):
+    """ convert sat to sys+prn """
     if sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX:
         prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX)+192
         sys = uGNSS.QZS
@@ -441,20 +463,25 @@ def ecef2pos(r):
     r2 = r[0]**2+r[1]**2
     v = rCST.RE_WGS84
     z = r[2]
-    while True:
+    cnt = 0
+    while cnt < 1000:
         zk = z
         sp = z/np.sqrt(r2+z**2)
         v = rCST.RE_WGS84/np.sqrt(1-e2*sp**2)
         z = r[2]+v*e2*sp
         if np.fabs(z-zk) < 1e-4:
             break
+        cnt += 1
     pos = np.array([np.arctan(z/np.sqrt(r2)),
                     np.arctan2(r[1], r[0]),
                     np.sqrt(r2+z**2)-v])
     return pos
 
 
-def pos2ecef(pos):
+def pos2ecef(pos, isdeg: bool = False):
+    if isdeg:
+        pos[0] *= np.pi/180.0
+        pos[1] *= np.pi/180.0
     s_p = sin(pos[0])
     c_p = cos(pos[0])
     s_l = sin(pos[1])
