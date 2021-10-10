@@ -36,22 +36,21 @@ nav.rb = [-3959400.631, 3385704.533, 3667523.111]
 t = np.zeros(nep)
 enu = np.zeros((nep, 3))
 smode = np.zeros(nep, dtype=int)
-if True:
-    rtkinit(nav, dec.pos)
-    rr = dec.pos
-    for ne in range(nep):
-        obs = dec.decode_obs()
-        obsb = decb.decode_obs()
-        if ne == 0:
-            t0 = obs.t
-        t[ne] = gn.timediff(obs.t, t0)
-        relpos(nav, obs, obsb)
-        sol = nav.x[0:3]
-        enu[ne, :] = gn.ecef2enu(pos_ref, sol-xyz_ref)
-        smode[ne] = nav.smode
 
-    dec.fobs.close()
-    decb.fobs.close()
+rtkinit(nav, dec.pos)
+rr = dec.pos
+for ne in range(nep):
+    obs, obsb = rn.sync_obs(dec, decb)
+    if ne == 0:
+        t0 = nav.t = obs.t
+    relpos(nav, obs, obsb)
+    t[ne] = gn.timediff(nav.t, t0)
+    sol = nav.x[0:3]
+    enu[ne, :] = gn.ecef2enu(pos_ref, sol-xyz_ref)
+    smode[ne] = nav.smode
+
+dec.fobs.close()
+decb.fobs.close()
 
 fig_type = 1
 ylim = 0.2

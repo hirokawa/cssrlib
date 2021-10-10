@@ -12,11 +12,11 @@ from cssrlib.gnss import uGNSS, sat2prn, sat2id
 
 
 def plot_nsat(t, nsat):
+    """ plot number of satellites """
     lbl_t = {uGNSS.GPS: 'GPS', uGNSS.GAL: 'Galileo', uGNSS.QZS: 'QZSS',
              uGNSS.GLO: 'GLONASS', uGNSS.BDS: 'BeiDou'}
     col_tbl = 'bygmkrc'
-    fig = plt.figure()
-    fig, ax = plt.subplots(1, 1)
+    _, ax = plt.subplots(1, 1)
     ns = np.zeros(nsat.shape[0])
     for gnss in lbl_t.keys():
         y = ns+nsat[:, gnss]
@@ -33,7 +33,7 @@ def plot_nsat(t, nsat):
 
 
 def plot_elv(t, elv, elmask=0, satlist=None):
-    # elevation plot
+    """ elevation plot """
     if satlist is None:
         satlist = range(1, uGNSS.MAXSAT)
     nsat = np.zeros((len(t), uGNSS.GNSSMAX), dtype=int)
@@ -42,7 +42,7 @@ def plot_elv(t, elv, elmask=0, satlist=None):
     for k, sat in enumerate(satlist):
         if np.all(np.isnan(elv[:, k])):
             continue
-        sys, prn = sat2prn(sat)
+        sys, _ = sat2prn(sat)
         idx = elv[:, k] > elmask
         nsat[idx, sys] += 1
         plt.plot(t/3600, np.rad2deg(elv[:, k]), '-'+col_tbl[sys])
@@ -56,6 +56,7 @@ def plot_elv(t, elv, elmask=0, satlist=None):
 
 
 def skyplot(azm, elv, elmask=0, satlist=None):
+    """ plot skyplot """
     fig = plt.figure('skyplot')
     ax = fig.add_subplot(projection='polar')
     ax.set_theta_zero_location('N')
@@ -75,7 +76,7 @@ def skyplot(azm, elv, elmask=0, satlist=None):
     for k, sat in enumerate(satlist):
         if np.all(np.isnan(elv[:, k])):
             continue
-        sys, prn = sat2prn(sat)
+        sys, _ = sat2prn(sat)
         idx = elv[:, k] > elmask
         if len(elv[idx, k]) == 0:
             continue

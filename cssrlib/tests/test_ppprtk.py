@@ -1,23 +1,16 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Aug 22 21:01:49 2021
-
-@author: ruihi
-"""
-
 import matplotlib.pyplot as plt
 import numpy as np
 import cssrlib.gnss as gn
+import sys
 from cssrlib.cssrlib import cssr
 from cssrlib.gnss import ecef2pos, Nav, time2gpst, timediff
-from cssrlib.ppprtk import rtkinit, relpos
+from cssrlib.ppprtk import rtkinit, ppprtkpos
 from cssrlib.rinex import rnxdec
 
-bdir = '../data/'
-l6file = bdir+'2021078M.l6'
-griddef = bdir+'clas_grid.def'
-navfile = bdir+'SEPT078M.21P'
-obsfile = bdir+'SEPT078M.21O'
+l6file = '../data/2021078M.l6'
+griddef = '../data/clas_grid.def'
+navfile = '../data/SEPT078M.21P'
+obsfile = '../data/SEPT078M.21O'
 
 # based on GSI F5 solution
 xyz_ref = [-3962108.673,   3381309.574,   3668678.638]
@@ -48,7 +41,7 @@ if dec.decode_obsh(obsfile) >= 0:
     fc = open(l6file, 'rb')
     if not fc:
         print("L6 messsage file cannot open.")
-        exit(-1)
+        sys.exit(-1)
     for ne in range(nep):
         obs = dec.decode_obs()
         week, tow = time2gpst(obs.t)
@@ -59,19 +52,17 @@ if dec.decode_obsh(obsfile) >= 0:
             cs.decode_cssr(cs.buff, 0)
 
         if ne == 0:
-            t0 = obs.t
+            t0 = nav.t = obs.t
             t0.time = t0.time//30*30
             cs.time = obs.t
             nav.time_p = t0
-        t[ne] = timediff(obs.t, t0)
-        tc[ne] = timediff(cs.time, t0)
-
-        week, tow = time2gpst(obs.t)
 
         cstat = cs.chk_stat()
-
         if cstat:
-            relpos(nav, obs, cs)
+            ppprtkpos(nav, obs, cs)
+        
+        t[ne] = timediff(nav.t, t0)
+        tc[ne] = timediff(cs.time, t0)
 
         sol = nav.x[0:3]
         enu[ne, :] = gn.ecef2enu(pos_ref, sol-xyz_ref)

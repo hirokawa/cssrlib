@@ -90,7 +90,7 @@ def msearch(L, d, zs, m=2):
     step[-1] = np.sign(y)
     if step[-1] == 0:
         step[-1] = 1
-    for c in range(10000):
+    for _ in range(10000):
         newdist = dist[k]+y**2/d[k]
         if newdist < Chi2:
             if k != 0:
@@ -121,12 +121,11 @@ def msearch(L, d, zs, m=2):
                 step[0] = -step[0]-np.sign(step[0])
         else:
             if k == n-1:
-                break
-            else:
-                k += 1
-                z[k] += step[k]
-                y = zb[k]-z[k]
-                step[k] = -step[k]-np.sign(step[k])
+                break            
+            k += 1
+            z[k] += step[k]
+            y = zb[k]-z[k]
+            step[k] = -step[k]-np.sign(step[k])
 
     order = np.argsort(s)
     s = s[order]
@@ -141,8 +140,8 @@ def mlambda(a, Q, m=2):
     invZt = np.round(np.linalg.inv(Z.T))
     z = Z.T@a
     E, s = msearch(L, d, z, m)
-    afix = invZt@E
-    return afix, s
+    afix_ = invZt@E
+    return afix_, s
 
 
 if __name__ == '__main__':

@@ -5,10 +5,10 @@ Created on Mon Nov 23 20:10:51 2020
 @author: ruihi
 """
 
+from copy import deepcopy
 from enum import IntEnum
 from math import floor, sin, cos, sqrt, asin, atan2, fabs
 import numpy as np
-from copy import deepcopy
 
 gpst0 = [1980, 1, 6, 0, 0, 0]
 
@@ -81,6 +81,7 @@ class uSIG(IntEnum):
 
 
 class rSIG(IntEnum):
+    """ class to define signals """
     NONE = 0
     L1C = 1
     L1X = 2
@@ -174,6 +175,7 @@ class Nav():
         # self.gnss_t = [uGNSS.GPS, uGNSS.GAL]
         self.loglevel = 2
         self.cnr_min = 35
+        self.maxout = 5  # maximum outage [epoch]
 
         # antenna type:  JAVAD RINGANT SCIT
         self.ant_pcv = [[+0.00, -0.38, -1.46, -3.06, -4.94, -6.81, -8.45,
@@ -205,6 +207,15 @@ class Nav():
         self.dsis = np.zeros(uGNSS.MAXSAT)
         self.sis = np.zeros(uGNSS.MAXSAT)
 
+        # satellite observation status
+        self.fix  = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
+        self.outc = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
+        self.vsat = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
+        self.lock = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
+        self.slip = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
+
+        self.tt = 0
+        self.t = gtime_t()
 
 def leaps(tgps):
     """ return leap seconds (TBD) """
@@ -219,7 +230,7 @@ def epoch2time(ep):
     mon = int(ep[1])
     day = int(ep[2])
 
-    if year < 1970 or 2099 < year or mon < 1 or 12 < mon:
+    if year < 1970 or year > 2099 or mon < 1 or mon > 12:
         return time
     days = (year-1970)*365+(year-1969)//4+doy[mon-1]+day-2
     if year % 4 == 0 and mon >= 3:
@@ -230,9 +241,9 @@ def epoch2time(ep):
     return time
 
 
-def gpst2utc(tgps, leaps=-18):
+def gpst2utc(tgps, leaps_=-18):
     """ calculate UTC-time from gps-time """
-    tutc = timeadd(tgps, leaps)
+    tutc = timeadd(tgps, leaps_)
     return tutc
 
 
@@ -256,7 +267,7 @@ def timediff(t1: gtime_t, t2: gtime_t):
 def gpst2time(week, tow):
     """ convert to time from gps-time """
     t = epoch2time(gpst0)
-    if tow < -1e9 or 1e9 < tow:
+    if tow < -1e9 or tow > 1e9:
         tow = 0.0
     t.time += 86400*7*week+int(tow)
     t.sec = tow-int(tow)
@@ -342,7 +353,7 @@ def sat2prn(sat):
 
 
 def sat2id(sat):
-    id = []
+    """ convert satellite number to id """
     sys, prn = sat2prn(sat)
     gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
                 uGNSS.QZS: 'J', uGNSS.GLO: 'R'}
@@ -352,19 +363,19 @@ def sat2id(sat):
         prn -= 192
     elif sys == uGNSS.SBS:
         prn -= 100
-    id = '%s%02d' % (gnss_tbl[sys], prn)
-    return id
+    return '%s%02d' % (gnss_tbl[sys], prn)
 
 
-def id2sat(id):
+def id2sat(id_):
+    """ convert id to satellite number """
     # gnss_tbl={'G':uGNSS.GPS,'S':uGNSS.SBS,'E':uGNSS.GAL,'C':uGNSS.BDS,
     #           'I':uGNSS.IRN,'J':uGNSS.QZS,'R':uGNSS.GLO}
     gnss_tbl = {'G': uGNSS.GPS, 'E': uGNSS.GAL, 'C': uGNSS.BDS,
                 'J': uGNSS.QZS, 'R': uGNSS.GLO}
-    if id[0] not in gnss_tbl:
+    if id_[0] not in gnss_tbl:
         return -1
-    sys = gnss_tbl[id[0]]
-    prn = int(id[1:3])
+    sys = gnss_tbl[id_[0]]
+    prn = int(id_[1:3])
     if sys == uGNSS.QZS:
         prn += 192
     elif sys == uGNSS.SBS:
@@ -374,10 +385,12 @@ def id2sat(id):
 
 
 def vnorm(r):
+    """ calculate norm of a vector """
     return r/np.linalg.norm(r)
 
 
 def geodist(rs, rr):
+    """ calculate geometric distance """
     e = rs-rr
     r = np.linalg.norm(e)
     e = e/r
@@ -386,31 +399,31 @@ def geodist(rs, rr):
 
 
 def kfupdate(x, P, H, v, R):
-    """ kalmanf filter measurement update """
-    n = len(x)
+    """ Kalman filter measurement update """
+    # select subset of states and covariance
     ix = []
-    k = 0
-    for i in range(n):
+    for i in range(len(x)):
         if P[i, i] > 0.0:
             ix.append(i)
-            k += 1
     x_ = x[ix]
     P_ = P[ix, :][:, ix]
+    # measurement update
     H_ = H[:, ix]
     PHt = P_@H_.T
     S = H_@PHt+R
     K = PHt@np.linalg.inv(S)
     x_ += K@v
     P_ -= K@H_@P_
+    # restore states and covariance
     x[ix] = x_
-
-    for k1, i in enumerate(ix):
-        for k2, j in enumerate(ix):
-            P[i, j] = P_[k1, k2]
-    return x, P
+    sP=P[ix,:]
+    sP[:,ix]=P_
+    P[ix,:]=sP
+    return x, P, S
 
 
 def dops_h(H):
+    """ calculate DOP from H """
     Qinv = np.linalg.inv(np.dot(H.T, H))
     dop = np.diag(Qinv)
     hdop = dop[0]+dop[1]  # TBD
@@ -422,6 +435,7 @@ def dops_h(H):
 
 
 def dops(az, el, elmin=0):
+    """ calculate DOP from az/el """
     nm = az.shape[0]
     H = np.zeros((nm, 4))
     n = 0
@@ -448,6 +462,7 @@ def dops(az, el, elmin=0):
 
 
 def xyz2enu(pos):
+    """ return ECEF to ENU conversion matrix from LLH """
     sp = sin(pos[0])
     cp = cos(pos[0])
     sl = sin(pos[1])
@@ -459,6 +474,7 @@ def xyz2enu(pos):
 
 
 def ecef2pos(r):
+    """  ECEF to LLH position conversion """
     e2 = rCST.FE_WGS84*(2-rCST.FE_WGS84)
     r2 = r[0]**2+r[1]**2
     v = rCST.RE_WGS84
@@ -479,6 +495,7 @@ def ecef2pos(r):
 
 
 def pos2ecef(pos, isdeg: bool = False):
+    """ LLH (rad/deg) to ECEF position conversion  """
     if isdeg:
         pos[0] *= np.pi/180.0
         pos[1] *= np.pi/180.0
@@ -495,12 +512,14 @@ def pos2ecef(pos, isdeg: bool = False):
 
 
 def ecef2enu(pos, r):
+    """ releative ECEF to ENU conversion """
     E = xyz2enu(pos)
     e = E@r
     return e
 
 
 def deg2dms(deg):
+    """ convert from deg to dms """
     if deg < 0.0:
         sign = -1
     else:
@@ -517,6 +536,7 @@ def deg2dms(deg):
 
 
 def satazel(pos, e):
+    """ calculate az/el from LOS vector in ECEF (e) """
     enu = ecef2enu(pos, e)
     az = atan2(enu[0], enu[1])
     el = asin(enu[2])
@@ -524,12 +544,13 @@ def satazel(pos, e):
 
 
 def ionmodel(t, pos, az, el, ion=None):
+    """ klobuchar model of ionosphere delay estimation """
     psi = 0.0137/(el/np.pi+0.11)-0.022
     phi = pos[0]/np.pi+psi*cos(az)
     phi = np.max((-0.416, np.min((0.416, phi))))
     lam = pos[1]/np.pi+psi*sin(az)/cos(phi*np.pi)
     phi += 0.064*cos((lam-1.617)*np.pi)
-    week, tow = time2gpst(t)
+    _, tow = time2gpst(t)
     tt = 43200.0*lam+tow  # local time
     tt -= np.floor(tt/86400)*86400
     f = 1.0+16.0*np.power(0.53-el/np.pi, 3.0)  # slant factor
@@ -537,10 +558,8 @@ def ionmodel(t, pos, az, el, ion=None):
     h = [1, phi, phi**2, phi**3]
     amp = np.dot(h, ion[0, :])
     per = np.dot(h, ion[1, :])
-    if amp < 0:
-        amp = 0
-    if per < 72000.0:
-        per = 72000.0
+    amp = max(amp, 0)
+    per = max(per, 72000.0)
     x = 2.0*np.pi*(tt-50400.0)/per
     if np.abs(x) < 1.57:
         v = 5e-9+amp*(1.0+x*x*(-0.5+x*x/24.0))
@@ -551,16 +570,18 @@ def ionmodel(t, pos, az, el, ion=None):
 
 
 def interpc(coef, lat):
+    """ linear interpolation (lat step=15) """
     i = int(lat/15.0)
     if i < 1:
         return coef[:, 0]
-    elif i > 4:
+    if i > 4:
         return coef[:, 4]
     d = lat/15.0-i
     return coef[:, i-1]*(1.0-d)+coef[:, i]*d
 
 
 def antmodel(nav, el=0, nf=2, rtype=1):
+    """ antenna pco/pcv """
     sE = sin(el)
     za = 90-np.rad2deg(el)
     za_t = np.arange(0, 90.1, 5)
@@ -579,11 +600,13 @@ def antmodel(nav, el=0, nf=2, rtype=1):
 
 
 def mapf(el, a, b, c):
+    """ simple tropospheric mapping function """
     sinel = np.sin(el)
     return (1.0+a/(1.0+b/(1.0+c)))/(sinel+(a/(sinel+b/(sinel+c))))
 
 
 def tropmapf(t, pos, el):
+    """ tropospheric mapping function by Neil (NMF) """
     if pos[2] < -1e3 or pos[2] > 20e3 or el <= 0.0:
         return 0.0, 0.0
     coef = np.array([
@@ -615,6 +638,7 @@ def tropmapf(t, pos, el):
 
 
 def tropmodel(t, pos, el=np.pi/2, humi=0.7):
+    """ saastamonien tropospheric delay model """
     hgt = pos[2]
     # standard atmosphere
     pres = 1013.25*np.power(1-2.2557e-5*hgt, 5.2568)

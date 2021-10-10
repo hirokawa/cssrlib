@@ -16,7 +16,7 @@ def findeph(nav, t, sat, iode=-1):
     """ find ephemeric for sat """
     dt_p = 3600*4
     eph = None
-    sys, prn = sat2prn(sat)
+    sys, _ = sat2prn(sat)
     for eph_ in nav:
         if eph_.sat != sat:
             continue
@@ -44,7 +44,7 @@ def dtadjust(t1, t2, tw=604800):
 
 def eph2pos(t, eph, flg_v=False):
     """ calculate satellite position based on ephemeris """
-    sys, prn = sat2prn(eph.sat)
+    sys, _ = sat2prn(eph.sat)
     if sys == uGNSS.GAL:
         mu = rCST.MU_GAL
         omge = rCST.OMGE_GAL
@@ -55,7 +55,7 @@ def eph2pos(t, eph, flg_v=False):
     n = np.sqrt(mu/eph.A**3)+eph.deln
     M = eph.M0+n*dt
     E = M
-    for iter in range(10):
+    for _ in range(10):
         Eold = E
         sE = np.sin(E)
         E = M+eph.e*sE
@@ -113,7 +113,7 @@ def eph2pos(t, eph, flg_v=False):
 def eph2clk(time, eph):
     """ calculate clock offset based on ephemeris """
     t = timediff(time, eph.toc)
-    for i in range(2):
+    for _ in range(2):
         t -= eph.af0+eph.af1*t+eph.af2*t**2
     dts = eph.af0+eph.af1*t+eph.af2*t**2
     return dts
@@ -134,7 +134,7 @@ def satposs(obs, nav, cs=None):
     iode = -1
     for i in range(n):
         sat = obs.sat[i]
-        sys, prn = sat2prn(sat)
+        sys, _ = sat2prn(sat)
         if sys not in nav.gnss_t:
             continue
         pr = obs.P[i, 0]

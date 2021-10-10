@@ -1,3 +1,4 @@
+""" module to calculate standard positioning """
 import numpy as np
 from cssrlib.gnss import rCST, ecef2pos, geodist, satazel, ionmodel,\
     tropmodel, Nav, tropmapf, kfupdate
@@ -15,6 +16,7 @@ def varerr(nav, el):
 
 
 def stdinit():
+    """ initialize standard positioning """
     nav = Nav()
     nav.na = 6
     nav.nx = 8
@@ -34,6 +36,7 @@ def stdinit():
 
 
 def rescode(obs, nav, rs, dts, svh, x):
+    """ calculate code residuals """
     n = obs.sat.shape[0]
     rr = x[0:3]
     dtr = x[nav.na]
@@ -55,7 +58,7 @@ def rescode(obs, nav, rs, dts, svh, x):
             continue
         P = obs.P[i, 0]-eph.tgd*rCST.CLIGHT
         dion = ionmodel(obs.t, pos, az, el, nav.ion)
-        trop_hs, trop_wet, z = tropmodel(obs.t, pos, el)
+        trop_hs, trop_wet, _ = tropmodel(obs.t, pos, el)
         mapfh, mapfw = tropmapf(obs.t, pos, el)
         dtrp = mapfh*trop_hs+mapfw*trop_wet
         v[nv] = P-(r+dtr-rCST.CLIGHT*dts[i]+dion+dtrp)
@@ -72,12 +75,13 @@ def rescode(obs, nav, rs, dts, svh, x):
 
 
 def pntpos(obs, nav):
-    rs, vs, dts, svh = satposs(obs, nav)
+    """ calculate point positioning """
+    rs, _, dts, svh = satposs(obs, nav)
     x = nav.x.copy()
     P = nav.P.copy()
     x = nav.Phi@x
     P = nav.Phi@P@nav.Phi.T+nav.Q
-    v, H, nv, az, el = rescode(obs, nav, rs, dts, svh, x)
+    v, H, _, az, el = rescode(obs, nav, rs, dts, svh, x)
     if abs(np.mean(v)) > 100:
         x[nav.na] = np.mean(v)
         v -= x[nav.na]

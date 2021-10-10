@@ -12,6 +12,7 @@ from cssrlib.gnss import gpst2time, rCST, prn2sat, uGNSS, gtime_t
 
 
 class sGNSS(IntEnum):
+    """ class to define GNSS """
     GPS = 0
     GLO = 1
     GAL = 2
@@ -21,6 +22,7 @@ class sGNSS(IntEnum):
 
 
 class sCSSR(IntEnum):
+    """ class to define Compact SSR message types """
     MASK = 1
     ORBIT = 2
     CLOCK = 3
@@ -36,6 +38,7 @@ class sCSSR(IntEnum):
 
 
 class sCType(IntEnum):
+    """ class to define correction message types """
     MASK = 0
     ORBIT = 1
     CLOCK = 2
@@ -48,6 +51,7 @@ class sCType(IntEnum):
 
 
 class sSigGPS(IntEnum):
+    """ class to define GPS signals """
     L1C = 0
     L1P = 1
     L1W = 2
@@ -65,6 +69,7 @@ class sSigGPS(IntEnum):
 
 
 class sSigGLO(IntEnum):
+    """ class to define GLONASS signals """
     L1C = 0
     L1P = 1
     L2C = 2
@@ -81,6 +86,7 @@ class sSigGLO(IntEnum):
 
 
 class sSigGAL(IntEnum):
+    """ class to define Galileo signals  """
     L1B = 0
     L1C = 1
     L1X = 2
@@ -99,6 +105,7 @@ class sSigGAL(IntEnum):
 
 
 class sSigBDS(IntEnum):
+    """ class to define BDS signals """
     L2I = 0
     L2Q = 1
     L2X = 2
@@ -117,6 +124,7 @@ class sSigBDS(IntEnum):
 
 
 class sSigQZS(IntEnum):
+    """ class to define QZSS signals """
     L1C = 0
     L1S = 1
     L1L = 2
@@ -133,6 +141,7 @@ class sSigQZS(IntEnum):
 
 
 class sSigSBS(IntEnum):
+    """ class to define SBAS signals """
     L1CA = 0
     L5I = 1
     L5Q = 2
@@ -140,6 +149,7 @@ class sSigSBS(IntEnum):
 
 
 class local_corr:
+    """ class for local corrections """
     def __init__(self):
         self.inet = -1
         self.inet_ref = -1
@@ -157,7 +167,7 @@ class local_corr:
         self.quality_trp = None
         self.quality_stec = None
         self.t0 = []
-        for k in range(sCType.MAX):
+        for _ in range(sCType.MAX):
             self.t0.append(gtime_t())
         self.cstat = 0            # status for receiving CSSR message
 
@@ -207,6 +217,15 @@ class cssr:
         self.tow = 0
         self.lc = []
         self.fcnt = -1
+        self.flg_net= False
+        self.time = -1
+        self.nsig_max = 0
+        self.ngrid = 0
+        self.grid_index = []
+        self.grid_weight = []
+        self.rngmin = 0
+        self.inet_ref = -1
+        self.netmask = np.zeros(self.MAXNET+1,dtype=np.dtype('u8'))
         for inet in range(self.MAXNET+1):
             self.lc.append(local_corr())
             self.lc[inet].inet = inet
@@ -224,8 +243,7 @@ class cssr:
         """ check if k-th bit in nbit mask is set """
         if (mask >> (nbit-k-1)) & 1:
             return True
-        else:
-            return False
+        return False
 
     def quality_idx(self, cl, val):
         """ calculate quality index """
@@ -261,7 +279,7 @@ class cssr:
         v = []
         n = 0
         for k in range(0, bitlen):
-            if (din & 1 << (bitlen-k-1)):
+            if din & 1 << (bitlen-k-1):
                 v.append(k+ofst)
                 n += 1
         return (v, n)
@@ -302,7 +320,7 @@ class cssr:
         self.sig_n = []
         self.nsig_max = 0
 
-        for gnss in range(0, dfm['ngnss']):
+        for _ in range(dfm['ngnss']):
             v = bs.unpack_from_dict('u4u40u16u1', ['gnssid', 'svmask',
                                                    'sigmask', 'cma'], msg, i)
             sys = self.gnss2sys(v['gnssid'])
@@ -597,10 +615,10 @@ class cssr:
         i += 6
         n = dfm['dsize']+1
         j = n*40*dfm['cnt']
-        for k in range(n):
+        for _ in range(n):
             d = bs.unpack_from('u40', msg, i)[0]
             i += 40
-            bs.pack_info('u40', self. sinfo, j, d)
+            bs.pack_into('u40', self. sinfo, j, d)
             j += 40
         if dfm['mi'] is False:
             self.parse_sinfo()
@@ -664,18 +682,17 @@ class cssr:
         if dfm['trop'] & 2:  # functional term
             self.lc[inet].ttype = ttype = bs.unpack_from('u2', msg, i)[0]
             i += 2
-            names = ['t00', 't01', 't10', 't11']
-            vt = bs.unpack_from_dict('s9', [names[0]], msg, i)
+            vt = bs.unpack_from_dict('s9', ['t00'], msg, i)
             i += 9
             self.lc[inet].ct = np.zeros(4)
             self.lc[inet].ct[0] = self.sval(vt['t00'], 9, 0.004)
             if ttype > 0:
-                vt = bs.unpack_from_dict('s7s7', [names[1:3]], msg, i)
+                vt = bs.unpack_from_dict('s7s7', ['t01', 't10'], msg, i)
                 i += 14
                 self.lc[inet].ct[1] = self.sval(vt['t01'], 7, 0.002)
                 self.lc[inet].ct[2] = self.sval(vt['t10'], 7, 0.002)
             if ttype > 1:
-                vt = bs.unpack_from_dict('s7', [names[3]], msg, i)
+                vt = bs.unpack_from_dict('s7', ['t11'], msg, i)
                 i += 7
                 self.lc[inet].ct[3] = self.sval(vt['t11'], 7, 0.001)
 
@@ -800,11 +817,11 @@ class cssr:
     def find_grid_index(self, pos):
         """ find index/weight of surounding grid   """
         self.rngmin = 5e3
-        lat = np.deg2rad(self.grid['lat'])
-        lon = np.deg2rad(self.grid['lon'])
         clat = np.cos(pos[0])
-        r = np.linalg.norm((lat-pos[0], (lon-pos[1])*clat),
-                           axis=0)*rCST.RE_WGS84
+        dlat = np.deg2rad(self.grid['lat'])-pos[0]
+        dlon = (np.deg2rad(self.grid['lon'])-pos[1])*clat
+
+        r = np.linalg.norm((dlat, dlon), axis=0)*rCST.RE_WGS84
         idx = np.argmin(r)
         self.inet_ref = self.grid[idx]['nid']
         if r[idx] < self.rngmin:
@@ -815,10 +832,30 @@ class cssr:
             idn = self.grid['nid'] == self.inet_ref
             rn = r[idn]
             self.ngrid = n = min(len(rn), 4)
-            idx = np.argsort(rn)[0:n]
-            rp = 1./rn[idx]
+            idx = np.argsort(rn)
+
+            if n < 4:
+                idx_n = idx[0:n]
+            else:
+                idx_n = idx[0:3]
+                # select 4th grid between v21 and v31
+                v = np.vstack((dlat[idn][idx], dlon[idn][idx]))
+                vp = -v[:, 0]  # relative rover position
+                vn = v[:, 1:].copy()  # relative grid position
+                vn[0, :] = vn[0, :] + vp[0]
+                vn[1, :] = vn[1, :] + vp[1]
+                vn1 = np.array((-vn[:, 0][1],vn[:, 0][0]))  # normal vec of v21
+                vn2 = np.array((-vn[:, 1][1],vn[:, 1][0]))  # normal vec of v31
+                s1 = vn1@vp
+                s2 = vn2@vp
+                for k, i in enumerate(idx[3:]):
+                    if s1*(vn1@vn[:, k+2]) >= 0 and s2*(vn2@vn[:, k+2]) >= 0:
+                        idx_n = np.append(idx_n, i)
+                        break
+
+            rp = 1./rn[idx_n]
             w = rp/np.sum(rp)
-            self.grid_index = self.grid[idn]['gid'][idx]
+            self.grid_index = self.grid[idn]['gid'][idx_n]
             self.grid_weight = w
         return self.inet_ref
 

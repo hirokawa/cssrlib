@@ -11,6 +11,7 @@ from cssrlib.gnss import id2sat
 
 
 def loadname(file):
+    """ load satellite list from file """
     satlist = {}
     with open(file, 'r') as f:
         for line in f:
@@ -23,6 +24,7 @@ def loadname(file):
 
 
 def loadTLE(tle_file, satlst=None):
+    """ load TLE from file """
     with open(tle_file, 'r') as f:
         satlist = []
         for l1 in f:
@@ -43,6 +45,7 @@ def loadTLE(tle_file, satlst=None):
 
 
 def tleorb(sat, dates, obs=None):
+    """ calculate orbit based on TLE """
     nsat = len(sat)
     nd = len(dates)
     lat = np.zeros((nd, nsat))

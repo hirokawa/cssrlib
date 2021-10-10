@@ -11,9 +11,11 @@ from cssrlib.gnss import uGNSS, rSIG, Eph, prn2sat, gpst2time, Obs, \
 
 
 class rnxdec:
+    """ class for RINEX decoder """
     MAXSAT = uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX
 
     def __init__(self):
+        self.ver = -1.0
         self.fobs = None
         self.freq_tbl = {rSIG.L1C: 0, rSIG.L1X: 0, rSIG.L2W: 1, rSIG.L2L: 1,
                          rSIG.L2X: 1, rSIG.L5Q: 2, rSIG.L5X: 2, rSIG.L7Q: 1,
@@ -27,6 +29,12 @@ class rnxdec:
                                          rSIG.L2X], uGNSS.GAL: [],
                              uGNSS.QZS: [rSIG.L1X]}
         self.nf = 4
+        self.sigid = np.ones((uGNSS.GNSSMAX, rSIG.SIGMAX*3),
+                             dtype=int)*rSIG.NONE
+        self.typeid = np.ones((uGNSS.GNSSMAX, rSIG.SIGMAX*3),
+                              dtype=int)*rSIG.NONE
+        self.nsig = np.zeros((uGNSS.GNSSMAX), dtype=int)
+        self.pos = np.array([0, 0, 0])
 
     def flt(self, u, c=-1):
         if c >= 0:
@@ -126,17 +134,11 @@ class rnxdec:
         return nav
 
     def decode_obsh(self, obsfile):
-        self.sigid = np.ones((uGNSS.GNSSMAX, rSIG.SIGMAX*3),
-                             dtype=int)*rSIG.NONE
-        self.typeid = np.ones((uGNSS.GNSSMAX, rSIG.SIGMAX*3),
-                              dtype=int)*rSIG.NONE
-        self.nsig = np.zeros((uGNSS.GNSSMAX), dtype=int)
         self.fobs = open(obsfile, 'rt')
-        self.pos = np.array([0, 0, 0])
         for line in self.fobs:
             if line[60:73] == 'END OF HEADER':
                 break
-            elif line[60:80] == 'RINEX VERSION / TYPE':
+            if line[60:80] == 'RINEX VERSION / TYPE':
                 self.ver = float(line[4:10])
                 if self.ver < 3.02:
                     return -1
