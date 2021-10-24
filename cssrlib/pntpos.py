@@ -89,5 +89,6 @@ def pntpos(obs, nav):
     R = np.zeros((n, n))
     for k in range(n):
         R[k, k] = varerr(nav, el[k])
-    nav.x, nav.P = kfupdate(x, P, H, v, R)
+    nav.x, nav.P, _ = kfupdate(x, P, H, v, R)
+    nav.t = obs.t
     return nav, az, el

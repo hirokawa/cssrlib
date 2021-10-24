@@ -24,7 +24,7 @@ if dec.decode_obsh(obsfile) >= 0:
     for ne in range(nep):
         obs = dec.decode_obs()
         if ne == 0:
-            t0 = obs.t
+            t0 = nav.t = obs.t
         t[ne] = timediff(obs.t, t0)
         nav, az, el = pntpos(obs, nav)
         sol[ne, :] = nav.x

@@ -18,7 +18,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.pmode = 1  # 0:static, 1:kinematic
 
     nav.na = 3 if nav.pmode == 0 else 6
-    nav.nq = 3
+    nav.nq = 3 if nav.pmode == 0 else 6
     nav.ratio = 0
     nav.thresar = [2]
     nav.nx = nav.na+gn.uGNSS.MAXSAT*nav.nf
@@ -31,22 +31,24 @@ def rtkinit(nav, pos0=np.zeros(3)):
     # parameter for RTK
     nav.eratio = [100, 100]
     nav.err = [0, 0.003, 0.003]
-    nav.sig_p0 = 3.0
-    nav.sig_v0 = 1.0
+    nav.sig_p0 = 30.0
+    nav.sig_v0 = 10.0
     nav.sig_n0 = 30.0
     nav.sig_qp = 0.01
-    nav.sig_qv = 0.05
+    nav.sig_qv = 0.5
 
     nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
     nav.x[0:3] = pos0
+    nav.x[3:6] = 0.0
 
     dP = np.diag(nav.P)
     dP.flags['WRITEABLE']=True
     dP[0:3] = nav.sig_p0**2
     nav.q = np.zeros(nav.nq)
-    if nav.pmode >= 1:
+    if nav.pmode >= 1: # kinematic
         dP[3:6] = nav.sig_v0**2
-        nav.q[0:3] = nav.sig_qv**2
+        nav.q[0:3] = nav.sig_qp**2
+        nav.q[3:6] = nav.sig_qv**2
     else:
         nav.q[0:3] = nav.sig_qp**2
 
@@ -259,7 +261,7 @@ def ddidx(nav, sat):
 def restamb(nav, bias, nb):
     """ restore SD ambiguity """
     nv = 0
-    xa = nav.x
+    xa = nav.x.copy()
     xa[0:nav.na] = nav.xa[0:nav.na]
 
     for m in range(gn.uGNSS.GNSSMAX):
@@ -301,13 +303,16 @@ def resamb_lambda(nav, sat):
     # MLAMBDA ILS
     b, s = mlambda(y, Qb)
     if s[0] <= 0.0 or s[1]/s[0] >= nav.thresar[0]:
-        nav.xa = nav.x[0:na]
-        nav.Pa = nav.P[0:na, 0:na]
+        nav.xa = nav.x[0:na].copy()
+        nav.Pa = nav.P[0:na, 0:na].copy()
         bias = b[:, 0]
         y -= b[:, 0]
-        Qb = np.linalg.inv(Qb)
-        nav.xa -= Qab@Qb@y
-        nav.Pa -= Qab@Qb@Qab.T
+        K = Qab@np.linalg.inv(Qb)
+        #Qb = np.linalg.inv(Qb)
+        #nav.xa -= Qab@Qb@y
+        #nav.Pa -= Qab@Qb@Qab.T
+        nav.xa -= K@y
+        nav.Pa -= K@Qab.T
 
         # restore SD ambiguity
         xa = restamb(nav, bias, nb)
@@ -326,29 +331,36 @@ def initx(nav, x0, v0, i):
 
 def kfupdate(x, P, H, v, R):
     """ kalmanf filter measurement update """
-    ix = []
-    for i, _ in enumerate(x):
-        if x[i] != 0.0 and P[i, i] > 0.0:
-            ix.append(i)
-    x_ = x[ix]
-    P_ = P[ix, :][:, ix]
-    H_ = H[:, ix]
-
-    PHt = P_@H_.T
-    S = H_@PHt+R
-    K = PHt@np.linalg.inv(S)
-    x_ += K@v
-    P_ -= K@H_@P_
-
-    x[ix] = x_
-    sP=P[ix,:]
-    sP[:,ix]=P_
-    P[ix,:]=sP
+    if False:
+        ix = []
+        for i, _ in enumerate(x):
+            if x[i] != 0.0 and P[i, i] > 0.0:
+                ix.append(i)
+        x_ = x[ix]
+        P_ = P[ix, :][:, ix]
+        H_ = H[:, ix]
+    
+        PHt = P_@H_.T
+        S = H_@PHt+R
+        K = PHt@np.linalg.inv(S)
+        x_ += K@v
+        P_ -= K@H_@P_
+    
+        x[ix] = x_
+        sP=P[ix,:]
+        sP[:,ix]=P_
+        P[ix,:]=sP
+    else:
+        PHt = P@H.T
+        S = H@PHt+R
+        K = PHt@np.linalg.inv(S)
+        x += K@v
+        P = P - K@H@P
 
     return x, P, S
 
 def udstate(nav, obs, obsb, iu, ir):
-    """ states propagation for filter """
+    """ states propagation for kalman filter """
     tt = gn.timediff(obs.t, nav.t)
     ns = len(iu)
     sys = []
@@ -361,15 +373,15 @@ def udstate(nav, obs, obsb, iu, ir):
     na = nav.na
     if False:
         Px = nav.P[0:na, 0:na]
-        if nav.pmode >= 1:
+        if nav.pmode >= 1: # kinematic
             F = np.eye(na)
             F[0:3, 3:6] = np.eye(3)*tt
             nav.x[0:3] += tt*nav.x[3:6]
             Px = F@Px@F.T
             dP = np.diag(Px)
             dP.flags['WRITEABLE'] = True
-            dP[3:3+nav.nq] += nav.q[0:nav.nq]*tt
-        else:
+            dP[0:nav.nq] += nav.q[0:nav.nq]*tt
+        else: # static
             dP = np.diag(Px)
             dP.flags['WRITEABLE'] = True
             dP[0:nav.nq] += nav.q[0:nav.nq]*tt
@@ -380,7 +392,7 @@ def udstate(nav, obs, obsb, iu, ir):
         nav.P = Phi@nav.P@Phi.T
         dP = np.diag(nav.P)
         dP.flags['WRITEABLE'] = True
-        dP[3:3+nav.nq] += nav.q[0:nav.nq]*tt
+        dP[0:nav.nq] += nav.q[0:nav.nq]*tt
 
     # bias
     for f in range(nav.nf):
@@ -450,12 +462,11 @@ def holdamb(nav, xa):
     nb = nav.nx-nav.na
     v = np.zeros(nb)
     H = np.zeros((nb, nav.nx))
-    index = []
     nv = 0
-
     for m in range(gn.uGNSS.GNSSMAX):
         for f in range(nav.nf):
             n = 0
+            index = []
             for i in range(gn.uGNSS.MAXSAT):
                 sys, _ = gn.sat2prn(i+1)
                 if sys != m or nav.fix[i, f] != 2:
@@ -467,8 +478,8 @@ def holdamb(nav, xa):
             for i in range(1, n):
                 v[nv] = (xa[index[0]]-xa[index[i]]) - \
                     (nav.x[index[0]]-nav.x[index[i]])
-                H[nv, index[0]] = 1
-                H[nv, index[i]] = -1
+                H[nv, index[0]] = 1.0
+                H[nv, index[i]] = -1.0
                 nv += 1
     if nv > 0:
         R = np.eye(nv)*VAR_HOLDAMB
@@ -499,7 +510,7 @@ def relpos(nav, obs, obsb):
     udstate(nav, obs, obsb, iu, ir)
 
     xa = np.zeros(nav.nx)
-    xp = nav.x.copy()
+    xp = nav.x
 
     # non-differencial residual for rover
     yu, eu, el = zdres(nav, obs, rs, dts, svh, xp[0:3])
@@ -519,7 +530,7 @@ def relpos(nav, obs, obsb):
     yu, eu, _ = zdres(nav, obs, rs, dts, svh, xp[0:3])
     y[:ns, :] = yu[iu, :]
     e[:ns, :] = eu[iu, :]
-    # reisdual for float solution
+    # residual for float solution
     v, H, R = ddres(nav, xp, y, e, sat, el)
     if valpos(nav, v, R):
         nav.x = xp
