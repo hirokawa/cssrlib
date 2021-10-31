@@ -11,7 +11,7 @@ from cssrlib.gnss import tropmodel, timediff, antmodel, uGNSS
 from cssrlib.ephemeris import satposs
 from cssrlib.cssrlib import sSigGPS, sSigGAL, sSigQZS, sCType
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
-from cssrlib.rtk import IB, ddres, resamb_lambda, valpos, holdamb, initx
+from cssrlib.rtk import IB, ddres, resamb_lambda, valpos, holdamb, initx, kfupdate
 
 MAXITR = 10
 ELMIN = 10
@@ -350,7 +350,7 @@ def ppprtkpos(nav, obs, cs):
     v, H, R = ddres(nav, xp, y, e, sat, el)
     Pp = nav.P.copy()
     # Kalman filter measurement update
-    xp, Pp = gn.kfupdate(xp, Pp, H, v, R)
+    xp, Pp, _ = kfupdate(xp, Pp, H, v, R)
 
     # non-differencial residual for rover after measurement update
     yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xp[0:3], cs)

@@ -449,11 +449,35 @@ def udstate(nav, obs, obsb, iu, ir):
 
 def selsat(nav, obs, obsb, elb):
     """ select common satellite between rover and base station """
-    idx0 = np.where(elb >= nav.elmin)
-    idx = np.intersect1d(obs.sat, obsb.sat[idx0], return_indices=True)
+    # exclude satellite with missing observation and cycle slip for rover
+    idx_u = []
+    for k, sat in enumerate(obs.sat):
+        sys, _ = gn.sat2prn(sat)
+        j0 = nav.obs_idx[0][sys]
+        j1 = nav.obs_idx[1][sys]
+        if obs.P[k, j0] == 0.0 or obs.P[k, j1] == 0.0 or \
+            obs.L[k, j0] == 0.0 or obs.L[k, j1] == 0.0 or \
+            obs.lli[k, j0] > 0 or obs.lli[k, j1] > 0:
+            continue
+        idx_u.append(k)
+
+    # exclude satellite with missing observation and cycle slip for base
+    idx_r = []
+    for k, sat in enumerate(obsb.sat):
+        sys, _ = gn.sat2prn(sat)
+        j0 = nav.obs_idx[0][sys]
+        j1 = nav.obs_idx[1][sys]
+        if obsb.P[k, j0] == 0.0 or obsb.P[k, j1] == 0.0 or \
+            obsb.L[k, j0] == 0.0 or obsb.L[k, j1] == 0.0 or \
+            obsb.lli[k, j0] > 0 or obsb.lli[k, j1] > 0 or \
+            elb[k] < nav.elmin:
+            continue
+        idx_r.append(k)
+    
+    idx = np.intersect1d(obs.sat[idx_u], obsb.sat[idx_r], return_indices=True)
     k = len(idx[0])
-    iu = idx[1]
-    ir = idx0[0][idx[2]]
+    iu = np.array(idx_u)[idx[1]]
+    ir = np.array(idx_r)[idx[2]]
     return k, iu, ir
 
 
@@ -498,11 +522,14 @@ def relpos(nav, obs, obsb):
     rsb, _, dtsb, svhb = satposs(obsb, nav)
 
     # non-differencial residual for base
-    yr, er, el = zdres(nav, obsb, rsb, dtsb, svhb, nav.rb, 0)
-    ns, iu, ir = selsat(nav, obs, obsb, el)
+    yr, er, elr = zdres(nav, obsb, rsb, dtsb, svhb, nav.rb, 0)
+    ns, iu, ir = selsat(nav, obs, obsb, elr)
     y = np.zeros((ns*2, nf*2))
     e = np.zeros((ns*2, 3))
 
+    if ns<4:
+        return -1
+    
     y[ns:, :] = yr[ir, :]
     e[ns:, :] = er[ir, :]
 

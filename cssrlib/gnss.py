@@ -43,11 +43,11 @@ class uGNSS(IntEnum):
     IRN = 7
     GNSSMAX = 8
     GPSMAX = 32
-#    GALMAX = 36
-    GALMAX = 0
+    GALMAX = 36
+    QZSMAX = 10    
+#    GALMAX = 0
 #    BDSMAX = 63
-#    QZSMAX = 10
-    QZSMAX = 0
+#    QZSMAX = 0
 #    GLOMAX = 24
 #    SBSMAX = 24
 #    IRNMAX = 10
@@ -56,8 +56,7 @@ class uGNSS(IntEnum):
     SBSMAX = 0
     IRNMAX = 0
     NONE = -1
-    MAXSAT = GPSMAX+GLOMAX+GALMAX+BDSMAX+QZSMAX
-    # MAXSAT=GPSMAX+GLOMAX+GALMAX+BDSMAX+QZSMAX+SBSMAX+IRNMAX
+    MAXSAT=GPSMAX+GLOMAX+GALMAX+BDSMAX+QZSMAX+SBSMAX+IRNMAX
 
 
 class uSIG(IntEnum):
@@ -177,8 +176,8 @@ class Nav():
         self.freq = [1.57542e9, 1.22760e9, 1.17645e9, 1.20714e9]
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
-        # self.gnss_t = [uGNSS.GPS, uGNSS.GAL, uGNSS.QZS]
-        self.gnss_t = [uGNSS.GPS]
+        self.gnss_t = [uGNSS.GPS, uGNSS.GAL, uGNSS.QZS]
+        # self.gnss_t = [uGNSS.GPS]
         self.loglevel = 2
         self.cnr_min = 35
         self.maxout = 5  # maximum outage [epoch]

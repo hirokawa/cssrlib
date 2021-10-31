@@ -20,10 +20,9 @@ decb = rn.rnxdec()
 decb.decode_obsh(basefile)
 dec.decode_obsh(obsfile)
 
-nep = 85
+nep = 360
 # GSI 3034 fujisawa
 nav.rb = [-3959400.631, 3385704.533, 3667523.111]
-nav.excl_sat = [158]
 t = np.zeros(nep)
 enu = np.zeros((nep, 3))
 smode = np.zeros(nep, dtype=int)
@@ -37,8 +36,6 @@ if True:
         obs, obsb = rn.sync_obs(dec, decb)
         if ne == 0:
             t0 = nav.t = obs.t
-        if ne>=60:
-            ne
         relpos(nav, obs, obsb)
         t[ne] = gn.timediff(nav.t, t0)
         sol = nav.x[0:3]
