@@ -43,11 +43,9 @@ for ne in range(nep):
     obs, obsb = rn.sync_obs(dec, decb)
     if ne == 0:
         t0 = nav.t = obs.t
-    if ne>=18:
-        print(ne)
     relpos(nav, obs, obsb)
     t[ne] = gn.timediff(nav.t, t0)
-    sol = nav.xa[0:3]
+    sol = nav.xa[0:3] if nav.smode == 4 else nav.x[0:3]
     enu[ne, :] = gn.ecef2enu(pos_ref, sol-xyz_ref)
     smode[ne] = nav.smode
 

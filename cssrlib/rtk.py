@@ -35,7 +35,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.sig_v0 = 10.0
     nav.sig_n0 = 30.0
     nav.sig_qp = 0.01
-    nav.sig_qv = 0.5
+    nav.sig_qv = 0.01
 
     nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
     nav.x[0:3] = pos0
@@ -566,7 +566,7 @@ def relpos(nav, obs, obsb):
         nav.smode = 0
 
     nb, xa = resamb_lambda(nav, sat)
-    nav.smode = 5
+    nav.smode = 5 # float
     if nb > 0:
         yu, eu, _ = zdres(nav, obs, rs, dts, svh, xa[0:3])
         y[:ns, :] = yu[iu, :]

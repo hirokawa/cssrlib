@@ -25,7 +25,9 @@ dec = rnxdec()
 nav = Nav()
 nav = dec.decode_nav(navfile, nav)
 # nep=3600//30
-nep = 300
+nep = 180
+#nep = 60
+
 t = np.zeros(nep)
 tc = np.zeros(nep)
 enu = np.ones((nep, 3))*np.nan
@@ -42,6 +44,7 @@ if dec.decode_obsh(obsfile) >= 0:
     if not fc:
         print("L6 messsage file cannot open.")
         sys.exit(-1)
+    
     for ne in range(nep):
         obs = dec.decode_obs()
         week, tow = time2gpst(obs.t)
@@ -59,12 +62,14 @@ if dec.decode_obsh(obsfile) >= 0:
 
         cstat = cs.chk_stat()
         if cstat:
+            if ne>=42:
+                ne
             ppprtkpos(nav, obs, cs)
         
         t[ne] = timediff(nav.t, t0)
         tc[ne] = timediff(cs.time, t0)
 
-        sol = nav.x[0:3]
+        sol = nav.xa[0:3] if nav.smode == 4 else nav.x[0:3]
         enu[ne, :] = gn.ecef2enu(pos_ref, sol-xyz_ref)
         smode[ne] = nav.smode
 

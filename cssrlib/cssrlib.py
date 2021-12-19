@@ -546,7 +546,7 @@ class cssr:
         self.flg_net = True
         dfm = bs.unpack_from_dict('u2u5u'+str(self.nsat_n),
                                   ['stype', 'inet', 'svmaskn'], msg, i)
-        self.inet = inet = dfm['inet']
+        inet = dfm['inet']
         self.netmask[inet] = netmask = dfm['svmaskn']
         self.lc[inet].sat_n = self.decode_local_sat(netmask)
         self.lc[inet].nsat_n = nsat = len(self.lc[inet].sat_n)
@@ -573,7 +573,7 @@ class cssr:
                                   ['ttype', 'range', 'inet', 'svmaskn',
                                    'class', 'value', 'ng'], msg, i)
         self.flg_net = True
-        self.inet = inet = dfm['inet']
+        inet = dfm['inet']
         self.netmask[inet] = netmask = dfm['svmaskn']
         self.lc[inet].sat_n = self.decode_local_sat(netmask)
         self.lc[inet].nsat_n = nsat = len(self.lc[inet].sat_n)
@@ -668,7 +668,7 @@ class cssr:
         dfm = bs.unpack_from_dict('u2u2u5u6', ['trop', 'stec', 'inet', 'ng'],
                                   msg, i)
         self.flg_net = True
-        self.inet = inet = dfm['inet']
+        inet = dfm['inet']
         self.lc[inet].ng = ng = dfm['ng']
         self.lc[inet].flg_trop = dfm['trop']
         self.lc[inet].flg_stec = dfm['stec']

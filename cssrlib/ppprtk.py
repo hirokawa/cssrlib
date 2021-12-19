@@ -11,7 +11,7 @@ from cssrlib.gnss import tropmodel, timediff, antmodel, uGNSS
 from cssrlib.ephemeris import satposs
 from cssrlib.cssrlib import sSigGPS, sSigGAL, sSigQZS, sCType
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
-from cssrlib.rtk import IB, ddres, resamb_lambda, valpos, holdamb, initx, kfupdate
+from cssrlib.rtk import IB, ddres, resamb_lambda, valpos, holdamb, initx
 
 MAXITR = 10
 ELMIN = 10
@@ -34,14 +34,26 @@ def logmon(nav, t, sat, cs, iu=None):
         for i in range(n[0]):
             if cpc[i, 0] == 0 and cpc[i, 1] == 0:
                 continue
-            nav.fout.write("%6d\t%3d\t%8.3f\t%8.3f\t%8.3f\t%8.3f\t%2d\t"
-                           % (tow, sat[i], cpc[i, 0], cpc[i, 1],
-                              prc[i, 0], prc[i, 1], cs.iodssr))
+            sys, prn = gn.sat2prn(sat[i])
+            pb = osr[i, 0:2]
+            cb = osr[i, 2:4]
+            antr = osr[i, 4:6]
+            phw = osr[i, 6:8]
+            trop = osr[i, 8]
+            iono = osr[i, 9]
+            relatv = osr[i, 10]
+            dorb = osr[i, 11]
+            dclk = osr[i,12]
+            # tow	sys	prn	trop	iono	antr1	antr2	antr5	relatv
+            # wup2	wup5	CPC1	CPC2	CPC5	PRC1	PRC2	PRC5	orb	clk
+            nav.fout.write("%6d\t%2d\t%3d\t%8.3f\t%8.3f\t%8.3f\t%8.3f\t"
+                           % (tow, sys, prn, pb[0], pb[1], cb[0], cb[1]))
+            nav.fout.write("%8.3f\t%8.3f\t%8.3f\t%8.3f\t"
+                           % (trop, iono, antr[0], antr[1]))
             nav.fout.write("%8.3f\t%8.3f\t%8.3f\t%8.3f\t%8.3f\t"
-                           % (osr[i, 0], osr[i, 1], osr[i, 2],
-                              osr[i, 3], osr[i, 4]))
+                           % (relatv, phw[0], phw[1], cpc[i, 0], cpc[i, 1]))
             nav.fout.write("%8.3f\t%8.3f\t%8.3f\t%8.3f\n"
-                           % (osr[i, 5], osr[i, 6], osr[i, 7], osr[i, 8]))
+                           % (prc[i, 0], prc[i, 1], dorb, dclk))
     return 0
 
 
@@ -51,7 +63,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.pmode = 1  # 0:static, 1:kinematic
 
     nav.na = 3 if nav.pmode == 0 else 6
-    nav.nq = 3
+    nav.nq = 3 if nav.pmode == 0 else 6
     nav.ratio = 0
     nav.thresar = [2]
     nav.nx = nav.na+gn.uGNSS.MAXSAT*nav.nf
@@ -63,8 +75,8 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.phw = np.zeros(gn.uGNSS.MAXSAT)
 
     # parameter for PPP-RTK
-    nav.eratio = [50, 50]
-    nav.err = [100, 0.00707, 0.00354]
+    nav.eratio = [100, 100]
+    nav.err = [0, 0.003, 0.003]
     nav.sig_p0 = 30.0
     nav.sig_v0 = 10.0
     nav.sig_n0 = 30.0
@@ -73,18 +85,20 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.tidecorr = True
     nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
     nav.gnss_t = [uGNSS.GPS, uGNSS.GAL, uGNSS.QZS]
-    nav.gnss_t = [uGNSS.GPS]  # GPS only
+    # nav.gnss_t = [uGNSS.GPS]  # GPS only
 
     #
     nav.x[0:3] = pos0
+    nav.x[3:6] = 0.0
     
     dP = np.diag(nav.P)
     dP.flags['WRITEABLE']=True
     dP[0:3] = nav.sig_p0**2    
     nav.q = np.zeros(nav.nq)
-    if nav.pmode >= 1:
+    if nav.pmode >= 1: # kinematic
         dP[3:6] = nav.sig_v0**2
-        nav.q[0:3] = nav.sig_qv**2
+        nav.q[0:3] = nav.sig_qp**2
+        nav.q[3:6] = nav.sig_qv**2
     else:
         nav.q[0:3] = nav.sig_qp**2
     # obs index
@@ -119,20 +133,13 @@ def udstate(nav, obs, cs):
 
     # pos,vel
     na = nav.na
-    Px = nav.P[0:na, 0:na]
-    if nav.pmode >= 1:
-        F = np.eye(na)
-        F[0:3, 3:6] = np.eye(3)*tt
-        nav.x[0:3] += tt*nav.x[3:6]
-        Px = F@Px@F.T
-        dP = np.diag(Px)
-        dP.flags['WRITEABLE'] = True
-        dP[3:3+nav.nq] += nav.q[0:nav.nq]*tt 
-    else:
-        dP = np.diag(Px)
-        dP.flags['WRITEABLE'] = True
-        dP[0:nav.nq] += nav.q[0:nav.nq]*tt 
-    nav.P[0:na, 0:na] = Px
+
+    Phi = np.eye(nav.nx)
+    Phi[0:3,3:6]=np.eye(3)*tt
+    nav.P = Phi@nav.P@Phi.T
+    dP = np.diag(nav.P)
+    dP.flags['WRITEABLE'] = True
+    dP[0:nav.nq] += nav.q[0:nav.nq]*tt
     
     # bias
     for f in range(nav.nf):
@@ -141,13 +148,14 @@ def udstate(nav, obs, cs):
         for i in range(gn.uGNSS.MAXSAT):
             sat_ = i+1
             nav.outc[i, f] += 1
-            reset = True if nav.outc[i, f] > nav.maxout else False
+            reset = (nav.outc[i, f] > nav.maxout)
             sys_i, _ = gn.sat2prn(sat_)
             if sys_i not in nav.gnss_t:
                 continue
             j = IB(sat_, f, nav.na)
             if reset and nav.x[j] != 0.0:
-                initx(nav, 0.0, 0.0, j)
+                #initx(nav, 0.0, 0.0, j)
+                #print("reset amb f=%d sat=%d outc=%d" % (f,sat_,nav.outc[i, f]))
                 nav.outc[i, f] = 0
         # cycle slip check by LLI
         for i in range(ns):
@@ -164,7 +172,7 @@ def udstate(nav, obs, cs):
             initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
         # bias
         bias = np.zeros(ns)
-        offset = 0
+        offset = 0 
         na = 0
         for i in range(ns):
             if sys[i] not in nav.gnss_t:
@@ -223,7 +231,7 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
 
     cs.cpc = np.zeros((n, nf))
     cs.prc = np.zeros((n, nf))
-    cs.osr = np.zeros((n, 2*nf+5))
+    cs.osr = np.zeros((n, 4*nf+5))
 
     for i in range(n):
         sat = obs.sat[i]
@@ -281,10 +289,10 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
             cbias += cs.lc[inet].cbias[idx_l][kidx]
         if cs.lc[inet].pbias is not None:
             pbias += cs.lc[inet].pbias[idx_l][kidx]
-            # t1 = timediff(obs.t, cs.lc[0].t0[sCType.ORBIT])
-            # t2 = timediff(obs.t, cs.lc[inet].t0[sCType.PBIAS])
-            # if t1 >= 0 and t1 < 30 and t2 >= 30:
-            #    pbias += nav.dsis[sat]
+            #t1 = timediff(obs.t, cs.lc[0].t0[sCType.ORBIT])
+            #t2 = timediff(obs.t, cs.lc[inet].t0[sCType.PBIAS])
+            #if t1 >= 0 and t1 < 30 and t2 >= 30:
+            #     pbias += nav.dsis[sat]
 
         # relativity effect
         relatv = shapiro(rs[i, :], rr_)
@@ -302,8 +310,9 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
         # prc_c += nav.dorb[sat]-nav.dclk[sat]
         cs.prc[i, :] = prc_c+iono+cbias
         cs.cpc[i, :] = prc_c-iono+pbias+phw
-        cs.osr[i, :] = [pbias[0], pbias[1], cbias[0], cbias[1], trop,
-                        iono_, relatv, nav.dorb[sat], nav.dclk[sat]]
+        cs.osr[i, :] = [pbias[0], pbias[1], cbias[0], cbias[1], 
+                        antr[0], antr[1], phw[0], phw[1],
+                        trop, iono_, relatv, nav.dorb[sat], nav.dclk[sat]]
         r += -_c*dts[i]
 
         for f in range(nf):
@@ -314,12 +323,22 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
     return y, e, el
 
 
+def kfupdate(x, P, H, v, R):
+    """ kalmanf filter measurement update """
+    PHt = P@H.T
+    S = H@PHt+R
+    K = PHt@np.linalg.inv(S)
+    x += K@v
+    P = P - K@H@P
+
+    return x, P, S
+
 def ppprtkpos(nav, obs, cs):
     """ PPP-RTK positioning """
     
-    for i in range(gn.uGNSS.MAXSAT):
-        for j in range(nav.nf):
-            nav.vsat[j] = 0
+#    for i in range(gn.uGNSS.MAXSAT):
+#        for j in range(nav.nf):
+#            nav.vsat[j] = 0
             
     rs, vs, dts, svh = satposs(obs, nav, cs)
     # Kalman filter time propagation
@@ -337,6 +356,7 @@ def ppprtkpos(nav, obs, cs):
     el = elu[iu]
     nav.sat = sat
     nav.y = y
+    ns = len(sat)
 
     logmon(nav, obs.t, sat, cs, iu)
 
@@ -365,16 +385,19 @@ def ppprtkpos(nav, obs, cs):
     if valpos(nav, v, R):
         nav.x = xp
         nav.P = Pp
-        ns = len(nav.sat)
         nav.ns = 0
         for i in range(ns):
+            j = sat[i]-1
             for f in range(nav.nf):
-                if nav.vsat[sat[i]-1, f] == 0:
+                if nav.vsat[j,f] == 0:
                     continue
-                nav.lock[sat[i]-1, f] += 1
-                nav.outc[sat[i]-1, f] = 0
+                nav.lock[j,f] += 1
+                nav.outc[j,f] = 0
                 if f==0:
                     nav.ns += 1
+                
+    else:
+        nav.smode = 0
 
     nb, xa = resamb_lambda(nav, sat)
     nav.smode = 5  # float
