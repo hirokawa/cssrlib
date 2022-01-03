@@ -16,7 +16,7 @@ obsfile = '../data/SEPT078M.21O'
 xyz_ref = [-3962108.673,   3381309.574,   3668678.638]
 pos_ref = ecef2pos(xyz_ref)
 
-cs = cssr() 
+cs = cssr()
 cs.monlevel = 1
 cs.week = 2149
 cs.read_griddef(griddef)
@@ -42,7 +42,7 @@ if dec.decode_obsh(obsfile) >= 0:
     if not fc:
         print("L6 messsage file cannot open.")
         sys.exit(-1)
-    
+
     for ne in range(nep):
         obs = dec.decode_obs()
         week, tow = time2gpst(obs.t)
@@ -61,7 +61,7 @@ if dec.decode_obsh(obsfile) >= 0:
         cstat = cs.chk_stat()
         if cstat:
             ppprtkpos(nav, obs, cs)
-        
+
         t[ne] = timediff(nav.t, t0)
         tc[ne] = timediff(cs.time, t0)
 

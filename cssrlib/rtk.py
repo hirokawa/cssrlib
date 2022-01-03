@@ -16,6 +16,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     """ initalize RTK-GNSS parameters """
     nav.nf = 2
     nav.pmode = 1  # 0:static, 1:kinematic
+    nav.monlevel = 1
 
     nav.na = 3 if nav.pmode == 0 else 6
     nav.nq = 3 if nav.pmode == 0 else 6
@@ -39,15 +40,15 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.sig_qv = 0.01
 
     nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
-    nav.elmaskar = np.deg2rad(20) # elevation mask for AR
+    nav.elmaskar = np.deg2rad(20)  # elevation mask for AR
     nav.x[0:3] = pos0
     nav.x[3:6] = 0.0
 
     dP = np.diag(nav.P)
-    dP.flags['WRITEABLE']=True
+    dP.flags['WRITEABLE'] = True
     dP[0:3] = nav.sig_p0**2
     nav.q = np.zeros(nav.nq)
-    if nav.pmode >= 1: # kinematic
+    if nav.pmode >= 1:  # kinematic
         dP[3:6] = nav.sig_v0**2
         nav.q[0:3] = nav.sig_qp**2
         nav.q[3:6] = nav.sig_qv**2
@@ -220,7 +221,8 @@ def valpos(nav, v, R, thres=4.0):
     for i in range(nv):
         if v[i]**2 <= fact*R[i, i]:
             continue
-        print("%i is large : %f" % (i, v[i]))
+        if nav.monlevel > 1:
+            print("%i is large : %f" % (i, v[i]))
     return True
 
 
@@ -240,9 +242,10 @@ def ddidx(nav, sat):
                 if (sys != m) or sys not in nav.gnss_t:
                     continue
                 if sat_i not in sat or nav.x[i] == 0.0 \
-                    or nav.vsat[sat_i-1, f] == 0:
+                   or nav.vsat[sat_i-1, f] == 0:
                     continue
-                if nav.lock[sat_i-1, f] >0 and nav.el[sat_i-1] >= nav.elmaskar:
+                if nav.lock[sat_i-1, f] > 0 and \
+                   nav.el[sat_i-1] >= nav.elmaskar:
                     nav.fix[sat_i-1, f] = 2
                     break
                 else:
@@ -253,7 +256,7 @@ def ddidx(nav, sat):
                 if (sys != m) or sys not in nav.gnss_t:
                     continue
                 if i == j or sat_j not in sat or nav.x[j] == 0.0 \
-                    or nav.vsat[sat_j-1, f] == 0:
+                   or nav.vsat[sat_j-1, f] == 0:
                     continue
                 if nav.el[sat_j-1] >= nav.elmaskar:
                     ix[nb, :] = [i, j]
@@ -342,6 +345,7 @@ def kfupdate(x, P, H, v, R):
 
     return x, P, S
 
+
 def udstate(nav, obs, obsb, iu, ir):
     """ states propagation for kalman filter """
     tt = gn.timediff(obs.t, nav.t)
@@ -357,7 +361,7 @@ def udstate(nav, obs, obsb, iu, ir):
     Phi = np.eye(nav.nx)
     if nav.na > 3:
         nav.x[0:3] += tt*nav.x[3:6]
-        Phi[0:3,3:6]=np.eye(3)*tt
+        Phi[0:3, 3:6] = np.eye(3)*tt
     nav.P = Phi@nav.P@Phi.T
     dP = np.diag(nav.P)
     dP.flags['WRITEABLE'] = True
@@ -425,8 +429,8 @@ def selsat(nav, obs, obsb, elb):
         j0 = nav.obs_idx[0][sys]
         j1 = nav.obs_idx[1][sys]
         if obs.P[k, j0] == 0.0 or obs.P[k, j1] == 0.0 or \
-            obs.L[k, j0] == 0.0 or obs.L[k, j1] == 0.0 or \
-            obs.lli[k, j0] > 0 or obs.lli[k, j1] > 0:
+           obs.L[k, j0] == 0.0 or obs.L[k, j1] == 0.0 or \
+           obs.lli[k, j0] > 0 or obs.lli[k, j1] > 0:
             continue
         idx_u.append(k)
 
@@ -437,12 +441,12 @@ def selsat(nav, obs, obsb, elb):
         j0 = nav.obs_idx[0][sys]
         j1 = nav.obs_idx[1][sys]
         if obsb.P[k, j0] == 0.0 or obsb.P[k, j1] == 0.0 or \
-            obsb.L[k, j0] == 0.0 or obsb.L[k, j1] == 0.0 or \
-            obsb.lli[k, j0] > 0 or obsb.lli[k, j1] > 0 or \
-            elb[k] < nav.elmin:
+           obsb.L[k, j0] == 0.0 or obsb.L[k, j1] == 0.0 or \
+           obsb.lli[k, j0] > 0 or obsb.lli[k, j1] > 0 or \
+           elb[k] < nav.elmin:
             continue
         idx_r.append(k)
-    
+
     idx = np.intersect1d(obs.sat[idx_u], obsb.sat[idx_r], return_indices=True)
     k = len(idx[0])
     iu = np.array(idx_u)[idx[1]]
@@ -496,9 +500,9 @@ def relpos(nav, obs, obsb):
     y = np.zeros((ns*2, nf*2))
     e = np.zeros((ns*2, 3))
 
-    if ns<4:
+    if ns < 4:
         return -1
-    
+
     y[ns:, :] = yr[ir, :]
     e[ns:, :] = er[ir, :]
 
@@ -535,7 +539,7 @@ def relpos(nav, obs, obsb):
         nav.smode = 0
 
     nb, xa = resamb_lambda(nav, sat)
-    nav.smode = 5 # float
+    nav.smode = 5  # float
     if nb > 0:
         yu, eu, _ = zdres(nav, obs, rs, dts, svh, xa[0:3])
         y[:ns, :] = yu[iu, :]

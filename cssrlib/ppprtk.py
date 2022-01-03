@@ -40,7 +40,7 @@ def logmon(nav, t, sat, cs, iu=None):
             iono = osr[i, 9]
             relatv = osr[i, 10]
             dorb = osr[i, 11]
-            dclk = osr[i,12]
+            dclk = osr[i, 12]
             # tow	sys	prn	trop	iono	antr1	antr2	antr5	relatv
             # wup2	wup5	CPC1	CPC2	CPC5	PRC1	PRC2	PRC5	orb	clk
             nav.fout.write("%6d\t%2d\t%3d\t%8.3f\t%8.3f\t%8.3f\t%8.3f\t"
@@ -58,7 +58,8 @@ def rtkinit(nav, pos0=np.zeros(3)):
     """ initialize variables for RTK """
     nav.nf = 2
     nav.pmode = 1  # 0:static, 1:kinematic
-
+    nav.monlevel = 1
+    
     nav.na = 3 if nav.pmode == 0 else 6
     nav.nq = 3 if nav.pmode == 0 else 6
     nav.ratio = 0
@@ -83,15 +84,15 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.sig_qv = 0.01
     nav.tidecorr = True
     nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
-    nav.elmaskar = np.deg2rad(20) # elevation mask for AR
+    nav.elmaskar = np.deg2rad(20)  # elevation mask for AR
     nav.gnss_t = [uGNSS.GPS, uGNSS.GAL, uGNSS.QZS]
     nav.x[0:3] = pos0
-            
+
     dP = np.diag(nav.P)
-    dP.flags['WRITEABLE']=True
-    dP[0:3] = nav.sig_p0**2    
+    dP.flags['WRITEABLE'] = True
+    dP[0:3] = nav.sig_p0**2
     nav.q = np.zeros(nav.nq)
-    if nav.pmode >= 1: # kinematic
+    if nav.pmode >= 1:  # kinematic
         nav.x[3:6] = 0.0
         dP[3:6] = nav.sig_v0**2
         nav.q[0:3] = nav.sig_qp**2
@@ -133,12 +134,12 @@ def udstate(nav, obs, cs):
     Phi = np.eye(nav.na)
     if nav.na > 3:
         nav.x[0:3] += nav.x[3:6]*tt
-        Phi[0:3,3:6]=np.eye(3)*tt
-    nav.P[0:na,0:na] = Phi@nav.P[0:na,0:na]@Phi.T   
+        Phi[0:3, 3:6] = np.eye(3)*tt
+    nav.P[0:na, 0:na] = Phi@nav.P[0:na, 0:na]@Phi.T
     dP = np.diag(nav.P)
     dP.flags['WRITEABLE'] = True
     dP[0:nav.nq] += nav.q[0:nav.nq]*tt
-    
+
     # bias
     for f in range(nav.nf):
         # reset phase-bias if instantaneous AR or
@@ -153,7 +154,6 @@ def udstate(nav, obs, cs):
             j = IB(sat_, f, nav.na)
             if reset and nav.x[j] != 0.0:
                 initx(nav, 0.0, 0.0, j)
-                #print("reset amb f=%d sat=%d outc=%d" % (f,sat_,nav.outc[i, f]))
                 nav.outc[i, f] = 0
         # cycle slip check by LLI
         for i in range(ns):
@@ -170,7 +170,7 @@ def udstate(nav, obs, cs):
             initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
         # bias
         bias = np.zeros(ns)
-        offset = 0 
+        offset = 0
         na = 0
         for i in range(ns):
             if sys[i] not in nav.gnss_t:
@@ -278,8 +278,8 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
         # global/local signal bias
         cbias = np.zeros(nav.nf)
         pbias = np.zeros(nav.nf)
-        #t1 = timediff(obs.t, cs.lc[0].t0[sCType.ORBIT])
-        #t2 = timediff(obs.t, cs.lc[inet].t0[sCType.PBIAS])
+        # t1 = timediff(obs.t, cs.lc[0].t0[sCType.ORBIT])
+        # t2 = timediff(obs.t, cs.lc[inet].t0[sCType.PBIAS])
 
         if cs.lc[0].cbias is not None:
             cbias += cs.lc[0].cbias[idx_n][kidx]
@@ -289,7 +289,7 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
             cbias += cs.lc[inet].cbias[idx_l][kidx]
         if cs.lc[inet].pbias is not None:
             pbias += cs.lc[inet].pbias[idx_l][kidx]
-            #if t1 >= 0 and t1 < 30 and t2 >= 30:
+            # if t1 >= 0 and t1 < 30 and t2 >= 30:
             #     pbias += nav.dsis[sat]
 
         # relativity effect
@@ -308,7 +308,7 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
         # prc_c += nav.dorb[sat]-nav.dclk[sat]
         cs.prc[i, :] = prc_c+iono+cbias
         cs.cpc[i, :] = prc_c-iono+pbias+phw
-        cs.osr[i, :] = [pbias[0], pbias[1], cbias[0], cbias[1], 
+        cs.osr[i, :] = [pbias[0], pbias[1], cbias[0], cbias[1],
                         antr[0], antr[1], phw[0], phw[1],
                         trop, iono_, relatv, nav.dorb[sat], nav.dclk[sat]]
         r += -_c*dts[i]
@@ -331,9 +331,9 @@ def kfupdate(x, P, H, v, R):
 
     return x, P, S
 
+
 def ppprtkpos(nav, obs, cs):
     """ PPP-RTK positioning """
-                
     rs, vs, dts, svh = satposs(obs, nav, cs)
     # Kalman filter time propagation
     udstate(nav, obs, cs)
@@ -353,7 +353,8 @@ def ppprtkpos(nav, obs, cs):
     nav.y = y
     ns = len(sat)
 
-    logmon(nav, obs.t, sat, cs, iu)
+    if nav.monlevel > 1:
+        logmon(nav, obs.t, sat, cs, iu)
 
     ny = y.shape[0]
     if ny < 6:
@@ -384,13 +385,12 @@ def ppprtkpos(nav, obs, cs):
         for i in range(ns):
             j = sat[i]-1
             for f in range(nav.nf):
-                if nav.vsat[j,f] == 0:
+                if nav.vsat[j, f] == 0:
                     continue
-                nav.lock[j,f] += 1
-                nav.outc[j,f] = 0
-                if f==0:
+                nav.lock[j, f] += 1
+                nav.outc[j, f] = 0
+                if f == 0:
                     nav.ns += 1
-                
     else:
         nav.smode = 0
 

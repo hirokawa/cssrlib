@@ -41,7 +41,7 @@ class uGNSS(IntEnum):
     GNSSMAX = 8
     GPSMAX = 32
     GALMAX = 36
-    QZSMAX = 10    
+    QZSMAX = 10
 #    GALMAX = 0
 #    BDSMAX = 63
 #    QZSMAX = 0
@@ -53,7 +53,7 @@ class uGNSS(IntEnum):
     SBSMAX = 0
     IRNMAX = 0
     NONE = -1
-    MAXSAT=GPSMAX+GLOMAX+GALMAX+BDSMAX+QZSMAX+SBSMAX+IRNMAX
+    MAXSAT = GPSMAX+GLOMAX+GALMAX+BDSMAX+QZSMAX+SBSMAX+IRNMAX
 
 
 class uSIG(IntEnum):
@@ -210,7 +210,7 @@ class Nav():
         self.sis = np.zeros(uGNSS.MAXSAT)
 
         # satellite observation status
-        self.fix  = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
+        self.fix = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
         self.outc = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
         self.vsat = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
         self.lock = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
@@ -218,6 +218,7 @@ class Nav():
 
         self.tt = 0
         self.t = gtime_t()
+
 
 def leaps(tgps):
     """ return leap seconds (TBD) """
@@ -418,9 +419,9 @@ def kfupdate(x, P, H, v, R):
     P_ -= K@H_@P_
     # restore states and covariance
     x[ix] = x_
-    sP=P[ix,:]
-    sP[:,ix]=P_
-    P[ix,:]=sP
+    sP = P[ix, :]
+    sP[:, ix] = P_
+    P[ix, :] = sP
     return x, P, S
 
 

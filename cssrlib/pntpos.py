@@ -1,5 +1,5 @@
-""" 
-module for standalone positioning 
+"""
+module for standalone positioning
 """
 import numpy as np
 from cssrlib.gnss import rCST, ecef2pos, geodist, satazel, ionmodel,\

@@ -147,6 +147,7 @@ class sSigSBS(IntEnum):
 
 class local_corr:
     """ class for local corrections """
+
     def __init__(self):
         self.inet = -1
         self.inet_ref = -1
@@ -214,7 +215,7 @@ class cssr:
         self.tow = 0
         self.lc = []
         self.fcnt = -1
-        self.flg_net= False
+        self.flg_net = False
         self.time = -1
         self.nsig_max = 0
         self.ngrid = 0
@@ -222,7 +223,7 @@ class cssr:
         self.grid_weight = []
         self.rngmin = 0
         self.inet_ref = -1
-        self.netmask = np.zeros(self.MAXNET+1,dtype=np.dtype('u8'))
+        self.netmask = np.zeros(self.MAXNET+1, dtype=np.dtype('u8'))
         for inet in range(self.MAXNET+1):
             self.lc.append(local_corr())
             self.lc[inet].inet = inet
@@ -814,7 +815,7 @@ class cssr:
     def find_grid_index(self, pos):
         """ find index/weight of surounding grid   """
         self.rngmin = 5e3
-        clat = np.cos(pos[0])     
+        clat = np.cos(pos[0])
         dlat = np.deg2rad(self.grid['lat'])-pos[0]
         dlon = (np.deg2rad(self.grid['lon'])-pos[1])*clat
 
@@ -841,8 +842,8 @@ class cssr:
                 vn = v[:, 1:].copy()  # relative grid position
                 vn[0, :] = vn[0, :] + vp[0]
                 vn[1, :] = vn[1, :] + vp[1]
-                vn1 = np.array((-vn[:, 0][1],vn[:, 0][0]))  # normal vec of v21
-                vn2 = np.array((-vn[:, 1][1],vn[:, 1][0]))  # normal vec of v31
+                vn1 = np.array((-vn[:, 0][1], vn[:, 0][0]))  # normal of v21
+                vn2 = np.array((-vn[:, 1][1], vn[:, 1][0]))  # normal of v31
                 s1 = vn1@vp
                 s2 = vn2@vp
                 for k, i in enumerate(idx[3:]):
@@ -854,22 +855,6 @@ class cssr:
             w = rp/np.sum(rp)
             self.grid_index = self.grid[idn]['gid'][idx_n]
             self.grid_weight = w
-            
-            lat_ = self.grid['lat'][idn][idx_n]
-            lon_ = self.grid['lon'][idn][idx_n]
-            dlat_ = lat_ - lat_[0]
-            dlon_ = lon_ - lon_[0]
-            G = np.zeros((n,4))
-            for k in range(n):
-                G[k,0] = dlat_[k]
-                G[k,1] = dlon_[k]
-                G[k,2] = dlat_[k]*dlon_[k]
-                G[k,3] = 1
-            self.Gmat = np.linalg.inv(G)
-            dlat_ = np.rad2deg(pos[0]) - lat_[0]
-            dlon_ = np.rad2deg(pos[1]) - lon_[0]
-            self.Emat = [dlat_,dlon_,dlat_*dlon_,1]
-            
         return self.inet_ref
 
     def get_dpos(self, pos):
