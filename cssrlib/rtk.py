@@ -26,6 +26,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.P = np.zeros((nav.nx, nav.nx))
     nav.xa = np.zeros(nav.na)
     nav.Pa = np.zeros((nav.na, nav.na))
+    nav.el = np.zeros(gn.uGNSS.MAXSAT)
     nav.nfix = nav.neb = 0
 
     # parameter for RTK
@@ -38,6 +39,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.sig_qv = 0.01
 
     nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
+    nav.elmaskar = np.deg2rad(20)
     nav.x[0:3] = pos0
     nav.x[3:6] = 0.0
 
@@ -193,7 +195,7 @@ def ddres(nav, x, y, e, sat, el):
                     H[nv, idx_j] = -lami
                     Ri[nv] = varerr(nav, el[i], f)
                     Rj[nv] = varerr(nav, el[j], f)
-                    if f == 1:
+                    if sys != gn.uGNSS.GAL and f == 1:
                         Ri[nv] *= (2.55/1.55)**2
                         Rj[nv] *= (2.55/1.55)**2
                     nav.vsat[sat[i]-1, f] = 1
@@ -240,8 +242,11 @@ def ddidx(nav, sat):
                 if sat_i not in sat or nav.x[i] == 0.0 \
                     or nav.vsat[sat_i-1, f] == 0:
                     continue
-                nav.fix[sat_i-1, f] = 2
-                break
+                if nav.lock[sat_i-1, f] >0 and nav.el[sat_i-1] >= nav.elmaskar:
+                    nav.fix[sat_i-1, f] = 2
+                    break
+                else:
+                    nav.fix[sat_i-1, f] = 1
             for j in range(k, k+n):
                 sat_j = j-k+1
                 sys, _ = gn.sat2prn(sat_j)
@@ -250,9 +255,10 @@ def ddidx(nav, sat):
                 if i == j or sat_j not in sat or nav.x[j] == 0.0 \
                     or nav.vsat[sat_j-1, f] == 0:
                     continue
-                ix[nb, :] = [i, j]
-                nb += 1
-                nav.fix[sat_j-1, f] = 2
+                if nav.el[sat_j-1] >= nav.elmaskar:
+                    ix[nb, :] = [i, j]
+                    nb += 1
+                    nav.fix[sat_j-1, f] = 2
             k += n
     ix = np.resize(ix, (nb, 2))
     return ix
@@ -302,6 +308,7 @@ def resamb_lambda(nav, sat):
 
     # MLAMBDA ILS
     b, s = mlambda(y, Qb)
+    print("s0=%f s1=%f" % (s[0],s[1]))
     if s[0] <= 0.0 or s[1]/s[0] >= nav.thresar[0]:
         nav.xa = nav.x[0:na].copy()
         nav.Pa = nav.P[0:na, 0:na].copy()

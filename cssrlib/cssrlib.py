@@ -817,7 +817,7 @@ class cssr:
     def find_grid_index(self, pos):
         """ find index/weight of surounding grid   """
         self.rngmin = 5e3
-        clat = np.cos(pos[0])
+        clat = np.cos(pos[0])     
         dlat = np.deg2rad(self.grid['lat'])-pos[0]
         dlon = (np.deg2rad(self.grid['lon'])-pos[1])*clat
 
@@ -857,6 +857,22 @@ class cssr:
             w = rp/np.sum(rp)
             self.grid_index = self.grid[idn]['gid'][idx_n]
             self.grid_weight = w
+            
+            lat_ = self.grid['lat'][idn][idx_n]
+            lon_ = self.grid['lon'][idn][idx_n]
+            dlat_ = lat_ - lat_[0]
+            dlon_ = lon_ - lon_[0]
+            G = np.zeros((n,4))
+            for k in range(n):
+                G[k,0] = dlat_[k]
+                G[k,1] = dlon_[k]
+                G[k,2] = dlat_[k]*dlon_[k]
+                G[k,3] = 1
+            self.Gmat = np.linalg.inv(G)
+            dlat_ = np.rad2deg(pos[0]) - lat_[0]
+            dlon_ = np.rad2deg(pos[1]) - lon_[0]
+            self.Emat = [dlat_,dlon_,dlat_*dlon_,1]
+            
         return self.inet_ref
 
     def get_dpos(self, pos):
@@ -876,7 +892,7 @@ class cssr:
         if self.lc[inet].flg_trop & 2:
             trph = 2.3+self.lc[inet].ct@[1, dlat, dlon, dlat*dlon]
         if self.lc[inet].flg_trop & 1:
-            trpw = self.lc[inet].dtw[self.grid_index]@self.grid_weight
+            trpw = self.lc[inet].dtw[self.grid_index-1]@self.grid_weight
         return trph, trpw
 
     def get_stec(self, dlat=0.0, dlon=0.0):
@@ -890,7 +906,7 @@ class cssr:
                 stec[i] = [1, dlat, dlon, dlat*dlon, dlat**2, dlon**2]@ci
             if self.lc[inet].flg_stec & 1:
                 dstec = self.lc[inet].dstec[i,
-                                            self.grid_index]@self.grid_weight
+                                            self.grid_index-1]@self.grid_weight
                 stec[i] += dstec
         return stec
 
