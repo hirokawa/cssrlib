@@ -17,17 +17,14 @@ xyz_ref = [-3962108.673,   3381309.574,   3668678.638]
 pos_ref = ecef2pos(xyz_ref)
 
 cs = cssr() 
-cs.monlevel = 2
+cs.monlevel = 1
 cs.week = 2149
 cs.read_griddef(griddef)
 
 dec = rnxdec()
 nav = Nav()
 nav = dec.decode_nav(navfile, nav)
-# nep=3600//30
 nep = 180
-#nep = 65
-#nav.excl_sat = [58]
 
 t = np.zeros(nep)
 tc = np.zeros(nep)
@@ -63,8 +60,6 @@ if dec.decode_obsh(obsfile) >= 0:
 
         cstat = cs.chk_stat()
         if cstat:
-            if ne>=48:
-                ne
             ppprtkpos(nav, obs, cs)
         
         t[ne] = timediff(nav.t, t0)

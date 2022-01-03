@@ -1,15 +1,12 @@
-# -*- coding: utf-8 -*-
 """
-Created on Sun Nov 15 20:03:45 2020
-
-@author: ruihi
+module for PPP-RTK positioing
 """
 
 import numpy as np
 import cssrlib.gnss as gn
-from cssrlib.gnss import tropmodel, timediff, antmodel, uGNSS
+from cssrlib.gnss import tropmodel, antmodel, uGNSS
 from cssrlib.ephemeris import satposs
-from cssrlib.cssrlib import sSigGPS, sSigGAL, sSigQZS, sCType
+from cssrlib.cssrlib import sSigGPS, sSigGAL, sSigQZS
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.rtk import IB, ddres, resamb_lambda, valpos, holdamb, initx
 
@@ -62,8 +59,8 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.nf = 2
     nav.pmode = 1  # 0:static, 1:kinematic
 
-    nav.na = 3 if nav.pmode == 0 else 9
-    nav.nq = 3 if nav.pmode == 0 else 9
+    nav.na = 3 if nav.pmode == 0 else 6
+    nav.nq = 3 if nav.pmode == 0 else 6
     nav.ratio = 0
     nav.thresar = [2]
     nav.nx = nav.na+gn.uGNSS.MAXSAT*nav.nf
@@ -84,15 +81,10 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.sig_n0 = 30.0
     nav.sig_qp = 0.01
     nav.sig_qv = 0.01
-    nav.sig_qah = 1
-    nav.sig_qav = 0.1
     nav.tidecorr = True
     nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
-    nav.elmaskar = np.deg2rad(20)
+    nav.elmaskar = np.deg2rad(20) # elevation mask for AR
     nav.gnss_t = [uGNSS.GPS, uGNSS.GAL, uGNSS.QZS]
-    # nav.gnss_t = [uGNSS.GPS]  # GPS only
-    nav.tsmp = 1 # observation time step [s]
-    #
     nav.x[0:3] = pos0
             
     dP = np.diag(nav.P)
@@ -104,10 +96,6 @@ def rtkinit(nav, pos0=np.zeros(3)):
         dP[3:6] = nav.sig_v0**2
         nav.q[0:3] = nav.sig_qp**2
         nav.q[3:6] = nav.sig_qv**2
-        if nav.na > 6:
-            nav.x[6:9] = 1e-6
-            dP[6:9] = nav.sig_a0**2
-            #nav.q[6:9] = nav.sig_qa**2
     else:
         nav.q[0:3] = nav.sig_qp**2
     # obs index
@@ -131,8 +119,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
 
 def udstate(nav, obs, cs):
     """ time propagation of states and initialize """
-    # tt = gn.timediff(obs.t, nav.t)
-    tt = nav.tsmp
+    tt = gn.timediff(obs.t, nav.t)
 
     ns = len(obs.sat)
     sys = []
@@ -147,23 +134,10 @@ def udstate(nav, obs, cs):
     if nav.na > 3:
         nav.x[0:3] += nav.x[3:6]*tt
         Phi[0:3,3:6]=np.eye(3)*tt
-    if nav.na > 6:
-        nav.x[0:3] += nav.x[6:9]*(0.5*tt**2)
-        nav.x[3:6] += nav.x[6:9]*tt
-        #Phi[0:3,6:9]=np.eye(3)*(0.5*tt**2)
-        Phi[3:6,6:9]=np.eye(3)*tt
-    nav.P[0:na,0:na] = Phi@nav.P[0:na,0:na]@Phi.T
-    
-    if nav.na > 6:
-        pos = gn.ecef2pos(nav.x[0:3])
-        E = gn.xyz2enu(pos)
-        Q = np.diag([nav.sig_qah**2,nav.sig_qah**2,nav.sig_qav**2]*tt)
-        Qv = E.T@Q@E
-        nav.P[6:9,6:9] = nav.P[6:9,6:9] + Qv
-    else:
-        dP = np.diag(nav.P)
-        dP.flags['WRITEABLE'] = True
-        dP[0:nav.nq] += nav.q[0:nav.nq]*tt
+    nav.P[0:na,0:na] = Phi@nav.P[0:na,0:na]@Phi.T   
+    dP = np.diag(nav.P)
+    dP.flags['WRITEABLE'] = True
+    dP[0:nav.nq] += nav.q[0:nav.nq]*tt
     
     # bias
     for f in range(nav.nf):
@@ -178,7 +152,7 @@ def udstate(nav, obs, cs):
                 continue
             j = IB(sat_, f, nav.na)
             if reset and nav.x[j] != 0.0:
-                #initx(nav, 0.0, 0.0, j)
+                initx(nav, 0.0, 0.0, j)
                 #print("reset amb f=%d sat=%d outc=%d" % (f,sat_,nav.outc[i, f]))
                 nav.outc[i, f] = 0
         # cycle slip check by LLI
@@ -304,16 +278,15 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
         # global/local signal bias
         cbias = np.zeros(nav.nf)
         pbias = np.zeros(nav.nf)
-        t1 = timediff(obs.t, cs.lc[0].t0[sCType.ORBIT])
-        t2 = timediff(obs.t, cs.lc[inet].t0[sCType.PBIAS])
+        #t1 = timediff(obs.t, cs.lc[0].t0[sCType.ORBIT])
+        #t2 = timediff(obs.t, cs.lc[inet].t0[sCType.PBIAS])
 
         if cs.lc[0].cbias is not None:
-            #if t2 >= 30:
             cbias += cs.lc[0].cbias[idx_n][kidx]
         if cs.lc[0].pbias is not None:
             pbias += cs.lc[0].pbias[idx_n][kidx]
-        #if cs.lc[inet].cbias is not None:
-        #    cbias += cs.lc[inet].cbias[idx_l][kidx]
+        if cs.lc[inet].cbias is not None:
+            cbias += cs.lc[inet].cbias[idx_l][kidx]
         if cs.lc[inet].pbias is not None:
             pbias += cs.lc[inet].pbias[idx_l][kidx]
             #if t1 >= 0 and t1 < 30 and t2 >= 30:
@@ -360,11 +333,7 @@ def kfupdate(x, P, H, v, R):
 
 def ppprtkpos(nav, obs, cs):
     """ PPP-RTK positioning """
-    
-#    for i in range(gn.uGNSS.MAXSAT):
-#        for j in range(nav.nf):
-#            nav.vsat[j] = 0
-            
+                
     rs, vs, dts, svh = satposs(obs, nav, cs)
     # Kalman filter time propagation
     udstate(nav, obs, cs)
@@ -435,7 +404,6 @@ def ppprtkpos(nav, obs, cs):
         if valpos(nav, v, R):  # R <= Q=H'PH+R  chisq<max_inno[3] (0.5)
             if nav.armode == 3:  # fix and hold
                 holdamb(nav, xa)  # hold fixed ambiguity
-            # if rtk->sol.chisq<max_inno[4] (5)
             nav.smode = 4  # fix
     nav.t = obs.t
     return 0

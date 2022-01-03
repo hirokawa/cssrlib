@@ -1,8 +1,5 @@
-# -*- coding: utf-8 -*-
 """
-Created on Sat May 15 09:36:59 2021
-
-@author: ruihi
+module for TLE processing
 """
 
 from ephem import readtle

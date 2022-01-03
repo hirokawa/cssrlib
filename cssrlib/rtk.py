@@ -39,7 +39,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.sig_qv = 0.01
 
     nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
-    nav.elmaskar = np.deg2rad(20)
+    nav.elmaskar = np.deg2rad(20) # elevation mask for AR
     nav.x[0:3] = pos0
     nav.x[3:6] = 0.0
 
@@ -308,16 +308,12 @@ def resamb_lambda(nav, sat):
 
     # MLAMBDA ILS
     b, s = mlambda(y, Qb)
-    print("s0=%f s1=%f" % (s[0],s[1]))
     if s[0] <= 0.0 or s[1]/s[0] >= nav.thresar[0]:
         nav.xa = nav.x[0:na].copy()
         nav.Pa = nav.P[0:na, 0:na].copy()
         bias = b[:, 0]
         y -= b[:, 0]
         K = Qab@np.linalg.inv(Qb)
-        #Qb = np.linalg.inv(Qb)
-        #nav.xa -= Qab@Qb@y
-        #nav.Pa -= Qab@Qb@Qab.T
         nav.xa -= K@y
         nav.Pa -= K@Qab.T
 
@@ -338,31 +334,11 @@ def initx(nav, x0, v0, i):
 
 def kfupdate(x, P, H, v, R):
     """ kalmanf filter measurement update """
-    if False:
-        ix = []
-        for i, _ in enumerate(x):
-            if x[i] != 0.0 and P[i, i] > 0.0:
-                ix.append(i)
-        x_ = x[ix]
-        P_ = P[ix, :][:, ix]
-        H_ = H[:, ix]
-    
-        PHt = P_@H_.T
-        S = H_@PHt+R
-        K = PHt@np.linalg.inv(S)
-        x_ += K@v
-        P_ -= K@H_@P_
-    
-        x[ix] = x_
-        sP=P[ix,:]
-        sP[:,ix]=P_
-        P[ix,:]=sP
-    else:
-        PHt = P@H.T
-        S = H@PHt+R
-        K = PHt@np.linalg.inv(S)
-        x += K@v
-        P = P - K@H@P
+    PHt = P@H.T
+    S = H@PHt+R
+    K = PHt@np.linalg.inv(S)
+    x += K@v
+    P = P - K@H@P
 
     return x, P, S
 
@@ -378,28 +354,14 @@ def udstate(nav, obs, obsb, iu, ir):
 
     # pos,vel
     na = nav.na
-    if False:
-        Px = nav.P[0:na, 0:na]
-        if nav.pmode >= 1: # kinematic
-            F = np.eye(na)
-            F[0:3, 3:6] = np.eye(3)*tt
-            nav.x[0:3] += tt*nav.x[3:6]
-            Px = F@Px@F.T
-            dP = np.diag(Px)
-            dP.flags['WRITEABLE'] = True
-            dP[0:nav.nq] += nav.q[0:nav.nq]*tt
-        else: # static
-            dP = np.diag(Px)
-            dP.flags['WRITEABLE'] = True
-            dP[0:nav.nq] += nav.q[0:nav.nq]*tt
-        nav.P[0:na, 0:na] = Px
-    else:
-        Phi = np.eye(nav.nx)
+    Phi = np.eye(nav.nx)
+    if nav.na > 3:
+        nav.x[0:3] += tt*nav.x[3:6]
         Phi[0:3,3:6]=np.eye(3)*tt
-        nav.P = Phi@nav.P@Phi.T
-        dP = np.diag(nav.P)
-        dP.flags['WRITEABLE'] = True
-        dP[0:nav.nq] += nav.q[0:nav.nq]*tt
+    nav.P = Phi@nav.P@Phi.T
+    dP = np.diag(nav.P)
+    dP.flags['WRITEABLE'] = True
+    dP[0:nav.nq] += nav.q[0:nav.nq]*tt
 
     # bias
     for f in range(nav.nf):

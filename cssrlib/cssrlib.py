@@ -1,8 +1,5 @@
-# -*- coding: utf-8 -*-
 """
-Created on Sun Nov 15 20:03:45 2020
-
-@author: ruihi
+module for Compact SSR processing
 """
 
 import cbitstruct as bs

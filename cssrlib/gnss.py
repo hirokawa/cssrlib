@@ -1,8 +1,5 @@
-# -*- coding: utf-8 -*-
 """
-Created on Mon Nov 23 20:10:51 2020
-
-@author: ruihi
+module for GNSS processing
 """
 
 from copy import deepcopy

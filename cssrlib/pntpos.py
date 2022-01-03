@@ -1,4 +1,6 @@
-""" module to calculate standard positioning """
+""" 
+module for standalone positioning 
+"""
 import numpy as np
 from cssrlib.gnss import rCST, ecef2pos, geodist, satazel, ionmodel,\
     tropmodel, Nav, tropmapf, kfupdate

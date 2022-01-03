@@ -1,8 +1,5 @@
-# -*- coding: utf-8 -*-
 """
-Created on Mon Nov 23 20:10:51 2020
-
-@author: ruihi
+module for RINEX 3.0x processing
 """
 
 import numpy as np
