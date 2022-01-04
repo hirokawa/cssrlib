@@ -7,8 +7,7 @@ from cssrlib.ppprtk import rtkinit, ppprtkpos
 
 navfile = '../data/SEPT2650.21P'
 obsfile = '../data/SEPT265G.21O'
-#l6file = '../data/2021265G.l6'
-l6file = 'c:/work/log/archive/KB4/2021265G.l6'
+l6file = '../data/2021265G.l6'
 griddef = '../data/clas_grid.def'
 
 xyz_ref = gn.pos2ecef([35.342058098, 139.521986657, 47.5515], True)
@@ -25,7 +24,6 @@ dec.decode_nav(navfile, nav)
 dec.decode_obsh(obsfile)
 
 nep = 360
-# nav.excl_sat = [158]
 t = np.zeros(nep)
 enu = np.zeros((nep, 3))
 smode = np.zeros(nep, dtype=int)
@@ -67,8 +65,6 @@ if True:
             cs.time = obs.t
             nav.time_p = t0
 
-        if ne >= 59:
-            ne
         cstat = cs.chk_stat()
 
         if cstat:

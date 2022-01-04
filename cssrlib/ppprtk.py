@@ -78,7 +78,6 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.err = [0, 0.01, 0.005]/np.sqrt(2)
     nav.sig_p0 = 30.0
     nav.sig_v0 = 1.0
-    nav.sig_a0 = 1.0
     nav.sig_n0 = 30.0
     nav.sig_qp = 0.01
     nav.sig_qv = 0.01

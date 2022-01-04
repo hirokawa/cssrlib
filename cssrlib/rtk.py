@@ -38,9 +38,10 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.sig_n0 = 30.0
     nav.sig_qp = 0.01
     nav.sig_qv = 0.01
-
+    
     nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20)  # elevation mask for AR
+    nav.gnss_t = [gn.uGNSS.GPS, gn.uGNSS.GAL, gn.uGNSS.QZS]
     nav.x[0:3] = pos0
     nav.x[3:6] = 0.0
 
@@ -196,9 +197,6 @@ def ddres(nav, x, y, e, sat, el):
                     H[nv, idx_j] = -lami
                     Ri[nv] = varerr(nav, el[i], f)
                     Rj[nv] = varerr(nav, el[j], f)
-                    if sys != gn.uGNSS.GAL and f == 1:
-                        Ri[nv] *= (2.55/1.55)**2
-                        Rj[nv] *= (2.55/1.55)**2
                     nav.vsat[sat[i]-1, f] = 1
                     nav.vsat[sat[j]-1, f] = 1
                 else:
@@ -244,8 +242,7 @@ def ddidx(nav, sat):
                 if sat_i not in sat or nav.x[i] == 0.0 \
                    or nav.vsat[sat_i-1, f] == 0:
                     continue
-                if nav.lock[sat_i-1, f] > 0 and \
-                   nav.el[sat_i-1] >= nav.elmaskar:
+                if nav.el[sat_i-1] >= nav.elmaskar:
                     nav.fix[sat_i-1, f] = 2
                     break
                 else:
@@ -519,6 +516,7 @@ def relpos(nav, obs, obsb):
     e[:ns, :] = eu[iu, :]
     el = el[iu]
     sat = obs.sat[iu]
+    nav.el[sat-1] = el
     # DD residual
     v, H, R = ddres(nav, xp, y, e, sat, el)
     Pp = nav.P
