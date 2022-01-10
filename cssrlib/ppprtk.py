@@ -58,12 +58,12 @@ def rtkinit(nav, pos0=np.zeros(3)):
     """ initialize variables for RTK """
     nav.nf = 2
     nav.pmode = 1  # 0:static, 1:kinematic
-    nav.monlevel = 1
+    nav.monlevel = 2
     
     nav.na = 3 if nav.pmode == 0 else 6
     nav.nq = 3 if nav.pmode == 0 else 6
     nav.ratio = 0
-    nav.thresar = [2]
+    nav.thresar = [2.0]
     nav.nx = nav.na+gn.uGNSS.MAXSAT*nav.nf
     nav.x = np.zeros(nav.nx)
     nav.P = np.zeros((nav.nx, nav.nx))
@@ -80,7 +80,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.sig_v0 = 1.0
     nav.sig_n0 = 30.0
     nav.sig_qp = 0.01
-    nav.sig_qv = 0.01
+    nav.sig_qv = 1.0
     nav.tidecorr = True
     nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20)  # elevation mask for AR

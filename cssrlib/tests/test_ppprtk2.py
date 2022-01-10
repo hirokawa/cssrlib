@@ -28,10 +28,10 @@ t = np.zeros(nep)
 enu = np.zeros((nep, 3))
 smode = np.zeros(nep, dtype=int)
 rr0 = [-3961951.1326752,  3381198.11019757,  3668916.0417232]  # from pntpos
-# rr0 = xyz_ref
 pos_ref = gn.ecef2pos(xyz_ref)
 
-# nav.elmin = np.deg2rad(30.0)
+nav.excl_sat = [5,58,65]
+nav.armode = 3
 
 if True:
     rtkinit(nav, rr0)

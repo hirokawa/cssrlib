@@ -80,6 +80,6 @@ if True:
     plt.plot(t, dop[:, 1:])
     plt.legend(['pdop', 'hdop', 'vdop'])
     plt.grid()
-    plt.axis([0, nep, 0, 2])
+    plt.axis([0, nep, 0, 6])
     plt.xlabel('time[s]')
     plt.show()

@@ -30,14 +30,14 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.el = np.zeros(gn.uGNSS.MAXSAT)
     nav.nfix = nav.neb = 0
 
-    # parameter for RTK
-    nav.eratio = [100, 100]
-    nav.err = [0, 0.003, 0.003]
+    # parameter for RTK    
+    nav.eratio = [50, 50]
+    nav.err = [0, 0.01, 0.005]/np.sqrt(2)
     nav.sig_p0 = 30.0
-    nav.sig_v0 = 10.0
+    nav.sig_v0 = 1.0
     nav.sig_n0 = 30.0
     nav.sig_qp = 0.01
-    nav.sig_qv = 0.01
+    nav.sig_qv = 1.0
     
     nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20)  # elevation mask for AR

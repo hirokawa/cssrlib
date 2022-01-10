@@ -3,7 +3,7 @@ module for standalone positioning
 """
 import numpy as np
 from cssrlib.gnss import rCST, ecef2pos, geodist, satazel, ionmodel,\
-    tropmodel, Nav, tropmapf, kfupdate
+    tropmodel, Nav, tropmapf, kfupdate, sat2prn
 from cssrlib.ephemeris import findeph, satposs
 
 
@@ -25,14 +25,14 @@ def stdinit():
     nav.x = np.zeros(nav.nx)
     sig_p0 = 100.0*np.ones(3)
     sig_v0 = 10.0*np.ones(3)
-    nav.P = np.diag(np.hstack((sig_p0**2, sig_v0**2, 100, 100)))
+    nav.P = np.diag(np.hstack((sig_p0**2, sig_v0**2, 100**2, 10**2)))
     dt = 1
     nav.Phi = np.eye(nav.nx)
     nav.Phi[0:3, 3:6] = dt*np.eye(3)
     nav.Phi[6, 7] = dt
     nav.elmin = np.deg2rad(10)
     sq = 1e-2
-    nav.Q = np.diag([0, 0, 0, sq, sq, sq, 0, 1e-6])
+    nav.Q = np.diag([0, 0, 0, sq, sq, sq, 0, 1e-2])
     nav.err = [0, 0.3, 0.3]
     return nav
 
@@ -49,6 +49,9 @@ def rescode(obs, nav, rs, dts, svh, x):
     elv = np.zeros(n)
     nv = 0
     for i in range(n):
+        sys, _ = sat2prn(obs.sat[i])
+        if sys not in nav.gnss_t:
+            continue
         if np.linalg.norm(rs[i, :]) < rCST.RE_WGS84 or svh[i] > 0:
             continue
         r, e = geodist(rs[i, :], rr)
