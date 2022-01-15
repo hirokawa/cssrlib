@@ -16,6 +16,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     """ initalize RTK-GNSS parameters """
     nav.nf = 2
     nav.pmode = 1  # 0:static, 1:kinematic
+    nav.monlevel = 1
 
     nav.na = 3 if nav.pmode == 0 else 6
     nav.nq = 3 if nav.pmode == 0 else 6
@@ -26,26 +27,29 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.P = np.zeros((nav.nx, nav.nx))
     nav.xa = np.zeros(nav.na)
     nav.Pa = np.zeros((nav.na, nav.na))
+    nav.el = np.zeros(gn.uGNSS.MAXSAT)
     nav.nfix = nav.neb = 0
 
-    # parameter for RTK
-    nav.eratio = [100, 100]
-    nav.err = [0, 0.003, 0.003]
+    # parameter for RTK    
+    nav.eratio = [50, 50]
+    nav.err = [0, 0.01, 0.005]/np.sqrt(2)
     nav.sig_p0 = 30.0
-    nav.sig_v0 = 10.0
+    nav.sig_v0 = 1.0
     nav.sig_n0 = 30.0
     nav.sig_qp = 0.01
-    nav.sig_qv = 0.01
-
+    nav.sig_qv = 1.0
+    
     nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
+    nav.elmaskar = np.deg2rad(20)  # elevation mask for AR
+    nav.gnss_t = [gn.uGNSS.GPS, gn.uGNSS.GAL, gn.uGNSS.QZS]
     nav.x[0:3] = pos0
     nav.x[3:6] = 0.0
 
     dP = np.diag(nav.P)
-    dP.flags['WRITEABLE']=True
+    dP.flags['WRITEABLE'] = True
     dP[0:3] = nav.sig_p0**2
     nav.q = np.zeros(nav.nq)
-    if nav.pmode >= 1: # kinematic
+    if nav.pmode >= 1:  # kinematic
         dP[3:6] = nav.sig_v0**2
         nav.q[0:3] = nav.sig_qp**2
         nav.q[3:6] = nav.sig_qv**2
@@ -193,9 +197,6 @@ def ddres(nav, x, y, e, sat, el):
                     H[nv, idx_j] = -lami
                     Ri[nv] = varerr(nav, el[i], f)
                     Rj[nv] = varerr(nav, el[j], f)
-                    if f == 1:
-                        Ri[nv] *= (2.55/1.55)**2
-                        Rj[nv] *= (2.55/1.55)**2
                     nav.vsat[sat[i]-1, f] = 1
                     nav.vsat[sat[j]-1, f] = 1
                 else:
@@ -218,7 +219,8 @@ def valpos(nav, v, R, thres=4.0):
     for i in range(nv):
         if v[i]**2 <= fact*R[i, i]:
             continue
-        print("%i is large : %f" % (i, v[i]))
+        if nav.monlevel > 1:
+            print("%i is large : %f" % (i, v[i]))
     return True
 
 
@@ -238,21 +240,25 @@ def ddidx(nav, sat):
                 if (sys != m) or sys not in nav.gnss_t:
                     continue
                 if sat_i not in sat or nav.x[i] == 0.0 \
-                    or nav.vsat[sat_i-1, f] == 0:
+                   or nav.vsat[sat_i-1, f] == 0:
                     continue
-                nav.fix[sat_i-1, f] = 2
-                break
+                if nav.el[sat_i-1] >= nav.elmaskar:
+                    nav.fix[sat_i-1, f] = 2
+                    break
+                else:
+                    nav.fix[sat_i-1, f] = 1
             for j in range(k, k+n):
                 sat_j = j-k+1
                 sys, _ = gn.sat2prn(sat_j)
                 if (sys != m) or sys not in nav.gnss_t:
                     continue
                 if i == j or sat_j not in sat or nav.x[j] == 0.0 \
-                    or nav.vsat[sat_j-1, f] == 0:
+                   or nav.vsat[sat_j-1, f] == 0:
                     continue
-                ix[nb, :] = [i, j]
-                nb += 1
-                nav.fix[sat_j-1, f] = 2
+                if nav.el[sat_j-1] >= nav.elmaskar:
+                    ix[nb, :] = [i, j]
+                    nb += 1
+                    nav.fix[sat_j-1, f] = 2
             k += n
     ix = np.resize(ix, (nb, 2))
     return ix
@@ -308,9 +314,6 @@ def resamb_lambda(nav, sat):
         bias = b[:, 0]
         y -= b[:, 0]
         K = Qab@np.linalg.inv(Qb)
-        #Qb = np.linalg.inv(Qb)
-        #nav.xa -= Qab@Qb@y
-        #nav.Pa -= Qab@Qb@Qab.T
         nav.xa -= K@y
         nav.Pa -= K@Qab.T
 
@@ -331,33 +334,14 @@ def initx(nav, x0, v0, i):
 
 def kfupdate(x, P, H, v, R):
     """ kalmanf filter measurement update """
-    if False:
-        ix = []
-        for i, _ in enumerate(x):
-            if x[i] != 0.0 and P[i, i] > 0.0:
-                ix.append(i)
-        x_ = x[ix]
-        P_ = P[ix, :][:, ix]
-        H_ = H[:, ix]
-    
-        PHt = P_@H_.T
-        S = H_@PHt+R
-        K = PHt@np.linalg.inv(S)
-        x_ += K@v
-        P_ -= K@H_@P_
-    
-        x[ix] = x_
-        sP=P[ix,:]
-        sP[:,ix]=P_
-        P[ix,:]=sP
-    else:
-        PHt = P@H.T
-        S = H@PHt+R
-        K = PHt@np.linalg.inv(S)
-        x += K@v
-        P = P - K@H@P
+    PHt = P@H.T
+    S = H@PHt+R
+    K = PHt@np.linalg.inv(S)
+    x += K@v
+    P = P - K@H@P
 
     return x, P, S
+
 
 def udstate(nav, obs, obsb, iu, ir):
     """ states propagation for kalman filter """
@@ -371,28 +355,14 @@ def udstate(nav, obs, obsb, iu, ir):
 
     # pos,vel
     na = nav.na
-    if False:
-        Px = nav.P[0:na, 0:na]
-        if nav.pmode >= 1: # kinematic
-            F = np.eye(na)
-            F[0:3, 3:6] = np.eye(3)*tt
-            nav.x[0:3] += tt*nav.x[3:6]
-            Px = F@Px@F.T
-            dP = np.diag(Px)
-            dP.flags['WRITEABLE'] = True
-            dP[0:nav.nq] += nav.q[0:nav.nq]*tt
-        else: # static
-            dP = np.diag(Px)
-            dP.flags['WRITEABLE'] = True
-            dP[0:nav.nq] += nav.q[0:nav.nq]*tt
-        nav.P[0:na, 0:na] = Px
-    else:
-        Phi = np.eye(nav.nx)
-        Phi[0:3,3:6]=np.eye(3)*tt
-        nav.P = Phi@nav.P@Phi.T
-        dP = np.diag(nav.P)
-        dP.flags['WRITEABLE'] = True
-        dP[0:nav.nq] += nav.q[0:nav.nq]*tt
+    Phi = np.eye(nav.nx)
+    if nav.na > 3:
+        nav.x[0:3] += tt*nav.x[3:6]
+        Phi[0:3, 3:6] = np.eye(3)*tt
+    nav.P = Phi@nav.P@Phi.T
+    dP = np.diag(nav.P)
+    dP.flags['WRITEABLE'] = True
+    dP[0:nav.nq] += nav.q[0:nav.nq]*tt
 
     # bias
     for f in range(nav.nf):
@@ -456,8 +426,8 @@ def selsat(nav, obs, obsb, elb):
         j0 = nav.obs_idx[0][sys]
         j1 = nav.obs_idx[1][sys]
         if obs.P[k, j0] == 0.0 or obs.P[k, j1] == 0.0 or \
-            obs.L[k, j0] == 0.0 or obs.L[k, j1] == 0.0 or \
-            obs.lli[k, j0] > 0 or obs.lli[k, j1] > 0:
+           obs.L[k, j0] == 0.0 or obs.L[k, j1] == 0.0 or \
+           obs.lli[k, j0] > 0 or obs.lli[k, j1] > 0:
             continue
         idx_u.append(k)
 
@@ -468,12 +438,12 @@ def selsat(nav, obs, obsb, elb):
         j0 = nav.obs_idx[0][sys]
         j1 = nav.obs_idx[1][sys]
         if obsb.P[k, j0] == 0.0 or obsb.P[k, j1] == 0.0 or \
-            obsb.L[k, j0] == 0.0 or obsb.L[k, j1] == 0.0 or \
-            obsb.lli[k, j0] > 0 or obsb.lli[k, j1] > 0 or \
-            elb[k] < nav.elmin:
+           obsb.L[k, j0] == 0.0 or obsb.L[k, j1] == 0.0 or \
+           obsb.lli[k, j0] > 0 or obsb.lli[k, j1] > 0 or \
+           elb[k] < nav.elmin:
             continue
         idx_r.append(k)
-    
+
     idx = np.intersect1d(obs.sat[idx_u], obsb.sat[idx_r], return_indices=True)
     k = len(idx[0])
     iu = np.array(idx_u)[idx[1]]
@@ -527,9 +497,9 @@ def relpos(nav, obs, obsb):
     y = np.zeros((ns*2, nf*2))
     e = np.zeros((ns*2, 3))
 
-    if ns<4:
+    if ns < 4:
         return -1
-    
+
     y[ns:, :] = yr[ir, :]
     e[ns:, :] = er[ir, :]
 
@@ -546,6 +516,7 @@ def relpos(nav, obs, obsb):
     e[:ns, :] = eu[iu, :]
     el = el[iu]
     sat = obs.sat[iu]
+    nav.el[sat-1] = el
     # DD residual
     v, H, R = ddres(nav, xp, y, e, sat, el)
     Pp = nav.P
@@ -566,7 +537,7 @@ def relpos(nav, obs, obsb):
         nav.smode = 0
 
     nb, xa = resamb_lambda(nav, sat)
-    nav.smode = 5 # float
+    nav.smode = 5  # float
     if nb > 0:
         yu, eu, _ = zdres(nav, obs, rs, dts, svh, xa[0:3])
         y[:ns, :] = yu[iu, :]

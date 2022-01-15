@@ -1,8 +1,5 @@
-# -*- coding: utf-8 -*-
 """
-Created on Mon Nov 23 20:10:51 2020
-
-@author: ruihi
+module for ephemeris processing
 """
 
 import numpy as np
@@ -63,16 +60,16 @@ def eph2pos(t, eph, flg_v=False):
             break
     cE = np.cos(E)
     dtc = dtadjust(t, eph.toc)
-    dtrel = -2*np.sqrt(mu)*eph.e*np.sqrt(eph.A)*sE/rCST.CLIGHT**2
+    dtrel = -2.0*np.sqrt(mu)*eph.e*np.sqrt(eph.A)*sE/rCST.CLIGHT**2
     dts = eph.af0+eph.af1*dtc+eph.af2*dtc**2+dtrel
 
-    nus = np.sqrt(1-eph.e**2)*sE
+    nus = np.sqrt(1.0-eph.e**2)*sE
     nuc = cE-eph.e
-    nue = 1-eph.e*cE
+    nue = 1.0-eph.e*cE
 
     nu = np.arctan2(nus, nuc)
     phi = nu+eph.omg
-    h2 = np.array([np.cos(2*phi), np.sin(2*phi)])
+    h2 = np.array([np.cos(2.0*phi), np.sin(2.0*phi)])
     u = phi+np.array([eph.cuc, eph.cus])@h2
     r = eph.A*nue+np.array([eph.crc, eph.crs])@h2
     h = np.array([np.cos(u), np.sin(u)])
@@ -91,8 +88,8 @@ def eph2pos(t, eph, flg_v=False):
     if flg_v:  # satellite velocity
         qq = np.array([si*sOmg, -si*cOmg, ci])
         Ed = n/nue
-        nud = np.sqrt(1-eph.e**2)/nue*Ed
-        h2d = 2*nud*np.array([-h[1], h[0]])
+        nud = np.sqrt(1.0-eph.e**2)/nue*Ed
+        h2d = 2.0*nud*np.array([-h[1], h[0]])
         ud = nud+np.array([eph.cuc, eph.cus])@h2d
         rd = eph.A*eph.e*sE*Ed+np.array([eph.crc, eph.crs])@h2d
 

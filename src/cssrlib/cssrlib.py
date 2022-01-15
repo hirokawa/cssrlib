@@ -1,8 +1,5 @@
-# -*- coding: utf-8 -*-
 """
-Created on Sun Nov 15 20:03:45 2020
-
-@author: ruihi
+module for Compact SSR processing
 """
 
 import cbitstruct as bs
@@ -150,6 +147,7 @@ class sSigSBS(IntEnum):
 
 class local_corr:
     """ class for local corrections """
+
     def __init__(self):
         self.inet = -1
         self.inet_ref = -1
@@ -217,7 +215,7 @@ class cssr:
         self.tow = 0
         self.lc = []
         self.fcnt = -1
-        self.flg_net= False
+        self.flg_net = False
         self.time = -1
         self.nsig_max = 0
         self.ngrid = 0
@@ -225,7 +223,7 @@ class cssr:
         self.grid_weight = []
         self.rngmin = 0
         self.inet_ref = -1
-        self.netmask = np.zeros(self.MAXNET+1,dtype=np.dtype('u8'))
+        self.netmask = np.zeros(self.MAXNET+1, dtype=np.dtype('u8'))
         for inet in range(self.MAXNET+1):
             self.lc.append(local_corr())
             self.lc[inet].inet = inet
@@ -844,8 +842,8 @@ class cssr:
                 vn = v[:, 1:].copy()  # relative grid position
                 vn[0, :] = vn[0, :] + vp[0]
                 vn[1, :] = vn[1, :] + vp[1]
-                vn1 = np.array((-vn[:, 0][1],vn[:, 0][0]))  # normal vec of v21
-                vn2 = np.array((-vn[:, 1][1],vn[:, 1][0]))  # normal vec of v31
+                vn1 = np.array((-vn[:, 0][1], vn[:, 0][0]))  # normal of v21
+                vn2 = np.array((-vn[:, 1][1], vn[:, 1][0]))  # normal of v31
                 s1 = vn1@vp
                 s2 = vn2@vp
                 for k, i in enumerate(idx[3:]):
@@ -876,7 +874,7 @@ class cssr:
         if self.lc[inet].flg_trop & 2:
             trph = 2.3+self.lc[inet].ct@[1, dlat, dlon, dlat*dlon]
         if self.lc[inet].flg_trop & 1:
-            trpw = self.lc[inet].dtw[self.grid_index]@self.grid_weight
+            trpw = self.lc[inet].dtw[self.grid_index-1]@self.grid_weight
         return trph, trpw
 
     def get_stec(self, dlat=0.0, dlon=0.0):
@@ -890,7 +888,7 @@ class cssr:
                 stec[i] = [1, dlat, dlon, dlat*dlon, dlat**2, dlon**2]@ci
             if self.lc[inet].flg_stec & 1:
                 dstec = self.lc[inet].dstec[i,
-                                            self.grid_index]@self.grid_weight
+                                            self.grid_index-1]@self.grid_weight
                 stec[i] += dstec
         return stec
 

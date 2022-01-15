@@ -1,7 +1,4 @@
-# -*- coding: utf-8 -*-
 """
-Created on Sun Nov 15 20:03:45 2020
-
 integer ambiguity resolution by LAMBDA
 
 reference :
@@ -11,7 +8,6 @@ reference :
      [2] X.-W.Chang, X.Yang, T.Zhou, MLAMBDA: A modified LAMBDA method for
          integer least-squares estimation, J.Geodesy, Vol.79, 552-565, 2005
 
-@author: ruihi
 """
 
 import numpy as np

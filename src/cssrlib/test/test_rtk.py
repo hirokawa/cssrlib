@@ -1,8 +1,5 @@
-# -*- coding: utf-8 -*-
 """
-sample for RTK positioning
-
-@author: rui.h
+ static test for RTK
 """
 
 import matplotlib.pyplot as plt
@@ -13,8 +10,8 @@ from cssrlib.rtk import rtkinit, relpos
 
 bdir = '../data/'
 navfile = bdir+'SEPT078M.21P'
-obsfile = bdir+'SEPT078M1.21O'
-basefile = bdir+'3034078M1.21O'
+obsfile = bdir+'SEPT078M.21O'
+basefile = bdir+'3034078M.21O'
 
 xyz_ref = [-3962108.673,   3381309.574,   3668678.638]
 pos_ref = gn.ecef2pos(xyz_ref)
@@ -29,7 +26,7 @@ decb = rn.rnxdec()
 decb.decode_obsh(basefile)
 dec.decode_obsh(obsfile)
 
-nep = 60
+nep = 180
 
 # GSI 3034 fujisawa
 nav.rb = [-3959400.631, 3385704.533, 3667523.111]
