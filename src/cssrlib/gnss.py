@@ -42,14 +42,14 @@ class uGNSS(IntEnum):
     GPSMAX = 32
     GALMAX = 36
     QZSMAX = 10
-#    BDSMAX = 63
-#    GLOMAX = 24
-#    SBSMAX = 24
-#    IRNMAX = 10
-    BDSMAX = 0
-    GLOMAX = 0
-    SBSMAX = 0
-    IRNMAX = 0
+    BDSMAX = 63
+    GLOMAX = 24
+    SBSMAX = 24
+    IRNMAX = 10
+#    BDSMAX = 0
+#    GLOMAX = 0
+#    SBSMAX = 0
+#    IRNMAX = 0
     NONE = -1
     MAXSAT = GPSMAX+GLOMAX+GALMAX+BDSMAX+QZSMAX+SBSMAX+IRNMAX
 
