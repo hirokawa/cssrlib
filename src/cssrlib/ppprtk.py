@@ -41,8 +41,8 @@ def logmon(nav, t, sat, cs, iu=None):
             relatv = osr[i, 10]
             dorb = osr[i, 11]
             dclk = osr[i, 12]
-            # tow	sys	prn	trop	iono	antr1	antr2	antr5	relatv
-            # wup2	wup5	CPC1	CPC2	CPC5	PRC1	PRC2	PRC5	orb	clk
+            # tow  sys  prn  pb1  pb2  cb1 cb2 trop iono  antr1  antr2  relatv
+            # wup1  wup2  CPC1  CPC2  PRC1  PRC2  dorb  dclk
             nav.fout.write("%6d\t%2d\t%3d\t%8.3f\t%8.3f\t%8.3f\t%8.3f\t"
                            % (tow, sys, prn, pb[0], pb[1], cb[0], cb[1]))
             nav.fout.write("%8.3f\t%8.3f\t%8.3f\t%8.3f\t"
@@ -59,7 +59,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.nf = 2
     nav.pmode = 1  # 0:static, 1:kinematic
     nav.monlevel = 1
-    
+
     nav.na = 3 if nav.pmode == 0 else 6
     nav.nq = 3 if nav.pmode == 0 else 6
     nav.ratio = 0
@@ -115,6 +115,8 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.logfile = 'log.txt'
     if nav.loglevel >= 2:
         nav.fout = open(nav.logfile, 'w')
+        nav.fout.write("# tow\tsys\tprn\tpb1\tpb2\tcb1\tcb2\ttrop\tiono\tantr1\tantr2")
+        nav.fout.write("# \trelatv\twup1\twup2\tCPC1\tCPC2\tPRC1\tPRC2\tdorb\tdclk\n")
 
 
 def udstate(nav, obs, cs):
@@ -321,7 +323,7 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
 
 
 def kfupdate(x, P, H, v, R):
-    """ kalmanf filter measurement update """
+    """ Kalman filter measurement update """
     PHt = P@H.T
     S = H@PHt+R
     K = PHt@np.linalg.inv(S)
@@ -339,7 +341,7 @@ def ppprtkpos(nav, obs, cs):
     xa = np.zeros(nav.nx)
     xp = nav.x.copy()
 
-    # non-differencial residual for rover
+    # non-differential residuals for rover
     yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xp[0:3], cs)
 
     iu = np.where(elu >= nav.elmin)[0]
@@ -352,7 +354,7 @@ def ppprtkpos(nav, obs, cs):
     nav.y = y
     ns = len(sat)
 
-    if nav.monlevel > 1:
+    if nav.loglevel > 1:
         logmon(nav, obs.t, sat, cs, iu)
 
     ny = y.shape[0]
@@ -367,7 +369,7 @@ def ppprtkpos(nav, obs, cs):
     # Kalman filter measurement update
     xp, Pp, _ = kfupdate(xp, Pp, H, v, R)
 
-    # non-differencial residual for rover after measurement update
+    # non-differential residual for rover after measurement update
     yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xp[0:3], cs)
     y = yu[iu, :]
     e = eu[iu, :]
@@ -375,7 +377,8 @@ def ppprtkpos(nav, obs, cs):
     nav.y2 = y
     if ny < 6:
         return -1
-    # reisdual for float solution
+
+    # residual for float solution
     v, H, R = ddres(nav, xp, y, e, sat, el)
     if valpos(nav, v, R):
         nav.x = xp
