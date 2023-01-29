@@ -4,8 +4,16 @@ module for RINEX 3.0x processing
 
 import numpy as np
 from cssrlib.gnss import uGNSS, rSIG, Eph, prn2sat, gpst2time, Obs, \
-    epoch2time, timediff
+    epoch2time, timediff, gtime_t
 
+class pclk_t:
+    def __init__(self, time = None):
+        if time is not None:
+            self.time = time
+        else:
+            self.time = gtime_t()
+        self.clk = np.zeros(uGNSS.MAXSAT)
+        self.std = np.zeros(uGNSS.MAXSAT)
 
 class rnxdec:
     """ class for RINEX decoder """
@@ -38,6 +46,16 @@ class rnxdec:
             u = u[19*c+4:19*(c+1)+4]
         return float(u.replace("D", "E"))
 
+    def decode_time(self, s, ofst=0, slen=2):
+        year = int(s[ofst+0:ofst+4])
+        month = int(s[ofst+5:ofst+7])
+        day = int(s[ofst+8:ofst+10])
+        hour = int(s[ofst+11:ofst+13])
+        minute = int(s[ofst+14:ofst+16])
+        sec = float(s[ofst+17:ofst+slen+17])
+        t = epoch2time([year, month, day, hour, minute, sec])
+        return t
+
     def decode_nav(self, navfile, nav):
         """decode RINEX Navigation message from file """
         nav.eph = []
@@ -67,13 +85,7 @@ class rnxdec:
                 sat = prn2sat(sys, prn)
                 eph = Eph(sat)
 
-                year = int(line[4:8])
-                month = int(line[9:11])
-                day = int(line[12:14])
-                hour = int(line[15:17])
-                minute = int(line[18:20])
-                sec = int(line[21:23])
-                eph.toc = epoch2time([year, month, day, hour, minute, sec])
+                eph.toc = self.decode_time(line,4)
                 eph.af0 = self.flt(line, 1)
                 eph.af1 = self.flt(line, 2)
                 eph.af2 = self.flt(line, 3)
@@ -129,6 +141,36 @@ class rnxdec:
                 nav.eph.append(eph)
 
         return nav
+
+    def decode_clk(self, clkfile, nav):
+        """decode RINEX Navigation message from file """
+        nav.pclk = []
+        with open(clkfile, 'rt') as fnav:
+            for line in fnav:
+                if line[0:2] != 'AS':
+                    continue
+                if line[3] not in self.gnss_tbl:
+                    continue
+                sys = self.gnss_tbl[line[3]]
+                prn = int(line[4:7])
+                if sys == uGNSS.QZS:
+                    prn += 192
+                sat = prn2sat(sys, prn)
+                t = self.decode_time(line,8,9)
+                if nav.nc<=0 or abs(timediff(nav.pclk[-1].time, t))>1e-9:
+                    nav.nc+=1
+                    pclk = pclk_t()
+                    pclk.time = t
+                    nav.pclk.append(pclk)
+                    
+                nrec = int(line[35:37])
+                clk = float(line[40:59])
+                std = float(line[61:80]) if nrec>=2 else 0.0
+                nav.pclk[nav.nc-1].clk[sat-1] = clk
+                nav.pclk[nav.nc-1].std[sat-1] = std
+              
+        return nav
+
 
     def decode_obsh(self, obsfile):
         self.fobs = open(obsfile, 'rt')
