@@ -27,6 +27,14 @@ class rCST():
     AS2R = D2R/3600.0
     DAY_SEC = 86400.0
     CENTURY_SEC = DAY_SEC*36525.0
+    FREQ1 = 1.57542E9
+    FREQ2 = 1.22760E9
+    FREQ5 = 1.17645E9
+    FREQ6 = 1.27875E9
+    FREQ7 = 1.20714E9
+    FREQ9 = 2.492028E9
+    FREQ1_BDS = 1.561098E9
+    FREQ2_BDS = 1.20714E9
 
 
 class uGNSS(IntEnum):
@@ -161,12 +169,15 @@ class Nav():
 
     def __init__(self):
         self.eph = []
+        self.peph = []
         self.ion = np.array([
             [0.1118E-07, -0.7451E-08, -0.5961E-07, 0.1192E-06],
             [0.1167E+06, -0.2294E+06, -0.1311E+06, 0.1049E+07]])
         self.elmin = np.deg2rad(15.0)
         self.tidecorr = False
         self.nf = 2
+        self.ne = 0
+        self.nc = 0
         self.excl_sat = []
         self.freq = [1.57542e9, 1.22760e9, 1.17645e9, 1.20714e9]
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
@@ -315,6 +326,15 @@ def time2doy(t):
     ep[3] = ep[4] = ep[5] = 0.0
     return timediff(t, epoch2time(ep))/86400+1
 
+def str2time(s, i, n):
+    if i<0 or len(s)<i:
+        return -1
+    ep = np.array([float(x) for x in s[i:i+n].split()])
+    if len(ep)<6:
+        return -1
+    if ep[0]<100.0:
+        ep[0] += 2000.0 if ep[0]<80.0 else 1900.0
+    return epoch2time(ep)
 
 def prn2sat(sys, prn):
     """ convert sys+prn to sat """
