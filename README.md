@@ -15,6 +15,13 @@ Additional python packages are required as prerequisites and can be installed vi
 pip install bitstruct
 pip install cbitstruct
 pip install galois
+pip install cartopy
+```
+
+If the installation of `cartopy` fails, try installing `libgeos++-dev` first.
+
+```
+sudo apt-get install libgeos++-dev
 ```
 
 Install
