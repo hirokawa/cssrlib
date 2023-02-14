@@ -857,6 +857,9 @@ class biasdec():
                 elif '-BIAS/SOLUTION' in line:
                     status = False
                 if status and line[0:5] == ' DSB ':
+                    # Skip station DSBs
+                    if line[15:24].strip():
+                        continue
                     # Differential Signal Bias
                     svn = int(line[7:10])
                     prn = line[11:14]
@@ -886,8 +889,10 @@ class biasdec():
                     if len(line) >= 137:
                         slope = float(line[104:125])
                         std_s = float(line[126:137])
-                    print("{:3d} {:3d} {:s} {:s} {:f}".format(
-                        svn, sat, obs1, obs2, bias))
+
+                    print("{:3d} {:3d} {:s} {:s} {:7.3f}"
+                          .format(svn, sat, obs1, obs2, bias))
+
                     dcb = bias_t(sat, tst, ted, type1, code1,
                                  type2, code2, bias, std, svn)
                     self.dcb.append(dcb)
