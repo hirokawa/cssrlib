@@ -801,7 +801,7 @@ class biasdec():
         
 
     def parse(self,fname):
-        with open(fname,"r") as fh:
+        with open(fname, "r",encoding = 'latin-1') as fh:
             status = False
             for line in fh:
                 if line[0] == '*':
