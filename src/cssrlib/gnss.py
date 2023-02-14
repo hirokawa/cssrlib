@@ -326,15 +326,17 @@ def time2doy(t):
     ep[3] = ep[4] = ep[5] = 0.0
     return timediff(t, epoch2time(ep))/86400+1
 
+
 def str2time(s, i, n):
-    if i<0 or len(s)<i:
+    if i < 0 or len(s) < i:
         return -1
     ep = np.array([float(x) for x in s[i:i+n].split()])
-    if len(ep)<6:
+    if len(ep) < 6:
         return -1
-    if ep[0]<100.0:
-        ep[0] += 2000.0 if ep[0]<80.0 else 1900.0
+    if ep[0] < 100.0:
+        ep[0] += 2000.0 if ep[0] < 80.0 else 1900.0
     return epoch2time(ep)
+
 
 def prn2sat(sys, prn):
     """ convert sys+prn to sat """
@@ -627,7 +629,7 @@ def mapf(el, a, b, c):
 
 
 def tropmapf(t, pos, el):
-    """ tropospheric mapping function by Neil (NMF) """
+    """ tropospheric mapping function by Niell (NMF) """
     if pos[2] < -1e3 or pos[2] > 20e3 or el <= 0.0:
         return 0.0, 0.0
     coef = np.array([
@@ -659,7 +661,7 @@ def tropmapf(t, pos, el):
 
 
 def tropmodel(t, pos, el=np.pi/2, humi=0.7):
-    """ saastamonien tropospheric delay model """
+    """ saastamoinen tropospheric delay model """
     hgt = pos[2]
     # standard atmosphere
     pres = 1013.25*np.power(1-2.2557e-5*hgt, 5.2568)

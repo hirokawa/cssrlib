@@ -21,7 +21,7 @@ def ldldecom(Q):
     for i in range(n-1, -1, -1):
         d[i] = A[i, i]
         if d[i] <= 0.0:
-            print("Error: Qah should be positive deinite.")
+            print("Error: Qah should be positive definite.")
             raise SystemExit
         L[i, :i+1] = A[i, :i+1]/np.sqrt(d[i])
         for j in range(i):
@@ -117,7 +117,7 @@ def msearch(L, d, zs, m=2):
                 step[0] = -step[0]-np.sign(step[0])
         else:
             if k == n-1:
-                break            
+                break
             k += 1
             z[k] += step[k]
             y = zb[k]-z[k]
