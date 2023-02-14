@@ -810,6 +810,7 @@ class biasdec():
                         '5Q': rSIG.L5Q, '5X': rSIG.L5X, '7Q': rSIG.L7Q,
                         '7X': rSIG.L7X}
         self.dcb = []
+        self.osb = []
 
     def sig2code(self, sig):
         sig_t = {'C': 0, 'L': 1}
@@ -833,21 +834,45 @@ class biasdec():
         days = (year-1970)*365+(year-1969)//4+doy-1
         return gtime_t(days*86400+sec)
 
-    def getdcb(self, sat, time, code):
-        bias, std = 0, 0
-        bcode = None
+    def getdcb(self, sat, time, sig):
+        bias, std, bcode = None, None, None
+
+        type,code = self.sig2code(sig)
+        if type==-1 or code==-1:
+            return bias, std, bcode
+
         for dcb in self.dcb:
-            if dcb.sat == sat and dcb.code2 == code and \
+            if dcb.sat == sat and \
+                    dcb.type2 == type and dcb.code2 == code and \
                     timediff(time, dcb.tst) >= 0.0 and \
                     timediff(time, dcb.ted) < 0.0:
                 bias = dcb.bias
                 std = dcb.std
                 bcode = dcb.code1
                 break
+
         return bias, std, bcode
 
+    def getosb(self, sat, time, sig):
+        bias, std = None, None
+
+        type,code = self.sig2code(sig)
+        if type==-1 or code==-1:
+            return bias, std
+
+        for osb in self.osb:
+            if osb.sat == sat and \
+                    osb.type1 == type and osb.code1 == code and \
+                    timediff(time, osb.tst) >= 0.0 and \
+                    timediff(time, osb.ted) < 0.0:
+                bias = osb.bias
+                std = osb.std
+                break
+
+        return bias, std
+
     def parse(self, fname):
-        with open(fname, "r",encoding = 'latin-1') as fh:
+        with open(fname, "r", encoding='latin-1') as fh:
             status = False
             for line in fh:
                 if line[0] == '*':
@@ -857,14 +882,16 @@ class biasdec():
                 elif '-BIAS/SOLUTION' in line:
                     status = False
                 if status and line[0:5] == ' DSB ':
+
                     # Skip station DSBs
-                    if line[15:24].strip():
+                    sname = line[15:24]
+                    if sname.strip():
                         continue
+
                     # Differential Signal Bias
                     svn = int(line[7:10])
                     prn = line[11:14]
                     sat = id2sat(prn)
-                    #sname = line[15:24]
                     obs1 = line[25:29]
                     obs2 = line[30:34]
                     type1, code1 = self.sig2code(obs1)
@@ -890,12 +917,59 @@ class biasdec():
                         slope = float(line[104:125])
                         std_s = float(line[126:137])
 
+                    """
                     print("{:3d} {:3d} {:s} {:s} {:7.3f}"
                           .format(svn, sat, obs1, obs2, bias))
+                    """
 
                     dcb = bias_t(sat, tst, ted, type1, code1,
                                  type2, code2, bias, std, svn)
                     self.dcb.append(dcb)
+
+                elif status and line[0:5] == ' OSB ':
+
+                    # Skip station OSBs
+                    sname = line[15:24]
+                    if sname.strip():
+                        continue
+
+                    # Differential Signal Bias
+                    svn = int(line[7:10])
+                    prn = line[11:14]
+                    sat = id2sat(prn)
+
+                    obs1 = line[25:29]
+                    obs2 = None
+                    type1, code1 = self.sig2code(obs1)
+                    type2, code2 = None, None
+                    # year:doy:sec
+                    ep1 = [int(line[35:39]), int(
+                        line[40:43]), int(line[44:49])]
+                    ep2 = [int(line[50:54]), int(
+                        line[55:58]), int(line[59:64])]
+                    tst = self.doy2time(ep1)
+                    ted = self.doy2time(ep2)
+                    unit = line[65:69]
+                    #if (type1 == 0 and unit[0:2] != 'ns') or (type1 == 1 and unit[0:3] != 'cyc'):
+                    if (type1 == 0 and unit[0:2] != 'ns'):
+                        print("format error: inconsistent dimension {} in {}"
+                              .format(type1,unit))
+                        return -1
+
+                    bias = float(line[70:91])
+                    std = float(line[92:103])
+                    if len(line) >= 137:
+                        slope = float(line[104:125])
+                        std_s = float(line[126:137])
+
+                    """
+                    print("{:3d} {:3d} {:s}     {:7.3f}"
+                          .format(svn, sat, obs1, bias))
+                    """
+
+                    osb = bias_t(sat, tst, ted, type1, code1,
+                                 type2, code2, bias, std, svn)
+                    self.osb.append(osb)
 
 
 if __name__ == '__main__':
