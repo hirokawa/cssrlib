@@ -87,7 +87,7 @@ class peph:
                     if line[0:2]!='##':
                         break
                     self.week0 = int(line[3:7])
-                    print("week={:4d}".format(self.week0))                    
+                    #print("week={:4d}".format(self.week0))                    
                     self.status = 2
                 elif self.status == 2:
                     if line[0:2]=='+ ':
