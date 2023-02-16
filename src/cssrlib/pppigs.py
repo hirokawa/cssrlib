@@ -1,5 +1,5 @@
 """
-module for PPP-RTK positioing
+module for standard PPP positioning
 """
 from collections import defaultdict
 from copy import copy
@@ -133,7 +133,6 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.sig_qp = 0.01
     nav.sig_qv = 1.0
     nav.sig_qion = 10.0  # [m/sqrt(s)]
-    # nav.sig_qztd = 0.005/np.sqrt(3600)  # [m/sqrt(s)]
     nav.sig_qztd = 0.1e-3/np.sqrt(30)  # [m/sqrt(s)]
 
     nav.tidecorr = True
