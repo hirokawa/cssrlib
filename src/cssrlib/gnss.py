@@ -179,7 +179,8 @@ class Nav():
         self.ne = 0
         self.nc = 0
         self.excl_sat = []
-        self.freq = [1.57542e9, 1.22760e9, 1.17645e9, 1.20714e9]
+        self.freq = [1.57542e9, 1.22760e9,  # L1,L2
+                     1.17645e9, 1.20714e9]  # E5a,E5b
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
         self.gnss_t = [uGNSS.GPS, uGNSS.GAL, uGNSS.QZS]
@@ -198,7 +199,7 @@ class Nav():
                         [+0.00, -0.16, -0.60, -1.26, -2.06, -2.91, -3.77,
                          -4.57, -5.21, -5.54, -5.43, -4.81, -3.69, -2.21,
                          -0.46, 1.58, 4.16, 7.70, 12.53]]
-        self.ant_pco = [+85.44, +115.05, +115.05]
+        self.ant_pco = [+85.44, +115.05, +115.05]  # up offsets only!
 
         # antenna type: TRM59800.80     NONE [mm] 0:5:90 [deg]
         self.ant_pcv_b = [[+0.00, -0.22, -0.86, -1.87, -3.17, -4.62, -6.03,
@@ -210,7 +211,7 @@ class Nav():
                           [+0.00, -0.14, -0.53, -1.13, -1.89, -2.74, -3.62,
                            -4.43, -5.07, -5.40, -5.32, -4.79, -3.84, -2.56,
                            -1.02, +0.84, +3.24, +6.51, +10.84]]
-        self.ant_pco_b = [+89.51, +117.13, +117.13]
+        self.ant_pco_b = [+89.51, +117.13, +117.13]  # up offsets only!
 
         # SSR correction placeholder
         self.dorb = np.zeros(uGNSS.MAXSAT)
