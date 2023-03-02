@@ -7,8 +7,7 @@ from datetime import datetime
 import numpy as np
 import sys
 import cssrlib.gnss as gn
-from cssrlib.gnss import tropmodel, antmodel, uGNSS, rCST,sat2id, sat2prn, timeadd
-from cssrlib.ephemeris import satposs
+from cssrlib.gnss import tropmodel, antmodel, uGNSS, rCST, sat2id, sat2prn, timeadd
 from cssrlib.cssrlib import sSigGPS, sSigGAL, sSigQZS
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.rtk import IB, ddres, resamb_lambda, valpos, holdamb, initx
@@ -263,7 +262,8 @@ def udstate(nav, obs, cs):
         for i in range(ns):
             if sat[i] in cs.sat_n:
                 continue
-            initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na)) # TODO: remove this when BiasSINEX is used!!
+            # TODO: remove this when BiasSINEX is used!!
+            initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
         # bias
         bias = np.zeros(ns)
         offset = 0
@@ -373,15 +373,15 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, bsx, cs):
         pbias = np.zeros(nav.nf)
 
         if sys == uGNSS.GPS:
-            cbias[0],_ = bsx.getosb(sat, obs.t, "C1C")
-            cbias[1],_ = bsx.getosb(sat, obs.t, "C2W")
-            pbias[0],_ = bsx.getosb(sat, obs.t, "L1C")
-            pbias[1],_ = bsx.getosb(sat, obs.t, "L2W")
+            cbias[0], _ = bsx.getosb(sat, obs.t, "C1C")
+            cbias[1], _ = bsx.getosb(sat, obs.t, "C2W")
+            pbias[0], _ = bsx.getosb(sat, obs.t, "L1C")
+            pbias[1], _ = bsx.getosb(sat, obs.t, "L2W")
         elif sys == uGNSS.GAL:
-            cbias[0],_ = bsx.getosb(sat, obs.t, "C1C")
-            cbias[1],_ = bsx.getosb(sat, obs.t, "C5Q")
-            pbias[0],_ = bsx.getosb(sat, obs.t, "L1C")
-            pbias[1],_ = bsx.getosb(sat, obs.t, "L5Q")
+            cbias[0], _ = bsx.getosb(sat, obs.t, "C1C")
+            cbias[1], _ = bsx.getosb(sat, obs.t, "C5Q")
+            pbias[0], _ = bsx.getosb(sat, obs.t, "L1C")
+            pbias[1], _ = bsx.getosb(sat, obs.t, "L5Q")
 
         """
         if cs.lc[0].cbias is not None:
@@ -396,7 +396,7 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, bsx, cs):
             #     pbias += nav.dsis[sat]
         """
 
-        #print(sat2id(sat),cbias,pbias)
+        # print(sat2id(sat),cbias,pbias)
 
         # relativity effect
         relatv = shapiro(rs[i, :], rr_)
@@ -602,10 +602,10 @@ def satpreposs(obs, nav, orb):
         rs[i, :], dts[i, :], var = orb.peph2pos(t, sat, nav)
         #print(sat2id(sat), rs[i,:])
 
-        t = timeadd(t, -dts[i,0])
+        t = timeadd(t, -dts[i, 0])
         rs[i, :], dts[i, :], var = orb.peph2pos(t, sat, nav)
 
-    return rs[:,0:3], rs[:,3:6], dts[:,0], svh
+    return rs[:, 0:3], rs[:, 3:6], dts[:, 0], svh
 
 
 def pppigspos(nav, obs, orb, bsx, cs):
@@ -624,6 +624,7 @@ def pppigspos(nav, obs, orb, bsx, cs):
     yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xp[0:3], bsx, cs)
 
     # Select satellites above minimum elevation
+    #
     iu = np.where(elu >= nav.elmin)[0]
     sat = obs.sat[iu]
     y = yu[iu, :]
@@ -640,6 +641,7 @@ def pppigspos(nav, obs, orb, bsx, cs):
     #       on constellation changes! Must be added here.
     #
     # Remove missing satellites
+    #
     satsIdx_ = copy(nav.satIdx)
     for s in satsIdx_.keys():
         # Skip void
@@ -647,7 +649,9 @@ def pppigspos(nav, obs, orb, bsx, cs):
             idx = nav.satIdx.pop(s)
             nav.satIdx[None].append(idx)
             print("Removing {} at {}".format(sat2id(s), idx))
+
     # Add new satellites
+    #
     for s in sat:
         if s not in nav.satIdx.keys():
             idx = nav.satIdx.pop(None)
@@ -659,11 +663,13 @@ def pppigspos(nav, obs, orb, bsx, cs):
                 print("ERROR: satellite index full!")
                 sys.exit(1)
 
+    """
     print()
     print("Satellite index")
     for s, n in nav.satIdx.items():
         print("{} : {}".format('---' if s is None else sat2id(s), n))
     print()
+    """
 
     if nav.loglevel > 1:
         logmon(nav, obs.t, sat, cs, iu)
