@@ -403,6 +403,8 @@ class pcv_t():
 
 def readpcv(fname):
     pcvs = []
+    pcvr = []
+
     state = False
     freq = 0
     freqs = [1, 2, 5, 6, 7, 8, 0]
@@ -415,15 +417,20 @@ def readpcv(fname):
                 pcv = pcv_t()
                 state = True
             elif "END OF ANTENNA" in line[60:]:
-                pcvs.append(pcv)
+                if pcv.sat is None:
+                    pcvr.append(pcv)
+                else:
+                    pcvs.append(pcv)
                 state = False
             if not state:
                 continue
             if "TYPE / SERIAL NO" in line[60:]:
                 pcv.type = line[0:20]
                 pcv.code = line[20:40]
-                if pcv.code[3:11] == "        ":
-                    pcv.sat = id2sat(pcv.code)
+                if not pcv.code.strip():
+                    pcv.sat = None
+                else:
+                    pcv.sat = id2sat(pcv.code.strip())
             elif "VALID FROM" in line[60:]:
                 pcv.ts = str2time(line, 2, 40)
             elif "VALID UNTIL" in line[60:]:
@@ -441,8 +448,8 @@ def readpcv(fname):
                 if freq < 1 or NFREQ < freq:
                     continue
                 neu = [float(x)*1e-3 for x in line[3:30].split()]
-                pcv.off[freq-1, 0] = neu[0] if pcv.sat > 0 else neu[1]
-                pcv.off[freq-1, 1] = neu[1] if pcv.sat > 0 else neu[0]
+                pcv.off[freq-1, 0] = neu[0] if pcv.sat is not None else neu[1]
+                pcv.off[freq-1, 1] = neu[1] if pcv.sat is not None else neu[0]
                 pcv.off[freq-1, 2] = neu[2]
             elif "ZEN1 / ZEN2 / DZEN" in line[60:]:
                 pcv.zen = [float(x) for x in line[3:20].split()]
@@ -458,21 +465,22 @@ def readpcv(fname):
                     pcv.var[freq-1, n:] = var[n-1]
                 pcv.var[freq-1, :n] = var[0:n]
 
-    return pcvs
+    return pcvs, pcvr
 
 
-def searchpcv(sat, time, pcvs):
+def searchpcv(name, time, pcvs):
     n = len(pcvs)
     for i in range(n):
         pcv = pcvs[i]
-        if pcv.sat != sat:
+        if (pcv.sat is None and pcv.type != name) or \
+                (pcv.sat is not None and pcv.sat != name):
             continue
         if pcv.ts.time != 0 and timediff(pcv.ts, time) > 0.0:
             continue
         if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
             continue
         return pcv
-    return False
+    return None
 
 
 leaps_ = [[2017, 1, 1, 0, 0, 0, -18],
@@ -1003,7 +1011,7 @@ if __name__ == '__main__':
         sp = peph()
         nav = sp.parse_sp3(obsfile, nav)
         nav = rnx.decode_clk(clkfile, nav)
-        nav.pcvs = readpcv(atxfile)
+        nav.pcvs, pcvr = readpcv(atxfile)
 
         n = 10
         rs = np.zeros((n, 6))
