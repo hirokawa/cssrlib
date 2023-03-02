@@ -6,14 +6,16 @@ import numpy as np
 from cssrlib.gnss import uGNSS, rSIG, Eph, prn2sat, gpst2time, Obs, \
     epoch2time, timediff, gtime_t
 
+
 class pclk_t:
-    def __init__(self, time = None):
+    def __init__(self, time=None):
         if time is not None:
             self.time = time
         else:
             self.time = gtime_t()
         self.clk = np.zeros(uGNSS.MAXSAT)
         self.std = np.zeros(uGNSS.MAXSAT)
+
 
 class rnxdec:
     """ class for RINEX decoder """
@@ -40,6 +42,8 @@ class rnxdec:
                               dtype=int)*rSIG.NONE
         self.nsig = np.zeros((uGNSS.GNSSMAX), dtype=int)
         self.pos = np.array([0, 0, 0])
+        self.rcv = None
+        self.ant = None
 
     def flt(self, u, c=-1):
         if c >= 0:
@@ -85,7 +89,7 @@ class rnxdec:
                 sat = prn2sat(sys, prn)
                 eph = Eph(sat)
 
-                eph.toc = self.decode_time(line,4)
+                eph.toc = self.decode_time(line, 4)
                 eph.af0 = self.flt(line, 1)
                 eph.af1 = self.flt(line, 2)
                 eph.af2 = self.flt(line, 3)
@@ -156,21 +160,20 @@ class rnxdec:
                 if sys == uGNSS.QZS:
                     prn += 192
                 sat = prn2sat(sys, prn)
-                t = self.decode_time(line,8,9)
-                if nav.nc<=0 or abs(timediff(nav.pclk[-1].time, t))>1e-9:
-                    nav.nc+=1
+                t = self.decode_time(line, 8, 9)
+                if nav.nc <= 0 or abs(timediff(nav.pclk[-1].time, t)) > 1e-9:
+                    nav.nc += 1
                     pclk = pclk_t()
                     pclk.time = t
                     nav.pclk.append(pclk)
-                    
+
                 nrec = int(line[35:37])
                 clk = float(line[40:59])
-                std = float(line[61:80]) if nrec>=2 else 0.0
+                std = float(line[61:80]) if nrec >= 2 else 0.0
                 nav.pclk[nav.nc-1].clk[sat-1] = clk
                 nav.pclk[nav.nc-1].std[sat-1] = std
-              
-        return nav
 
+        return nav
 
     def decode_obsh(self, obsfile):
         self.fobs = open(obsfile, 'rt')
@@ -181,6 +184,10 @@ class rnxdec:
                 self.ver = float(line[4:10])
                 if self.ver < 3.02:
                     return -1
+            elif 'REC # / TYPE / VERS' in line:
+                self.rcv = line[20:40]
+            elif 'ANT # / TYPE' in line:
+                self.ant = line[20:40]
             elif line[60:79] == 'APPROX POSITION XYZ':
                 self.pos = np.array([float(line[0:14]),
                                      float(line[14:28]),
@@ -269,7 +276,7 @@ class rnxdec:
 
 
 def sync_obs(dec, decb, dt_th=0.1):
-    """ sync obseverbation beteen rover and base """
+    """ sync observation between rover and base """
     obs = dec.decode_obs()
     obsb = decb.decode_obs()
     while True:
