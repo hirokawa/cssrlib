@@ -324,7 +324,8 @@ class peph:
 
     def peph2pos(self, time, sat, nav, var=False):
         """
-        Satellite position and clock offset wrt to APC!!
+        Satellite position, velocity and clock offset
+        NOTE: satellite position is wrt IF-free APC!
         """
 
         tt = 1e-3
@@ -333,33 +334,44 @@ class peph:
         #
         rss, dtss, vare, varc = self.pephpos(time, sat, nav, var, var)
         if rss is None:
-            return None, None, (False, False)
+            return None, None, False
 
         # Satellite clock based on Clock-RINEX
         #
         if nav.nc >= 2:
             dtss, varc = self.pephclk(time, sat, nav, var)
             if dtss is None:
-                return None, False
-        time_tt = timeadd(time, tt)
+                return None, None, False
 
         # Satellite position based on SP3 at epoch plus delta t
         #
+        time_tt = timeadd(time, tt)
         rst, dtst, _, _ = self.pephpos(time_tt, sat, nav)
         if rss is None:
-            return None, None, (False, False)
+            return None, None, False
+
+        # Get clock offset from Clock-RINEX
+        #
         if nav.nc >= 2:
             dtst, _ = self.pephclk(time_tt, sat, nav)
             if dtst is None:
-                return None, False
-
+                return None, None, False
+        
+        # Get iono-free APC for satellite
+        #
         dant = satantoff(time, rss, sat, nav)
+        
+        # Satellite position and velocity (from differentiation)
+        #
         rs = np.zeros(6)
         dts = np.zeros(2)
 
         rs[0:3] = rss + dant
         rs[3:6] = (rst-rss)/tt
 
+        # Apply relativistic correction to clock offset, compute clock rate from
+        # differentiation
+        #
         if dtss[0] != 0.0:
             dts[0] = dtss[0]-2.0*(rs[0:3]@rs[3:6])/(rCST.CLIGHT**2)
             dts[1] = (dtst[0]-dtss[0])/tt
@@ -837,8 +849,8 @@ class biasdec():
     def getdcb(self, sat, time, sig):
         bias, std, bcode = None, None, None
 
-        type,code = self.sig2code(sig)
-        if type==-1 or code==-1:
+        type, code = self.sig2code(sig)
+        if type == -1 or code == -1:
             return bias, std, bcode
 
         for dcb in self.dcb:
@@ -856,8 +868,8 @@ class biasdec():
     def getosb(self, sat, time, sig):
         bias, std = None, None
 
-        type,code = self.sig2code(sig)
-        if type==-1 or code==-1:
+        type, code = self.sig2code(sig)
+        if type == -1 or code == -1:
             return bias, std
 
         for osb in self.osb:
@@ -950,10 +962,10 @@ class biasdec():
                     tst = self.doy2time(ep1)
                     ted = self.doy2time(ep2)
                     unit = line[65:69]
-                    #if (type1 == 0 and unit[0:2] != 'ns') or (type1 == 1 and unit[0:3] != 'cyc'):
+                    # if (type1 == 0 and unit[0:2] != 'ns') or (type1 == 1 and unit[0:3] != 'cyc'):
                     if (type1 == 0 and unit[0:2] != 'ns'):
                         print("format error: inconsistent dimension {} in {}"
-                              .format(type1,unit))
+                              .format(type1, unit))
                         return -1
 
                     bias = float(line[70:91])
