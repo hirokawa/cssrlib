@@ -12,49 +12,6 @@ from cssrlib.cssrlib import sSigGPS, sSigGAL, sSigQZS
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.rtk import IB, ddres, resamb_lambda, valpos, holdamb, initx
 
-MAXITR = 10
-ELMIN = 10
-NX = 4
-
-
-def logmon(nav, t, sat, cs, iu=None):
-    """ log variables for monitoring """
-    _, tow = gn.time2gpst(t)
-    if iu is None:
-        cpc = cs.cpc
-        prc = cs.prc
-        osr = cs.osr
-    else:
-        cpc = cs.cpc[iu, :]
-        prc = cs.prc[iu, :]
-        osr = cs.osr[iu, :]
-    if nav.loglevel >= 2:
-        n = cpc.shape
-        for i in range(n[0]):
-            if cpc[i, 0] == 0 and cpc[i, 1] == 0:
-                continue
-            sys, prn = gn.sat2prn(sat[i])
-            pb = osr[i, 0:2]
-            cb = osr[i, 2:4]
-            antr = osr[i, 4:6]
-            phw = osr[i, 6:8]
-            trop = osr[i, 8]
-            iono = osr[i, 9]
-            relatv = osr[i, 10]
-            dorb = osr[i, 11]
-            dclk = osr[i, 12]
-            # tow  sys  prn  pb1  pb2  cb1 cb2 trop iono  antr1  antr2  relatv
-            # wup1  wup2  CPC1  CPC2  PRC1  PRC2  dorb  dclk
-            nav.fout.write("%6d\t%2d\t%3d\t%8.3f\t%8.3f\t%8.3f\t%8.3f\t"
-                           % (tow, sys, prn, pb[0], pb[1], cb[0], cb[1]))
-            nav.fout.write("%8.3f\t%8.3f\t%8.3f\t%8.3f\t"
-                           % (trop, iono, antr[0], antr[1]))
-            nav.fout.write("%8.3f\t%8.3f\t%8.3f\t%8.3f\t%8.3f\t"
-                           % (relatv, phw[0], phw[1], cpc[i, 0], cpc[i, 1]))
-            nav.fout.write("%8.3f\t%8.3f\t%8.3f\t%8.3f\n"
-                           % (prc[i, 0], prc[i, 1], dorb, dclk))
-    return 0
-
 
 def rtkinit(nav, pos0=np.zeros(3)):
     """ initialize variables for RTK """
@@ -63,6 +20,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.monlevel = 1
 
     # Number of frequencies
+    #
     nav.nf = 2
 
     # Positioning mode
@@ -70,18 +28,21 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.pmode = 0
 
     # Number of tracking channels (1 per satellite)
-    nav.nChan = 15
+    #
+    nav.nChan = 20
     nav.satIdx = defaultdict(list)
     for n in range(nav.nChan):
         nav.satIdx[None].append(n)
 
     # State index
+    #
     nav.idx_pos = -1
     nav.idx_vel = -1
     nav.idx_ztd = -1
     nav.idx_ion = -1
 
     # Position (and optional velocity) states
+    #
     nav.na = 3 if nav.pmode == 0 else 6
     nav.nq = 3 if nav.pmode == 0 else 6
 
@@ -208,7 +169,7 @@ def varerr(nav, el, f):
     return 2.0*(a**2+(b/s_el)**2)
 
 
-def udstate(nav, obs, cs):
+def udstate(nav, obs):
     """ time propagation of states and initialize """
     tt = gn.timediff(obs.t, nav.t)
 
@@ -237,8 +198,7 @@ def udstate(nav, obs, cs):
 
     # bias
     for f in range(nav.nf):
-        # reset phase-bias if instantaneous AR or
-        # expire obs outage counter
+        # reset phase-bias if instantaneous AR or expire obs outage counter
         for i in range(gn.uGNSS.MAXSAT):
             sat_ = i+1
             nav.outc[i, f] += 1
@@ -258,12 +218,13 @@ def udstate(nav, obs, cs):
             if obs.lli[i, j] & 1 == 0:
                 continue
             initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
-        # reset bias if correction is not available
+
+        # Reset ambiguity if satellite is not available
         for i in range(ns):
-            if sat[i] in cs.sat_n:
+            if sat[i] in nav.satIdx:
                 continue
-            # TODO: remove this when BiasSINEX is used!!
             initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
+
         # bias
         bias = np.zeros(ns)
         offset = 0
@@ -297,7 +258,7 @@ def udstate(nav, obs, cs):
     return 0
 
 
-def zdres(nav, obs, rs, vs, dts, svh, rr, bsx, cs):
+def zdres(nav, obs, rs, vs, dts, svh, rr, bsx):
     """ non-differential residual """
     _c = gn.rCST.CLIGHT
     nf = nav.nf
@@ -308,21 +269,22 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, bsx, cs):
     rr_ = rr.copy()
 
     # Tide corrections
+    #
     if nav.tidecorr:
         pos = gn.ecef2pos(rr_)
         disp = tidedisp(gn.gpst2utc(obs.t), pos)
         rr_ += disp
 
-    # Geodetic position for correction grid index
+    # Geodetic position
+    #
     pos = gn.ecef2pos(rr_)
-    inet = cs.find_grid_index(pos)
 
     # Tropospheric dry and wet delays at user position
+    #
     trop_hs, trop_wet, _ = tropmodel(obs.t, pos)
 
-    cs.cpc = np.zeros((n, nf))
-    cs.prc = np.zeros((n, nf))
-    cs.osr = np.zeros((n, 4*nf+5))
+    cpc = np.zeros((n, nf))
+    prc = np.zeros((n, nf))
 
     for i in range(n):
 
@@ -331,22 +293,9 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, bsx, cs):
 
         if svh[i] > 0 or sys not in nav.gnss_t or sat in nav.excl_sat:
             continue
-        if sat not in cs.lc[inet].sat_n:
-            continue
-
-        idx_n = np.where(cs.sat_n == sat)[0][0]  # global
-        idx_l = np.where(cs.lc[inet].sat_n == sat)[0][0]  # local
-        kidx = [-1]*nav.nf
-        nsig = 0
-        for k, sig in enumerate(cs.sig_n[idx_n]):
-            for f in range(nav.nf):
-                if sig == nav.cs_sig_idx[sys][f]:
-                    kidx[f] = k
-                    nsig += 1
-        if nsig < nav.nf:
-            continue
 
         # check for measurement consistency
+        #
         flg_m = True
         for f in range(nav.nf):
             k = nav.obs_idx[f][sys]
@@ -383,19 +332,6 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, bsx, cs):
             pbias[0], _ = bsx.getosb(sat, obs.t, "L1C")
             pbias[1], _ = bsx.getosb(sat, obs.t, "L5Q")
 
-        """
-        if cs.lc[0].cbias is not None:
-            cbias += cs.lc[0].cbias[idx_n][kidx]
-        if cs.lc[0].pbias is not None:
-            pbias += cs.lc[0].pbias[idx_n][kidx]
-        if cs.lc[inet].cbias is not None:
-            cbias += cs.lc[inet].cbias[idx_l][kidx]
-        if cs.lc[inet].pbias is not None:
-            pbias += cs.lc[inet].pbias[idx_l][kidx]
-            # if t1 >= 0 and t1 < 30 and t2 >= 30:
-            #     pbias += nav.dsis[sat]
-        """
-
         # print(sat2id(sat),cbias,pbias)
 
         # relativity effect
@@ -412,20 +348,20 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, bsx, cs):
                                     nav.phw[sat-1])
         phw = lam*nav.phw[sat-1]
         antr = antmodel(nav, el[i], nav.nf)
+
         # range correction
+        #
         prc_c = trop+relatv+antr
-        # prc_c += nav.dorb[sat]-nav.dclk[sat]
-        cs.prc[i, :] = prc_c+cbias
-        cs.cpc[i, :] = prc_c+pbias+phw
-        cs.osr[i, :] = [pbias[0], pbias[1], cbias[0], cbias[1],
-                        antr[0], antr[1], phw[0], phw[1],
-                        trop, None, relatv, nav.dorb[sat], nav.dclk[sat]]
+
+        prc[i, :] = prc_c+cbias
+        cpc[i, :] = prc_c+pbias+phw
+
         r += -_c*dts[i]
 
         for f in range(nf):
             k = nav.obs_idx[f][sys]
-            y[i, f] = obs.L[i, k]*lam[f]-(r+cs.cpc[i, f])
-            y[i, f+nf] = obs.P[i, k]-(r+cs.prc[i, f])
+            y[i, f] = obs.L[i, k]*lam[f]-(r+cpc[i, f])
+            y[i, f+nf] = obs.P[i, k]-(r+prc[i, f])
 
     return y, e, el
 
@@ -599,29 +535,31 @@ def satpreposs(obs, nav, orb):
         pr = obs.P[i, 0]
         t = timeadd(obs.t, -pr/rCST.CLIGHT)
 
-        rs[i, :], dts[i, :], var = orb.peph2pos(t, sat, nav)
-        #print(sat2id(sat), rs[i,:])
+        rs[i, :], dts[i, :], _ = orb.peph2pos(t, sat, nav)
 
         t = timeadd(t, -dts[i, 0])
-        rs[i, :], dts[i, :], var = orb.peph2pos(t, sat, nav)
+        rs[i, :], dts[i, :], _ = orb.peph2pos(t, sat, nav)
 
     return rs[:, 0:3], rs[:, 3:6], dts[:, 0], svh
 
 
-def pppigspos(nav, obs, orb, bsx, cs):
+def pppigspos(nav, obs, orb, bsx):
     """ PPP positioning with IGS files and conventions"""
 
     # GNSS satellite positions, velocities and clock offsets
+    #
     rs, vs, dts, svh = satpreposs(obs, nav, orb)
 
     # Kalman filter time propagation
-    udstate(nav, obs, cs)
+    #
+    udstate(nav, obs)
 
     xa = np.zeros(nav.nx)
     xp = nav.x.copy()
 
-    # Non-differential residuals for rover
-    yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xp[0:3], bsx, cs)
+    # Non-differential residuals
+    #
+    yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xp[0:3], bsx)
 
     # Select satellites above minimum elevation
     #
@@ -671,9 +609,6 @@ def pppigspos(nav, obs, orb, bsx, cs):
     print()
     """
 
-    if nav.loglevel > 1:
-        logmon(nav, obs.t, sat, cs, iu)
-
     # ???
     ny = y.shape[0]
     if ny < 6:
@@ -682,14 +617,17 @@ def pppigspos(nav, obs, orb, bsx, cs):
         return -1
 
     # DD residual
+    #
     v, H, R = ddres(nav, obs.t, xp, y, e, sat, el)
     Pp = nav.P.copy()
 
     # Kalman filter measurement update
+    #
     xp, Pp, _ = kfupdate(xp, Pp, H, v, R)
 
-    # non-differential residual for rover after measurement update
-    yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xp[0:3], bsx, cs)
+    # non-differential residuals after measurement update
+    #
+    yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xp[0:3], bsx)
     y = yu[iu, :]
     e = eu[iu, :]
     ny = y.shape[0]
@@ -697,7 +635,8 @@ def pppigspos(nav, obs, orb, bsx, cs):
     if ny < 6:
         return -1
 
-    # residual for float solution
+    # Residuals for float solution
+    #
     v, H, R = ddres(nav, obs.t, xp, y, e, sat, el)
     if valpos(nav, v, R):
         nav.x = xp
@@ -721,7 +660,7 @@ def pppigspos(nav, obs, orb, bsx, cs):
     except:
         nb = 0
     if nb > 0:
-        yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xa[0:3], bsx, cs)
+        yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xa[0:3], bsx)
         y = yu[iu, :]
         e = eu[iu, :]
         v, H, R = ddres(nav, obs.t, xa, y, e, sat, el)
@@ -731,4 +670,5 @@ def pppigspos(nav, obs, orb, bsx, cs):
             nav.smode = 4           # fix
 
     nav.t = obs.t
+
     return 0
