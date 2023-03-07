@@ -185,9 +185,9 @@ class rnxdec:
                 if self.ver < 3.02:
                     return -1
             elif 'REC # / TYPE / VERS' in line:
-                self.rcv = line[20:40]
+                self.rcv = line[20:40].upper()
             elif 'ANT # / TYPE' in line:
-                self.ant = line[20:40]
+                self.ant = line[20:40].upper()
             elif line[60:79] == 'APPROX POSITION XYZ':
                 self.pos = np.array([float(line[0:14]),
                                      float(line[14:28]),
