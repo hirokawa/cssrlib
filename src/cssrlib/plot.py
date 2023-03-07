@@ -83,4 +83,5 @@ def skyplot(azm, elv, elmask=0, satlist=None):
         ax.scatter(theta, z, s=5, c=col_tbl[sys])
         ax.text(theta[0], z[0], sat2id(sat), fontsize=8)
         nsat += 1
+    plt.show()
     return nsat
