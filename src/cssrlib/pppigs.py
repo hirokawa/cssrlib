@@ -7,10 +7,16 @@ from datetime import datetime
 import numpy as np
 import sys
 import cssrlib.gnss as gn
-from cssrlib.gnss import tropmodel, antmodel, uGNSS, rCST, sat2id, sat2prn, timeadd
+from cssrlib.gnss import tropmodel, antmodel, uGNSS, rCST, sat2id, sat2prn, timeadd, time2epoch
 from cssrlib.cssrlib import sSigGPS, sSigGAL, sSigQZS
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.rtk import IB, ddres, resamb_lambda, valpos, holdamb, initx
+
+
+def time2str(time):
+    ep = time2epoch(time)
+    return ("{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02.0f}"
+            .format(ep[0], ep[1], ep[2], ep[3], ep[4], ep[5]))
 
 
 def rtkinit(nav, pos0=np.zeros(3)):
@@ -210,6 +216,7 @@ def udstate(nav, obs):
             if reset and nav.x[j] != 0.0:
                 initx(nav, 0.0, 0.0, j)
                 nav.outc[i, f] = 0
+
         # cycle slip check by LLI
         for i in range(ns):
             if sys[i] not in nav.gnss_t:
@@ -258,7 +265,7 @@ def udstate(nav, obs):
     return 0
 
 
-def zdres(nav, obs, rs, vs, dts, svh, rr, bsx):
+def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
     """ non-differential residual """
     _c = gn.rCST.CLIGHT
     nf = nav.nf
@@ -317,7 +324,8 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, bsx):
             freq[f] = nav.obs_freq[f][sys]
             lam[f] = gn.rCST.CLIGHT/freq[f]
 
-        # global/local signal bias
+        # Code and phase signal bias [ns]
+        #
         cbias = np.zeros(nav.nf)
         pbias = np.zeros(nav.nf)
 
@@ -327,34 +335,39 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, bsx):
             pbias[0], _ = bsx.getosb(sat, obs.t, "L1C")
             pbias[1], _ = bsx.getosb(sat, obs.t, "L2W")
         elif sys == uGNSS.GAL:
-            cbias[0], _ = bsx.getosb(sat, obs.t, "C1C")
-            cbias[1], _ = bsx.getosb(sat, obs.t, "C5Q")
-            pbias[0], _ = bsx.getosb(sat, obs.t, "L1C")
-            pbias[1], _ = bsx.getosb(sat, obs.t, "L5Q")
-
-        # print(sat2id(sat),cbias,pbias)
+            cbias[0], _ = bsx.getosb(sat, obs.t, "C1X")
+            cbias[1], _ = bsx.getosb(sat, obs.t, "C5X")
+            pbias[0], _ = bsx.getosb(sat, obs.t, "L1X")
+            pbias[1], _ = bsx.getosb(sat, obs.t, "L5X")
 
         # relativity effect
+        #
         relatv = shapiro(rs[i, :], rr_)
 
         # tropospheric delay mapping functions
+        #
         mapfh, mapfw = gn.tropmapf(obs.t, pos, el[i])
 
-        # tropospheric delay mapping functions
+        # tropospheric delay
+        #
         trop = mapfh*trop_hs + mapfw*trop_wet
 
         # phase wind-up effect
+        #
         nav.phw[sat-1] = windupcorr(obs.t, rs[i, :], vs[i, :], rr_,
                                     nav.phw[sat-1])
         phw = lam*nav.phw[sat-1]
+
+        # Receiver antenna offset
+        #
         antr = antmodel(nav, el[i], nav.nf)
 
         # range correction
         #
-        prc_c = trop+relatv+antr
+        prc_c = trop + relatv + antr
 
-        prc[i, :] = prc_c+cbias
-        cpc[i, :] = prc_c+pbias+phw
+        prc[i, :] = prc_c + cbias*_c*1e-9
+        cpc[i, :] = prc_c + pbias*_c*1e-9 + phw
 
         r += -_c*dts[i]
 
@@ -559,7 +572,7 @@ def pppigspos(nav, obs, orb, bsx):
 
     # Non-differential residuals
     #
-    yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xp[0:3], bsx)
+    yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, svh, xp[0:3])
 
     # Select satellites above minimum elevation
     #
@@ -627,7 +640,7 @@ def pppigspos(nav, obs, orb, bsx):
 
     # non-differential residuals after measurement update
     #
-    yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xp[0:3], bsx)
+    yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, svh, xp[0:3])
     y = yu[iu, :]
     e = eu[iu, :]
     ny = y.shape[0]
@@ -660,7 +673,7 @@ def pppigspos(nav, obs, orb, bsx):
     except:
         nb = 0
     if nb > 0:
-        yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xa[0:3], bsx)
+        yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, svh, xa[0:3])
         y = yu[iu, :]
         e = eu[iu, :]
         v, H, R = ddres(nav, obs.t, xa, y, e, sat, el)
