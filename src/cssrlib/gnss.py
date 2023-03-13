@@ -88,20 +88,116 @@ class uSIG(IntEnum):
     SIGMAX = 8
 
 
+class rTYP(IntEnum):
+    """ class to define signal types"""
+    NONE = 0
+    C = 1
+    L = 2
+    D = 3
+    S = 4
+
+
 class rSIG(IntEnum):
     """ class to define signals """
     NONE = 0
-    L1C = 1
-    L1X = 2
-    L1W = 3
-    L2L = 4
-    L2X = 5
-    L2W = 6
-    L5Q = 7
-    L5X = 8
-    L7Q = 9
-    L7X = 10
-    SIGMAX = 16
+
+    L1A = 101
+    L1B = 102
+    L1C = 103
+    L1D = 104
+    L1E = 105
+    L1L = 112
+    L1M = 113
+    L1N = 114
+    L1P = 116
+    L1S = 119
+    L1W = 123
+    L1X = 124
+    L1Y = 125
+    L1Z = 126
+
+    L2C = 203
+    L2D = 204
+    L2I = 209
+    L2L = 212
+    L2M = 213
+    L2N = 214
+    L2P = 216
+    L2Q = 217
+    L2S = 219
+    L2W = 223
+    L2X = 224
+    L2Y = 225
+
+    L3I = 309
+    L3Q = 317
+    L3X = 324
+
+    L4A = 401
+    L4B = 402
+    L4X = 424
+
+    L5A = 501
+    L5B = 502
+    L5C = 503
+    L5D = 504
+    L5I = 509
+    L5P = 516
+    L5Q = 517
+    L5X = 524
+    L5Z = 526
+
+    L6A = 601
+    L6B = 602
+    L6C = 603
+    L6E = 605
+    L6I = 609
+    L6L = 612
+    L6Q = 617
+    L6S = 619
+    L6X = 624
+    L6Z = 626
+
+    L7D = 704
+    L7I = 709
+    L7P = 716
+    L7Q = 717
+    L7X = 724
+    L7Z = 726
+
+    L8D = 804
+    L8I = 809
+    L8P = 816
+    L8Q = 817
+    L8X = 824
+
+    L9A = 901
+    L9B = 902
+    L9C = 903
+    L9X = 924
+
+
+class rCOD():
+
+    def __init__(self, gns=uGNSS.NONE, typ=rTYP.NONE, sig=rSIG.NONE):
+        self.gns = gns
+        self.typ = typ
+        self.sig = sig
+
+    def str2cod(self, gns, s):
+
+        self.gns = gns
+
+        if s[0] == 'C':
+            self.typ = rTYP.C
+        elif s[0] == 'L':
+            self.typ = rTYP.L
+        elif s[0] == 'D':
+            self.typ = rTYP.D
+        elif s[0] == 'S':
+            self.typ = rTYP.S
+        else:
+            self.typ = rTYP.NONE
 
 
 class gtime_t():
