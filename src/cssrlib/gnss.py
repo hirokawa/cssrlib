@@ -434,10 +434,12 @@ def str2time(s, i, n):
         ep[0] += 2000.0 if ep[0] < 80.0 else 1900.0
     return epoch2time(ep)
 
+
 def time2str(t):
     e = time2epoch(t)
     return "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}"\
-        .format(e[0],e[1],e[2],e[3],e[4],e[5])
+        .format(e[0], e[1], e[2], e[3], e[4], e[5])
+
 
 def prn2sat(sys, prn):
     """ convert sys+prn to sat """
@@ -761,13 +763,19 @@ def tropmapf(t, pos, el):
     return mapfh, mapfw
 
 
+def meteo(hgt, humi):
+    """ standard athmosphere model """
+    pres = 1013.25*np.power(1-2.2557e-5*hgt, 5.2568)
+    temp = 15.0-6.5e-3*hgt+273.16
+    e = 6.108*humi*np.exp((17.15*temp-4684.0)/(temp-38.45))
+    return pres, temp, e
+
+
 def tropmodel(t, pos, el=np.pi/2, humi=0.7):
     """ saastamoinen tropospheric delay model """
     hgt = pos[2]
     # standard atmosphere
-    pres = 1013.25*np.power(1-2.2557e-5*hgt, 5.2568)
-    temp = 15.0-6.5e-3*hgt+273.16
-    e = 6.108*humi*np.exp((17.15*temp-4684.0)/(temp-38.45))
+    pres, temp, e = meteo(hgt, humi)
     # saastamoinen
     z = np.pi/2.0-el
     trop_hs = 0.0022768*pres/(1.0-0.00266*np.cos(2*pos[0])-0.00028e-3*hgt)
