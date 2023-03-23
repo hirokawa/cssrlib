@@ -434,6 +434,10 @@ def str2time(s, i, n):
         ep[0] += 2000.0 if ep[0] < 80.0 else 1900.0
     return epoch2time(ep)
 
+def time2str(t):
+    e = time2epoch(t)
+    return "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}"\
+        .format(e[0],e[1],e[2],e[3],e[4],e[5])
 
 def prn2sat(sys, prn):
     """ convert sys+prn to sat """
