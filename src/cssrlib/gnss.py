@@ -513,15 +513,23 @@ def sat2id(sat):
     return '%s%02d' % (gnss_tbl[sys], prn)
 
 
+def char2gns(c):
+    """ convert character to GNSS """
+    gnss_tbl={'G':uGNSS.GPS,'S':uGNSS.SBS,'E':uGNSS.GAL,'C':uGNSS.BDS,
+              'I':uGNSS.IRN,'J':uGNSS.QZS,'R':uGNSS.GLO}
+
+    if c not in gnss_tbl:
+        return uGNSS.NONE
+    else:
+        return gnss_tbl[c]
+
+
 def id2sat(id_):
     """ convert id to satellite number """
-    # gnss_tbl={'G':uGNSS.GPS,'S':uGNSS.SBS,'E':uGNSS.GAL,'C':uGNSS.BDS,
-    #           'I':uGNSS.IRN,'J':uGNSS.QZS,'R':uGNSS.GLO}
-    gnss_tbl = {'G': uGNSS.GPS, 'E': uGNSS.GAL, 'C': uGNSS.BDS,
-                'J': uGNSS.QZS, 'R': uGNSS.GLO}
-    if id_[0] not in gnss_tbl:
+    sys = char2gns(id_[0])
+    if sys == uGNSS.NONE:
         return -1
-    sys = gnss_tbl[id_[0]]
+
     prn = int(id_[1:3])
     if sys == uGNSS.QZS:
         prn += 192
