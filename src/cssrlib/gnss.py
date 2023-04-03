@@ -62,45 +62,21 @@ class uGNSS(IntEnum):
     MAXSAT = GPSMAX+GLOMAX+GALMAX+BDSMAX+QZSMAX+SBSMAX+IRNMAX
 
 
-class uSIG(IntEnum):
-    """ class for GNSS signals """
-    GPS_L1CA = 0
-    GPS_L2W = 2
-    GPS_L2CL = 3
-    GPS_L2CM = 4
-    GPS_L5Q = 6
-    SBS_L1CA = 0
-    GAL_E1C = 0
-    GAL_E1B = 1
-    GAL_E5BI = 5
-    GAL_E5BQ = 6
-    BDS_B1ID1 = 0
-    BDS_B1ID2 = 1
-    BDS_B2ID1 = 2
-    BDS_B2ID2 = 3
-    QZS_L1CA = 0
-    QZS_L1S = 1
-    QZS_L2CM = 4
-    QZS_L2CL = 5
-    GLO_L1OF = 0
-    GLO_L2OF = 2
-    NONE = -1
-    SIGMAX = 8
-
-
-class rTYP(IntEnum):
+class uTYP(IntEnum):
     """ class to define signal types"""
     NONE = 0
+
     C = 1
     L = 2
     D = 3
     S = 4
 
 
-class rSIG(IntEnum):
-    """ class to define signals """
+class uSIG(IntEnum):
+    """ class to define signal band and attribute """
     NONE = 0
 
+    L1  = 100
     L1A = 101
     L1B = 102
     L1C = 103
@@ -116,6 +92,7 @@ class rSIG(IntEnum):
     L1Y = 125
     L1Z = 126
 
+    L2  = 200
     L2C = 203
     L2D = 204
     L2I = 209
@@ -129,14 +106,17 @@ class rSIG(IntEnum):
     L2X = 224
     L2Y = 225
 
+    L3  = 300
     L3I = 309
     L3Q = 317
     L3X = 324
 
+    L4  = 400
     L4A = 401
     L4B = 402
     L4X = 424
 
+    L5  = 500
     L5A = 501
     L5B = 502
     L5C = 503
@@ -147,6 +127,7 @@ class rSIG(IntEnum):
     L5X = 524
     L5Z = 526
 
+    L6  = 600
     L6A = 601
     L6B = 602
     L6C = 603
@@ -158,6 +139,7 @@ class rSIG(IntEnum):
     L6X = 624
     L6Z = 626
 
+    L7  = 700
     L7D = 704
     L7I = 709
     L7P = 716
@@ -165,39 +147,78 @@ class rSIG(IntEnum):
     L7X = 724
     L7Z = 726
 
+    L8  = 800
     L8D = 804
     L8I = 809
     L8P = 816
     L8Q = 817
     L8X = 824
 
+    L9  = 900
     L9A = 901
     L9B = 902
     L9C = 903
     L9X = 924
 
 
-class rCOD():
+class rSigRnx():
 
-    def __init__(self, gns=uGNSS.NONE, typ=rTYP.NONE, sig=rSIG.NONE):
+    def __init__(self, gns=uGNSS.NONE, typ=uTYP.NONE, sig=uSIG.NONE):
         self.gns = gns
         self.typ = typ
         self.sig = sig
 
-    def str2cod(self, gns, s):
+    def __eq__(self,other):
+        return self.gns == other.gns and \
+            self.typ == other.typ and \
+            self.sig == other.sig
+
+    def str2sig(self, gns, s):
 
         self.gns = gns
 
         if s[0] == 'C':
-            self.typ = rTYP.C
+            self.typ = uTYP.C
         elif s[0] == 'L':
-            self.typ = rTYP.L
+            self.typ = uTYP.L
         elif s[0] == 'D':
-            self.typ = rTYP.D
+            self.typ = uTYP.D
         elif s[0] == 'S':
-            self.typ = rTYP.S
+            self.typ = uTYP.S
         else:
-            self.typ = rTYP.NONE
+            self.typ = uTYP.NONE
+
+        self.sig += int(s[1])*100 + ord(s[2]) - ord('A') + 1
+
+        if self.sig not in [v.value for v in uSIG] or \
+            (self.gns == uGNSS.NONE or
+             self.typ == uTYP.NONE or
+             self.sig == uSIG.NONE):
+
+            self.gns = uGNSS.NONE
+            self.typ = uTYP.NONE
+            self.sig = uSIG.NONE
+
+
+    def str(self):
+
+        s = ''
+
+        if self.typ == uTYP.C:
+            s += 'C'
+        elif self.typ == uTYP.L:
+            s += 'L'
+        elif self.typ == uTYP.D:
+            s += 'D'
+        elif self.typ == uTYP.S:
+            s += 'S'
+        else:
+            return '???'
+
+        s += "{}{}".format(int(self.sig/100),
+                           chr(self.sig % 100+ord('A')-1))
+
+        return s
 
 
 class gtime_t():
