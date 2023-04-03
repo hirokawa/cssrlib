@@ -3,8 +3,25 @@ module for RINEX 3.0x processing
 """
 
 import numpy as np
-from cssrlib.gnss import uGNSS, rSIG, Eph, prn2sat, gpst2time, Obs, \
+from enum import IntEnum
+from cssrlib.gnss import uGNSS, Eph, prn2sat, gpst2time, Obs, \
     epoch2time, timediff, gtime_t
+
+# TODO: temporary local implementation until new SigRnx class is used
+class rSIG(IntEnum):
+    """ class to define signals """
+    NONE = 0
+    L1C = 1
+    L1X = 2
+    L1W = 3
+    L2L = 4
+    L2X = 5
+    L2W = 6
+    L5Q = 7
+    L5X = 8
+    L7Q = 9
+    L7X = 10
+    SIGMAX = 16
 
 
 class pclk_t:
