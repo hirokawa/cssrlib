@@ -6,7 +6,8 @@ Created on Sun Aug 22 21:01:49 2021
 """
 
 from cssrlib.gnss import Nav, epoch2time, time2epoch, timeadd, \
-    id2sat, timediff, gtime_t, uGNSS, str2time, sat2prn, rCST, rSIG
+    id2sat, char2gns,timediff, gtime_t, uGNSS, str2time, time2str,sat2prn, sat2id, \
+    rCST, rSigRnx, rSIG, uTYP
 from cssrlib.rinex import rnxdec
 import numpy as np
 from math import pow, sin, cos
@@ -356,11 +357,11 @@ class peph:
             dtst, _ = self.pephclk(time_tt, sat, nav)
             if dtst is None:
                 return None, None, False
-        
+
         # Get iono-free APC for satellite
         #
         dant = satantoff(time, rss, sat, nav)
-        
+
         # Satellite position and velocity (from differentiation)
         #
         rs = np.zeros(6)
@@ -373,7 +374,7 @@ class peph:
         # differentiation
         #
         if dtss[0] != 0.0:
-            dts[0] = dtss[0]-2.0*(rs[0:3]@rs[3:6])/(rCST.CLIGHT**2)
+            dts[0] = dtss[0] - 2.0*(rs[0:3]@rs[3:6])/(rCST.CLIGHT**2)
             dts[1] = (dtst[0]-dtss[0])/tt
         else:
             dts = dtss
@@ -808,15 +809,13 @@ def satantoff(time, rs, sat, nav):
 
 
 class bias_t():
-    def __init__(self, sat: int, tst: gtime_t, ted: gtime_t, type1, code1,
-                 type2=0, code2=0, bias=0.0, std=0.0, svn=0):
+    def __init__(self, sat: int, tst: gtime_t, ted: gtime_t, sig1: rSigRnx,
+                 sig2=rSigRnx(), bias=0.0, std=0.0, svn=0):
         self.sat = sat
         self.tst = tst
         self.ted = ted
-        self.type1 = type1
-        self.code1 = code1
-        self.type2 = type2
-        self.code2 = code2
+        self.sig1 = sig1
+        self.sig2 = sig2
         self.bias = bias
         self.std = std
         self.svn = svn
@@ -824,25 +823,8 @@ class bias_t():
 
 class biasdec():
     def __init__(self):
-        self.gnss_tbl = {'G': uGNSS.GPS, 'E': uGNSS.GAL, 'J': uGNSS.QZS}
-        self.sig_tbl = {'1C': rSIG.L1C, '1X': rSIG.L1X, '1W': rSIG.L1W,
-                        '2W': rSIG.L2W, '2L': rSIG.L2L, '2X': rSIG.L2X,
-                        '5Q': rSIG.L5Q, '5X': rSIG.L5X, '7Q': rSIG.L7Q,
-                        '7X': rSIG.L7X}
         self.dcb = []
         self.osb = []
-
-    def sig2code(self, sig):
-        sig_t = {'C': 0, 'L': 1}
-        if sig[0] in sig_t:
-            type_ = sig_t[sig[0]]
-        else:
-            type_ = -1
-        if sig[1:3] in self.sig_tbl:
-            code = self.sig_tbl[sig[1:3]]
-        else:
-            code = -1
-        return type_, code
 
     def doy2time(self, ep):
         """ calculate time from doy """
@@ -855,15 +837,12 @@ class biasdec():
         return gtime_t(days*86400+sec)
 
     def getdcb(self, sat, time, sig):
+        """ retrieve DCB based on satellite, epoch and signal code """
         bias, std, bcode = None, None, None
-
-        type, code = self.sig2code(sig)
-        if type == -1 or code == -1:
-            return bias, std, bcode
 
         for dcb in self.dcb:
             if dcb.sat == sat and \
-                    dcb.type2 == type and dcb.code2 == code and \
+                    dcb.sig2 == sig and \
                     timediff(time, dcb.tst) >= 0.0 and \
                     timediff(time, dcb.ted) < 0.0:
                 bias = dcb.bias
@@ -874,15 +853,13 @@ class biasdec():
         return bias, std, bcode
 
     def getosb(self, sat, time, sig):
+        """ retrieve OSB based on satellite, epoch and signal code """
         bias, std = None, None
 
-        type, code = self.sig2code(sig)
-        if type == -1 or code == -1:
-            return bias, std
-
         for osb in self.osb:
+
             if osb.sat == sat and \
-                    osb.type1 == type and osb.code1 == code and \
+                    osb.sig1 == sig and \
                     timediff(time, osb.tst) >= 0.0 and \
                     timediff(time, osb.ted) < 0.0:
                 bias = osb.bias
@@ -909,13 +886,18 @@ class biasdec():
                         continue
 
                     # Differential Signal Bias
+
+                    gns = char2gns(line[6])
                     svn = int(line[7:10])
                     prn = line[11:14]
                     sat = id2sat(prn)
-                    obs1 = line[25:29]
-                    obs2 = line[30:34]
-                    type1, code1 = self.sig2code(obs1)
-                    type2, code2 = self.sig2code(obs2)
+
+                    sig1 = rSigRnx()
+                    sig2 = rSigRnx()
+
+                    sig1.str2sig(gns,line[25:29])
+                    sig2.str2sig(gns,line[30:34])
+
                     # year:doy:sec
                     ep1 = [int(line[35:39]), int(
                         line[40:43]), int(line[44:49])]
@@ -924,26 +906,24 @@ class biasdec():
                     tst = self.doy2time(ep1)
                     ted = self.doy2time(ep2)
                     unit = line[65:69]
-                    if type1 != type2:
-                        print("format error: type1!=type2")
+
+                    if sig1.typ != sig2.typ:
+                        print("format error: different type of sig1 and sig2")
                         return -1
-                    if (type1 == 0 and unit[0:2] != 'ns') or (type1 == 1 and unit[0:3] != 'cyc'):
+                    if (sig1.typ == uTYP.C and unit[0:2] != 'ns') or \
+                       (sig1.typ == uTYP.L and unit[0:3] != 'cyc'):
                         print("format error: inconsistent dimension")
                         return -1
-
+                    if (sig1 == rSigRnx() or sig2 == rSigRnx()):
+                        print("ERROR: invalid signal code!")
+                        return -1
                     bias = float(line[70:91])
                     std = float(line[92:103])
                     if len(line) >= 137:
                         slope = float(line[104:125])
                         std_s = float(line[126:137])
 
-                    """
-                    print("{:3d} {:3d} {:s} {:s} {:7.3f}"
-                          .format(svn, sat, obs1, obs2, bias))
-                    """
-
-                    dcb = bias_t(sat, tst, ted, type1, code1,
-                                 type2, code2, bias, std, svn)
+                    dcb = bias_t(sat, tst, ted, sig1, sig2, bias, std, svn)
                     self.dcb.append(dcb)
 
                 elif status and line[0:5] == ' OSB ':
@@ -954,14 +934,16 @@ class biasdec():
                         continue
 
                     # Differential Signal Bias
+
+                    gns = char2gns(line[6])
                     svn = int(line[7:10])
                     prn = line[11:14]
                     sat = id2sat(prn)
 
-                    obs1 = line[25:29]
-                    obs2 = None
-                    type1, code1 = self.sig2code(obs1)
-                    type2, code2 = None, None
+                    sig1 = rSigRnx()
+                    sig1.str2sig(gns,line[25:29])
+                    sig2 = rSigRnx()
+
                     # year:doy:sec
                     ep1 = [int(line[35:39]), int(
                         line[40:43]), int(line[44:49])]
@@ -971,9 +953,9 @@ class biasdec():
                     ted = self.doy2time(ep2)
                     unit = line[65:69]
                     # if (type1 == 0 and unit[0:2] != 'ns') or (type1 == 1 and unit[0:3] != 'cyc'):
-                    if (type1 == 0 and unit[0:2] != 'ns'):
+                    if (sig1.typ == uTYP.L and unit[0:2] != 'ns'):
                         print("format error: inconsistent dimension {} in {}"
-                              .format(type1, unit))
+                              .format(sig1.str(), unit))
                         return -1
 
                     bias = float(line[70:91])
@@ -982,13 +964,7 @@ class biasdec():
                         slope = float(line[104:125])
                         std_s = float(line[126:137])
 
-                    """
-                    print("{:3d} {:3d} {:s}     {:7.3f}"
-                          .format(svn, sat, obs1, bias))
-                    """
-
-                    osb = bias_t(sat, tst, ted, type1, code1,
-                                 type2, code2, bias, std, svn)
+                    osb = bias_t(sat, tst, ted, sig1, sig2, bias, std, svn)
                     self.osb.append(osb)
 
 
