@@ -5,7 +5,10 @@ import numpy as np
 from os.path import expanduser
 from cssrlib.peph import biasdec, peph, satantoff, readpcv, searchpcv
 from cssrlib.rinex import rnxdec
-from cssrlib.gnss import Nav, epoch2time, time2epoch, timeadd, sat2id
+from cssrlib.gnss import Nav
+from cssrlib.gnss import epoch2time, time2epoch, timeadd, time2str
+from cssrlib.gnss import sat2id, id2sat
+from cssrlib.gnss import uGNSS, uTYP, uSIG, rSigRnx
 
 
 bdir = expanduser('~/GNSS_DAT/')
@@ -15,13 +18,13 @@ clkfile = bdir+"COD0IGSRAP/2021/COD0IGSRAP_20210780000_01D_30S_CLK.CLK"
 dcbfile = bdir+"COD0IGSRAP/2021/COD0IGSRAP_20210780000_01D_01D_OSB.BIA"
 
 time = epoch2time([2021, 3, 19, 12, 0, 0])
-sat = 1
+sat = id2sat("G01")
 
-rnx = rnxdec()
-nav = Nav()
-sp = peph()
+if False:
 
-if True:
+    rnx = rnxdec()
+    nav = Nav()
+    sp = peph()
 
     nav = sp.parse_sp3(orbfile, nav)
     nav = rnx.decode_clk(clkfile, nav)
@@ -40,7 +43,10 @@ if True:
               .format(ep[0], ep[1], ep[2], ep[3], ep[4], ep[5], sat2id(sat),
                       rs[0, 0], rs[0, 1], rs[0, 2], dts[0, 0]*1e6))
 
-if True:
+if False:
+
+    nav = Nav()
+    sp = peph()
 
     nav = sp.parse_sp3(orbfile, nav)
     nav.pcvs, nav.pcvr = readpcv(atxfile)
@@ -69,19 +75,25 @@ if True:
                   off[0], off[1], off[2]))
     """
 
-if False:
+if True:
 
     bd = biasdec()
     bd.parse(dcbfile)
 
-    sig = "C1W"
+    sat = id2sat("G03")
+    sig = rSigRnx(uGNSS.GPS, uTYP.C, uSIG.L1W)
+
     bias, std, = bd.getosb(sat, time, sig)
     assert bias == 7.6934
     assert std == 0.0
-    print("{:s} {:s} {:8.5f} {:6.4f}".format(sat2id(sat), sig, bias, std))
 
-    sig = "L1W"
+    print("{:s} {:s} {:8.5f} {:6.4f}"
+          .format(sat2id(sat), sig.str(), bias, std))
+
+    sig = rSigRnx(uGNSS.GPS, uTYP.L, uSIG.L1W)
     bias, std, = bd.getosb(sat, time, sig)
     assert bias == 0.00038
     assert std == 0.0
-    print("{:s} {:s} {:8.5f} {:6.4f}".format(sat2id(sat), sig, bias, std))
+
+    print("{:s} {:s} {:8.5f} {:6.4f}"
+          .format(sat2id(sat), sig.str(), bias, std))
