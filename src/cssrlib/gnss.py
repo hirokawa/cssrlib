@@ -459,7 +459,7 @@ def str2time(s, i, n):
 def time2str(t):
     e = time2epoch(t)
     return "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}"\
-        .format(e[0], e[1], e[2], e[3], e[4], e[5])
+        .format(e[0], e[1], e[2], e[3], e[4], int(e[5]))
 
 
 def prn2sat(sys, prn):
