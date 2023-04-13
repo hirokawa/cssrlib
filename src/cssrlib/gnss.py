@@ -76,7 +76,7 @@ class uSIG(IntEnum):
     """ class to define signal band and attribute """
     NONE = 0
 
-    L1  = 100
+    L1 = 100
     L1A = 101
     L1B = 102
     L1C = 103
@@ -92,7 +92,7 @@ class uSIG(IntEnum):
     L1Y = 125
     L1Z = 126
 
-    L2  = 200
+    L2 = 200
     L2C = 203
     L2D = 204
     L2I = 209
@@ -106,17 +106,17 @@ class uSIG(IntEnum):
     L2X = 224
     L2Y = 225
 
-    L3  = 300
+    L3 = 300
     L3I = 309
     L3Q = 317
     L3X = 324
 
-    L4  = 400
+    L4 = 400
     L4A = 401
     L4B = 402
     L4X = 424
 
-    L5  = 500
+    L5 = 500
     L5A = 501
     L5B = 502
     L5C = 503
@@ -127,7 +127,7 @@ class uSIG(IntEnum):
     L5X = 524
     L5Z = 526
 
-    L6  = 600
+    L6 = 600
     L6A = 601
     L6B = 602
     L6C = 603
@@ -139,7 +139,7 @@ class uSIG(IntEnum):
     L6X = 624
     L6Z = 626
 
-    L7  = 700
+    L7 = 700
     L7D = 704
     L7I = 709
     L7P = 716
@@ -147,14 +147,14 @@ class uSIG(IntEnum):
     L7X = 724
     L7Z = 726
 
-    L8  = 800
+    L8 = 800
     L8D = 804
     L8I = 809
     L8P = 816
     L8Q = 817
     L8X = 824
 
-    L9  = 900
+    L9 = 900
     L9A = 901
     L9B = 902
     L9C = 903
@@ -168,7 +168,7 @@ class rSigRnx():
         self.typ = typ
         self.sig = sig
 
-    def __eq__(self,other):
+    def __eq__(self, other):
         return self.gns == other.gns and \
             self.typ == other.typ and \
             self.sig == other.sig
@@ -198,7 +198,6 @@ class rSigRnx():
             self.gns = uGNSS.NONE
             self.typ = uTYP.NONE
             self.sig = uSIG.NONE
-
 
     def str(self):
 
@@ -515,8 +514,8 @@ def sat2id(sat):
 
 def char2gns(c):
     """ convert character to GNSS """
-    gnss_tbl={'G':uGNSS.GPS,'S':uGNSS.SBS,'E':uGNSS.GAL,'C':uGNSS.BDS,
-              'I':uGNSS.IRN,'J':uGNSS.QZS,'R':uGNSS.GLO}
+    gnss_tbl = {'G': uGNSS.GPS, 'S': uGNSS.SBS, 'E': uGNSS.GAL, 'C': uGNSS.BDS,
+                'I': uGNSS.IRN, 'J': uGNSS.QZS, 'R': uGNSS.GLO}
 
     if c not in gnss_tbl:
         return uGNSS.NONE
@@ -793,7 +792,7 @@ def tropmapf(t, pos, el):
 
 
 def meteo(hgt, humi):
-    """ standard athmosphere model """
+    """ standard atmosphere model """
     pres = 1013.25*np.power(1-2.2557e-5*hgt, 5.2568)
     temp = 15.0-6.5e-3*hgt+273.16
     e = 6.108*humi*np.exp((17.15*temp-4684.0)/(temp-38.45))
