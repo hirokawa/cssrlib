@@ -301,7 +301,7 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         if svh[i] > 0 or sys not in nav.gnss_t or sat in nav.excl_sat:
             continue
 
-        # check for measurement consistency
+        # Check for measurement consistency
         #
         flg_m = True
         for f in range(nav.nf):
@@ -452,13 +452,17 @@ def ddres(nav, t, x, y, e, sat, el, log=False):
             for j in idx:
 
                 # Skip reference satellite
+                #
                 if i == j:
                     continue
 
+                # Skip invalid signals
+                #
                 if y[i, f] == 0.0 or y[j, f] == 0.0:
                     continue
 
                 #  DD residual
+                #
                 if mode == 0:
                     if y[i+ns, f] == 0.0 or y[j+ns, f] == 0.0:
                         continue
@@ -467,15 +471,18 @@ def ddres(nav, t, x, y, e, sat, el, log=False):
                     v[nv] = y[i, f]-y[j, f]
 
                 # SD line-of-sight vectors
+                #
                 H[nv, 0:3] = -e[i, :]+e[j, :]
 
                 # SD troposphere
+                #
                 _, mapfwi = gn.tropmapf(t, pos, el[i])
                 _, mapfwj = gn.tropmapf(t, pos, el[j])
                 H[nv, nav.idx_ztd] = (mapfwi-mapfwj)
                 v[nv] -= (mapfwi-mapfwj)*x[nav.idx_ztd]
 
                 # SD ionosphere
+                #
                 idx_i = nav.satIdx[sat[i]] + nav.idx_ion
                 idx_j = nav.satIdx[sat[j]] + nav.idx_ion
                 H[nv, idx_i] = mu
@@ -490,7 +497,9 @@ def ddres(nav, t, x, y, e, sat, el, log=False):
                                   np.sqrt(nav.P[nav.idx_ztd, nav.idx_ztd])))
 
                 # SD ambiguity
+                #
                 if f < nf:  # carrier-phase
+
                     idx_i = IB(sat[i], f, nav.na)
                     idx_j = IB(sat[j], f, nav.na)
                     lami = _c/freq
@@ -501,7 +510,9 @@ def ddres(nav, t, x, y, e, sat, el, log=False):
                     Rj[nv] = varerr(nav, el[j], f)  # measurement variance
                     nav.vsat[sat[i]-1, f] = 1
                     nav.vsat[sat[j]-1, f] = 1
+
                 else:  # pseudorange
+
                     Ri[nv] = varerr(nav, el[i], f)  # measurement variance
                     Rj[nv] = varerr(nav, el[j], f)  # measurement variance
 
