@@ -27,6 +27,7 @@ class rCST():
     AS2R = D2R/3600.0
     DAY_SEC = 86400.0
     CENTURY_SEC = DAY_SEC*36525.0
+    ##### obsolete #################
     FREQ1 = 1.57542E9
     FREQ2 = 1.22760E9
     FREQ5 = 1.17645E9
@@ -35,6 +36,42 @@ class rCST():
     FREQ9 = 2.492028E9
     FREQ1_BDS = 1.561098E9
     FREQ2_BDS = 1.20714E9
+    ##### end obsolete #################
+    FREQ_G1 = 1575.42e6      # [Hz] GPS L1
+    FREQ_G2 = 1227.60e6      # [Hz] GPS L2
+    FREQ_G5 = 1176.45e6      # [Hz] GPS L5
+
+    FREQ_R1 = 1602.000e6     # [Hz] GLO G1   FDMA center frequency
+    FREQ_R1k = 562.500e3     # [Hz] GLO G1   FDMA frequency separation
+    FREQ_R2 = 1246.000e6     # [Hz] GLO G2   FDMA center frequency
+    FREQ_R2k = 437.500e3     # [Hz] GLO G2   FDMA frequency separation
+    FREQ_R1a = 1600.995e6     # [Hz] GLO G1a
+    FREQ_R2a = 1248.065e6     # [Hz] GLO G2a
+    FREQ_R3 = 1202.025e6     # [Hz] GLO G3
+
+    FREQ_E1 = 1575.42e6      # [Hz] GAL E1
+    FREQ_E5a = 1176.450e6     # [Hz] GAL E5a
+    FREQ_E5b = 1207.140e6     # [Hz] GAL E5b
+    FREQ_E5 = 1191.795e6     # [Hz] GAL E5
+    FREQ_E6 = 1278.750e6     # [Hz] GAL E6
+
+    FREQ_C1 = 1575.42e6      # [Hz] BDS B1
+    FREQ_C12 = 1561.098e6     # [Hz] BDS B1-2
+    FREQ_C2a = 1176.450e6     # [Hz] BDS B2a
+    FREQ_C2b = 1207.140e6     # [Hz] BDS B2b
+    FREQ_C2 = 1191.795e6     # [Hz] BDS B2
+    FREQ_C3 = 1268.520e6     # [Hz] BDS B3
+
+    FREQ_J1 = 1575.42e6      # [Hz] QZS L1
+    FREQ_J2 = 1227.60e6      # [Hz] QZS L2
+    FREQ_J5 = 1176.45e6      # [Hz] QZS L5
+    FREQ_J6 = 1278.75e6      # [Hz] QZS LEX
+
+    FREQ_S1 = 1575.42e6      # [Hz] SBS L1
+    FREQ_S5 = 1176.45e6      # [Hz] SBS L5
+
+    FREQ_I5 = 1191.795e6     # [Hz] IRS L5
+    FREQ_IS = 2492.028e6     # [Hz] IRS S
 
 
 class uGNSS(IntEnum):
@@ -188,7 +225,10 @@ class rSigRnx():
         else:
             self.typ = uTYP.NONE
 
-        self.sig += int(s[1])*100 + ord(s[2]) - ord('A') + 1
+        self.sig += int(s[1])*100
+
+        if s[2] != ' ':
+            self.sig += ord(s[2]) - ord('A') + 1
 
         if self.sig not in [v.value for v in uSIG] or \
             (self.gns == uGNSS.NONE or
@@ -214,10 +254,96 @@ class rSigRnx():
         else:
             return '???'
 
-        s += "{}{}".format(int(self.sig/100),
-                           chr(self.sig % 100+ord('A')-1))
+        s += '{}'.format(int(self.sig/100))
+
+        if self.sig % 100 == 0:
+            s += ' '
+        else:
+            s += '{}'.format(chr(self.sig % 100+ord('A')-1))
 
         return s
+
+    def frequency(self, k=None):
+        """ frequency in Hz """
+
+        if self.gns == uGNSS.GPS:
+            if int(self.sig / 100) == 1:
+                return rCST.FREQ_G1
+            elif int(self.sig / 100) == 2:
+                return rCST.FREQ_G2
+            elif int(self.sig / 100) == 5:
+                return rCST.FREQ_G5
+            else:
+                return None
+        elif self.gns == uGNSS.GLO:
+            if int(self.sig / 100) == 1 and k is not None:
+                return rCST.FREQ_R1 + k * rCST.FREQ_R1k
+            elif int(self.sig / 100) == 2 and k is not None:
+                return rCST.FREQ_R2 + k * rCST.FREQ_R2k
+            elif int(self.sig / 100) == 3:
+                return rCST.FREQ_R3
+            elif int(self.sig / 100) == 4:
+                return rCST.FREQ_R1a
+            elif int(self.sig / 100) == 5:
+                return rCST.FREQ_R2a
+            else:
+                return None
+        elif self.gns == uGNSS.GAL:
+            if int(self.sig / 100) == 1:
+                return rCST.FREQ_E1
+            elif int(self.sig / 100) == 5:
+                return rCST.FREQ_E5a
+            elif int(self.sig / 100) == 6:
+                return rCST.FREQ_E6
+            elif int(self.sig / 100) == 7:
+                return rCST.FREQ_E5b
+            elif int(self.sig / 100) == 8:
+                return rCST.FREQ_E5
+            else:
+                return None
+        elif self.gns == uGNSS.BDS:
+            if int(self.sig / 100) == 1:
+                return rCST.FREQ_C1
+            elif int(self.sig / 100) == 2:
+                return rCST.FREQ_C12
+            elif int(self.sig / 100) == 5:
+                return rCST.FREQ_C2a
+            elif int(self.sig / 100) == 6:
+                return rCST.FREQ_C3
+            elif int(self.sig / 100) == 7:
+                return rCST.FREQ_C2b
+            elif int(self.sig / 100) == 8:
+                return rCST.FREQ_C2
+            else:
+                return None
+        if self.gns == uGNSS.QZS:
+            if int(self.sig / 100) == 1:
+                return rCST.FREQ_J1
+            elif int(self.sig / 100) == 2:
+                return rCST.FREQ_J2
+            elif int(self.sig / 100) == 5:
+                return rCST.FREQ_J5
+            elif int(self.sig / 100) == 6:
+                return rCST.FREQ_J6
+            else:
+                return None
+        if self.gns == uGNSS.SBS:
+            if int(self.sig / 100) == 1:
+                return rCST.FREQ_S1
+            elif int(self.sig / 100) == 5:
+                return rCST.FREQ_S5
+        elif self.gns == uGNSS.IRN:
+            if int(self.sig / 100) == 5:
+                return rCST.FREQ_I5
+            elif int(self.sig / 100) == 9:
+                return rCST.FREQ_IS
+        else:
+            return None
+
+    def wavelength(self, k=None):
+        """ wavelength in [m] """
+        lam = self.frequency(k)
+        return rCST.CLIGHT/lam if lam is not None else None
 
 
 class gtime_t():
