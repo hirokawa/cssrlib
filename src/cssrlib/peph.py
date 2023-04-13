@@ -6,8 +6,8 @@ Created on Sun Aug 22 21:01:49 2021
 """
 
 from cssrlib.gnss import Nav, epoch2time, time2epoch, timeadd, \
-    id2sat, char2gns,timediff, gtime_t, uGNSS, str2time, time2str,sat2prn, sat2id, \
-    rCST, rSigRnx, rSIG, uTYP
+    id2sat, char2gns, timediff, gtime_t, uGNSS, str2time, time2str, sat2prn, sat2id, \
+    rCST, rSigRnx, uSIG, uTYP
 from cssrlib.rinex import rnxdec
 import numpy as np
 from math import pow, sin, cos
@@ -895,8 +895,8 @@ class biasdec():
                     sig1 = rSigRnx()
                     sig2 = rSigRnx()
 
-                    sig1.str2sig(gns,line[25:29])
-                    sig2.str2sig(gns,line[30:34])
+                    sig1.str2sig(gns, line[25:29])
+                    sig2.str2sig(gns, line[30:34])
 
                     # year:doy:sec
                     ep1 = [int(line[35:39]), int(
@@ -941,7 +941,7 @@ class biasdec():
                     sat = id2sat(prn)
 
                     sig1 = rSigRnx()
-                    sig1.str2sig(gns,line[25:29])
+                    sig1.str2sig(gns, line[25:29])
                     sig2 = rSigRnx()
 
                     # year:doy:sec
@@ -1010,14 +1010,26 @@ if __name__ == '__main__':
         assert np.all(abs((rmoon-rm)/rmoon) < 0.03)
 
     if True:
-        time = epoch2time([2022, 12, 31, 0, 0, 0])
-        sat = 3
 
         bd = biasdec()
         bd.parse(dcbfile)
-        bias, std, bcode = bd.getdcb(sat, time, rSIG.L1W)
-        assert bias == -1.2715
-        assert std == 0.0058
-        assert bcode == rSIG.L1C
 
-    #satantoff(time, rs, sat, nav)
+        time = epoch2time([2022, 12, 31, 0, 0, 0])
+        sat = id2sat("G03")
+        sig = rSigRnx(uGNSS.GPS, uTYP.C, uSIG.L1W)
+
+        bias, std, = bd.getosb(sat, time, sig)
+        assert bias == 7.6934
+        assert std == 0.0
+
+        print("{:s} {:s} {:8.5f} {:6.4f}"
+              .format(sat2id(sat), sig.str(), bias, std))
+
+        sig = rSigRnx(uGNSS.GPS, uTYP.L, uSIG.L1W)
+
+        bias, std, = bd.getosb(sat, time, sig)
+        assert bias == 0.00038
+        assert std == 0.0
+
+        print("{:s} {:s} {:8.5f} {:6.4f}"
+              .format(sat2id(sat), sig.str(), bias, std))
