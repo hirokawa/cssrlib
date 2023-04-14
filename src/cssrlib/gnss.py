@@ -225,7 +225,7 @@ class rSigRnx():
         else:
             self.typ = uTYP.NONE
 
-        self.sig += int(s[1])*100
+        self.sig = int(s[1])*100
 
         if s[2] != ' ':
             self.sig += ord(s[2]) - ord('A') + 1
