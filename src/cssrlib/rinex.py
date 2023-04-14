@@ -241,11 +241,14 @@ class rnxdec:
     def decode_obs(self):
         """decode RINEX Observation message from file """
         obs = Obs()
-
+        
         for line in self.fobs:
+
             if line[0] != '>':
                 continue
+
             nsat = int(line[32:35])
+
             year = int(line[2:6])
             month = int(line[7:9])
             day = int(line[10:12])
@@ -253,13 +256,13 @@ class rnxdec:
             minute = int(line[16:18])
             sec = float(line[19:29])
             obs.t = epoch2time([year, month, day, hour, minute, sec])
-            obs.data = np.zeros((nsat, self.nf*4))
+
             obs.P = np.zeros((nsat, self.nf))
             obs.L = np.zeros((nsat, self.nf))
             obs.S = np.zeros((nsat, self.nf))
             obs.lli = np.zeros((nsat, self.nf), dtype=int)
-            obs.mag = np.zeros((nsat, self.nf))
             obs.sat = np.zeros(nsat, dtype=int)
+
             for k in range(nsat):
                 line = self.fobs.readline()
                 if line[0] not in self.gnss_tbl:
@@ -285,10 +288,9 @@ class rnxdec:
                             obs.lli[k, ifreq] = 1
                     elif self.typeid[sys][i] == 2:  # C/No
                         obs.S[k, ifreq] = float(obs_)
-                    obs.data[k, ifreq*self.nf+self.typeid[sys][i]] = \
-                        float(obs_)
 
             break
+
         return obs
 
 

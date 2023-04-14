@@ -358,13 +358,11 @@ class Obs():
     """ class to define the observation """
 
     def __init__(self):
-        self.nm = 0
         self.t = gtime_t()
         self.P = []
         self.L = []
         self.S = []
         self.lli = []
-        self.data = []
         self.sat = []
 
 
