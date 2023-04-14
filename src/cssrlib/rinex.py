@@ -3,25 +3,10 @@ module for RINEX 3.0x processing
 """
 
 import numpy as np
-from enum import IntEnum
-from cssrlib.gnss import uGNSS, Eph, prn2sat, gpst2time, Obs, \
-    epoch2time, timediff, gtime_t
-
-# TODO: temporary local implementation until new SigRnx class is used
-class rSIG(IntEnum):
-    """ class to define signals """
-    NONE = 0
-    L1C = 1
-    L1X = 2
-    L1W = 3
-    L2L = 4
-    L2X = 5
-    L2W = 6
-    L5Q = 7
-    L5X = 8
-    L7Q = 9
-    L7X = 10
-    SIGMAX = 16
+from cssrlib.gnss import uGNSS, uTYP, rSigRnx
+from cssrlib.gnss import gpst2time, epoch2time, timediff, gtime_t
+from cssrlib.gnss import prn2sat, char2gns
+from cssrlib.gnss import Eph, Obs
 
 
 class pclk_t:
@@ -39,28 +24,27 @@ class rnxdec:
     MAXSAT = uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX
 
     def __init__(self):
+
         self.ver = -1.0
         self.fobs = None
-        self.freq_tbl = {rSIG.L1C: 0, rSIG.L1X: 0, rSIG.L2W: 1, rSIG.L2L: 1,
-                         rSIG.L2X: 1, rSIG.L5Q: 2, rSIG.L5X: 2, rSIG.L7Q: 1,
-                         rSIG.L7X: 1}
-        self.gnss_tbl = {'G': uGNSS.GPS, 'E': uGNSS.GAL, 'J': uGNSS.QZS}
-        self.sig_tbl = {'1C': rSIG.L1C, '1X': rSIG.L1X, '1W': rSIG.L1W,
-                        '2W': rSIG.L2W, '2L': rSIG.L2L, '2X': rSIG.L2X,
-                        '5Q': rSIG.L5Q, '5X': rSIG.L5X, '7Q': rSIG.L7Q,
-                        '7X': rSIG.L7X}
-        self.skip_sig_tbl = {uGNSS.GPS: [rSIG.L1X, rSIG.L1W, rSIG.L2L,
-                                         rSIG.L2X], uGNSS.GAL: [],
-                             uGNSS.QZS: [rSIG.L1X]}
-        self.nf = 4
-        self.sigid = np.ones((uGNSS.GNSSMAX, rSIG.SIGMAX*3),
-                             dtype=int)*rSIG.NONE
-        self.typeid = np.ones((uGNSS.GNSSMAX, rSIG.SIGMAX*3),
-                              dtype=int)*rSIG.NONE
-        self.nsig = np.zeros((uGNSS.GNSSMAX), dtype=int)
+        self.nf = 3  # TODO: create dynamically!!
+
+        self.sig_map = {}  # signal code mapping to columns in data section
+        self.sig_tab = {}  # signal selection for internal data structure
+
         self.pos = np.array([0, 0, 0])
         self.rcv = None
         self.ant = None
+
+    def setSignals(self, sigList):
+        """ define the signal list for each constellation """
+        for sig in sigList:
+            if sig.gns not in self.sig_tab:
+                self.sig_tab.update({sig.gns: {}})
+            if sig.typ not in self.sig_tab[sig.gns]:
+                self.sig_tab[sig.gns].update({sig.typ: []})
+            if sig not in self.sig_tab[sig.gns][sig.typ]:
+                self.sig_tab[sig.gns][sig.typ].append(sig)
 
     def flt(self, u, c=-1):
         if c >= 0:
@@ -97,9 +81,13 @@ class rnxdec:
                             nav.ion[1, k] = self.flt(line[5+k*12:5+(k+1)*12])
 
             for line in fnav:
-                if line[0] not in self.gnss_tbl:
+
+                sys = char2gns(line[0])
+                # Skip undesired constellations
+                #
+                if sys not in self.sig_tab:
                     continue
-                sys = self.gnss_tbl[line[0]]
+
                 prn = int(line[1:3])
                 if sys == uGNSS.QZS:
                     prn += 192
@@ -192,6 +180,7 @@ class rnxdec:
 
         return nav
 
+    # TODO: decode GLONASS FCN lines
     def decode_obsh(self, obsfile):
         self.fobs = open(obsfile, 'rt')
         for line in self.fobs:
@@ -210,38 +199,31 @@ class rnxdec:
                                      float(line[14:28]),
                                      float(line[28:42])])
             elif line[60:79] == 'SYS / # / OBS TYPES':
-                if line[0] in self.gnss_tbl:
-                    sys = self.gnss_tbl[line[0]]
-                else:
-                    continue
-                self.nsig[sys] = int(line[3:6])
-                s = line[7:7+4*13]
-                if self.nsig[sys] >= 14:
-                    line2 = self.fobs.readline()
-                    s += line2[7:7+4*13]
 
-                for k in range(self.nsig[sys]):
-                    sig = s[4*k:3+4*k]
-                    if sig[0] == 'C':
-                        self.typeid[sys][k] = 0
-                    elif sig[0] == 'L':
-                        self.typeid[sys][k] = 1
-                    elif sig[0] == 'S':
-                        self.typeid[sys][k] = 2
-                    elif sig[0] == 'D':
-                        self.typeid[sys][k] = 3
-                    else:
-                        continue
-                    if sig[1:3] in self.sig_tbl:
-                        if self.sig_tbl[sig[1:3]] in self.skip_sig_tbl[sys]:
-                            continue
-                        self.sigid[sys][k] = self.sig_tbl[sig[1:3]]
+                gns = char2gns(line[0])
+                nsig = int(line[3:6])
+
+                # Extract string list of signal codes
+                #
+                sigs = line[7:60].split()
+                if nsig >= 14:
+                    line2 = self.fobs.readline()
+                    sigs += line2[7:60].split()
+
+                # Convert to RINEX signal code and store in map
+                #
+                for i, sig in enumerate(sigs):
+                    rnxSig = rSigRnx()
+                    rnxSig.str2sig(gns, sig)
+                    if gns not in self.sig_map:
+                        self.sig_map.update({gns: {}})
+                    self.sig_map[gns].update({i: rnxSig})
+
         return 0
 
     def decode_obs(self):
         """decode RINEX Observation message from file """
         obs = Obs()
-        
         for line in self.fobs:
 
             if line[0] != '>':
@@ -257,6 +239,7 @@ class rnxdec:
             sec = float(line[19:29])
             obs.t = epoch2time([year, month, day, hour, minute, sec])
 
+            # TODO: build data strucute dynamically
             obs.P = np.zeros((nsat, self.nf))
             obs.L = np.zeros((nsat, self.nf))
             obs.S = np.zeros((nsat, self.nf))
@@ -264,30 +247,47 @@ class rnxdec:
             obs.sat = np.zeros(nsat, dtype=int)
 
             for k in range(nsat):
+
                 line = self.fobs.readline()
-                if line[0] not in self.gnss_tbl:
+                sys = char2gns(line[0])
+
+                # Skip constellation not contained in RINEX header
+                #
+                if sys not in self.sig_map.keys():
                     continue
-                sys = self.gnss_tbl[line[0]]
+
+                # Skip undesired constellations
+                #
+                if sys not in self.sig_tab:
+                    continue
+
+                # Store prn to satellite list
+                #
                 prn = int(line[1:3])
                 if sys == uGNSS.QZS:
                     prn += 192
                 obs.sat[k] = prn2sat(sys, prn)
-                nsig_max = (len(line)-4+2)//16
-                for i in range(self.nsig[sys]):
-                    if i >= nsig_max:
-                        break
-                    obs_ = line[16*i+4:16*i+17].strip()
-                    if obs_ == '' or self.sigid[sys][i] == 0:
+
+                for i, sig in self.sig_map[sys].items():
+
+                    # Skip undesired signals
+                    #
+                    if sig.typ not in self.sig_tab[sys] or \
+                            sig not in self.sig_tab[sys][sig.typ]:
                         continue
-                    ifreq = self.freq_tbl[self.sigid[sys][i]]
-                    if self.typeid[sys][i] == 0:  # code
-                        obs.P[k, ifreq] = float(obs_)
-                    elif self.typeid[sys][i] == 1:  # carrier
-                        obs.L[k, ifreq] = float(obs_)
+
+                    j = self.sig_tab[sys][sig.typ].index(sig)
+                    obs_ = line[16*i+4:16*i+17].strip()
+                    if sig.typ == uTYP.C:
+                        obs.P[k, j] = float(obs_)
+                    elif sig.typ == uTYP.L:
+                        obs.L[k, j] = float(obs_)
                         if line[16*i+17] == '1':
-                            obs.lli[k, ifreq] = 1
-                    elif self.typeid[sys][i] == 2:  # C/No
-                        obs.S[k, ifreq] = float(obs_)
+                            obs.lli[k, j] = 1
+                    elif sig.typ == uTYP.S:
+                        obs.S[k, j] = float(obs_)
+                    else:
+                        continue
 
             break
 
