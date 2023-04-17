@@ -7,6 +7,7 @@ from cssrlib.gnss import uGNSS, uTYP, rSigRnx
 from cssrlib.gnss import gpst2time, epoch2time, timediff, gtime_t
 from cssrlib.gnss import prn2sat, char2gns
 from cssrlib.gnss import Eph, Obs
+from _curses import nl
 
 
 class pclk_t:
@@ -31,6 +32,7 @@ class rnxdec:
 
         self.sig_map = {}  # signal code mapping to columns in data section
         self.sig_tab = {}  # signal selection for internal data structure
+        self.nsig = {uTYP.C: 0, uTYP.L: 0, uTYP.D: 0, uTYP.S: 0}
 
         self.pos = np.array([0, 0, 0])
         self.rcv = None
@@ -38,6 +40,7 @@ class rnxdec:
 
     def setSignals(self, sigList):
         """ define the signal list for each constellation """
+
         for sig in sigList:
             if sig.gns not in self.sig_tab:
                 self.sig_tab.update({sig.gns: {}})
@@ -45,6 +48,17 @@ class rnxdec:
                 self.sig_tab[sig.gns].update({sig.typ: []})
             if sig not in self.sig_tab[sig.gns][sig.typ]:
                 self.sig_tab[sig.gns][sig.typ].append(sig)
+
+        for _, sigs in self.sig_tab.items():
+            for typ, sig in sigs.items():
+                self.nsig[typ] = max((self.nsig[typ], len(sig)))
+
+    def getSignals(self, gns, typ):
+        """ retrieve signal list for constellation and obs type """
+        if gns in self.sig_tab.keys() and typ in self.sig_tab[gns].keys():
+            return self.sig_tab[gns][typ]
+        else:
+            return []
 
     def flt(self, u, c=-1):
         if c >= 0:
@@ -239,14 +253,13 @@ class rnxdec:
             sec = float(line[19:29])
             obs.t = epoch2time([year, month, day, hour, minute, sec])
 
-            # TODO: build data strucute dynamically
-            obs.P = np.zeros((nsat, self.nf))
-            obs.L = np.zeros((nsat, self.nf))
-            obs.S = np.zeros((nsat, self.nf))
-            obs.lli = np.zeros((nsat, self.nf), dtype=int)
-            obs.sat = np.zeros(nsat, dtype=int)
+            obs.P = np.empty((0, self.nsig[uTYP.C]), dtype=np.float64)
+            obs.L = np.empty((0, self.nsig[uTYP.L]), dtype=np.float64)
+            obs.S = np.empty((0, self.nsig[uTYP.S]), dtype=np.float64)
+            obs.lli = np.empty((0, self.nsig[uTYP.L]), dtype=np.int)
+            obs.sat = np.empty(0, dtype=np.int)
 
-            for k in range(nsat):
+            for _ in range(nsat):
 
                 line = self.fobs.readline()
                 sys = char2gns(line[0])
@@ -261,12 +274,21 @@ class rnxdec:
                 if sys not in self.sig_tab:
                     continue
 
-                # Store prn to satellite list
+                # Convert to satellite ID
                 #
                 prn = int(line[1:3])
                 if sys == uGNSS.QZS:
                     prn += 192
-                obs.sat[k] = prn2sat(sys, prn)
+                sat = prn2sat(sys, prn)
+
+                pr = np.zeros(len(self.getSignals(sys, uTYP.C)),
+                              dtype=np.float64)
+                cp = np.zeros(len(self.getSignals(sys, uTYP.L)),
+                              dtype=np.float64)
+                ll = np.zeros(len(self.getSignals(sys, uTYP.L)),
+                              dtype=np.int)
+                cn = np.zeros(len(self.getSignals(sys, uTYP.S)),
+                              dtype=np.float64)
 
                 for i, sig in self.sig_map[sys].items():
 
@@ -278,16 +300,30 @@ class rnxdec:
 
                     j = self.sig_tab[sys][sig.typ].index(sig)
                     obs_ = line[16*i+4:16*i+17].strip()
+
                     if sig.typ == uTYP.C:
-                        obs.P[k, j] = float(obs_)
+                        pr[j] = float(obs_)
                     elif sig.typ == uTYP.L:
-                        obs.L[k, j] = float(obs_)
+                        cp[j] = float(obs_)
                         if line[16*i+17] == '1':
-                            obs.lli[k, j] = 1
+                            ll[j] = 1
                     elif sig.typ == uTYP.S:
-                        obs.S[k, j] = float(obs_)
+                        cn[j] = float(obs_)
                     else:
                         continue
+
+                # Store prn and data
+                #
+                obs.P = np.append(obs.P, pr)
+                obs.L = np.append(obs.L, cp)
+                obs.S = np.append(obs.S, cn)
+                obs.lli = np.append(obs.lli, ll)
+                obs.sat = np.append(obs.sat, sat)
+
+            obs.P = obs.P.reshape(len(obs.sat), self.nsig[uTYP.C])
+            obs.L = obs.L.reshape(len(obs.sat), self.nsig[uTYP.L])
+            obs.S = obs.S.reshape(len(obs.sat), self.nsig[uTYP.S])
+            obs.lli = obs.lli.reshape(len(obs.sat), self.nsig[uTYP.L])
 
             break
 
