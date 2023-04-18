@@ -7,7 +7,6 @@ from cssrlib.gnss import uGNSS, uTYP, rSigRnx
 from cssrlib.gnss import gpst2time, epoch2time, timediff, gtime_t
 from cssrlib.gnss import prn2sat, char2gns
 from cssrlib.gnss import Eph, Obs
-from _curses import nl
 
 
 class pclk_t:
@@ -97,9 +96,10 @@ class rnxdec:
             for line in fnav:
 
                 sys = char2gns(line[0])
+
                 # Skip undesired constellations
                 #
-                if sys not in self.sig_tab:
+                if sys not in (uGNSS.GPS, uGNSS.GAL, uGNSS.QZS):
                     continue
 
                 prn = int(line[1:3])
