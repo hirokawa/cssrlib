@@ -301,6 +301,12 @@ class rnxdec:
                     j = self.sig_tab[sys][sig.typ].index(sig)
                     obs_ = line[16*i+4:16*i+17].strip()
 
+                    # Replace empty string with zero
+                    # TBD: consider using None-type instead?
+                    #
+                    if not obs_:
+                        obs_ = '0.0'
+
                     if sig.typ == uTYP.C:
                         pr[j] = float(obs_)
                     elif sig.typ == uTYP.L:
