@@ -597,6 +597,10 @@ def prn2sat(sys, prn):
         sat = prn+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX
     elif sys == uGNSS.QZS:
         sat = prn-192+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX
+    elif sys == uGNSS.SBS:
+        sat = prn-100+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX
+    elif sys == uGNSS.IRN:
+        sat = prn+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX
     else:
         sat = 0
     return sat
@@ -604,7 +608,13 @@ def prn2sat(sys, prn):
 
 def sat2prn(sat):
     """ convert sat to sys+prn """
-    if sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX:
+    if sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX:
+        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX)
+        sys = uGNSS.IRN
+    elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX:
+        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX)+100
+        sys = uGNSS.SBS
+    elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX:
         prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX)+192
         sys = uGNSS.QZS
     elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX:
@@ -625,8 +635,8 @@ def sat2prn(sat):
 def sat2id(sat):
     """ convert satellite number to id """
     sys, prn = sat2prn(sat)
-    gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
-                uGNSS.QZS: 'J', uGNSS.GLO: 'R'}
+    gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GLO: 'R', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
+                uGNSS.QZS: 'J', uGNSS.SBS: 'S', uGNSS.IRN: 'I' }
     if sys not in gnss_tbl:
         return -1
     if sys == uGNSS.QZS:
@@ -638,8 +648,8 @@ def sat2id(sat):
 
 def char2gns(c):
     """ convert character to GNSS """
-    gnss_tbl = {'G': uGNSS.GPS, 'S': uGNSS.SBS, 'E': uGNSS.GAL, 'C': uGNSS.BDS,
-                'I': uGNSS.IRN, 'J': uGNSS.QZS, 'R': uGNSS.GLO}
+    gnss_tbl = {'G': uGNSS.GPS, 'R': uGNSS.GLO, 'E': uGNSS.GAL, 'C': uGNSS.BDS,
+                'J': uGNSS.QZS, 'S': uGNSS.SBS, 'I': uGNSS.IRN}
 
     if c not in gnss_tbl:
         return uGNSS.NONE
