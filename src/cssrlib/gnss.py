@@ -210,6 +210,9 @@ class rSigRnx():
             self.typ == other.typ and \
             self.sig == other.sig
 
+    def __hash__(self):
+        return hash((self.gns, self.typ, self.sig))
+
     def str2sig(self, gns, s):
 
         self.gns = gns
@@ -227,7 +230,7 @@ class rSigRnx():
 
         self.sig = int(s[1])*100
 
-        if s[2] != ' ':
+        if len(s) == 3 and s[2] != ' ':
             self.sig += ord(s[2]) - ord('A') + 1
 
         if self.sig not in [v.value for v in uSIG] or \
