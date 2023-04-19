@@ -5,12 +5,15 @@ Created on Sun Aug 22 21:01:49 2021
 @author: ruihi
 """
 
-from cssrlib.gnss import Nav, epoch2time, time2epoch, timeadd, \
-    id2sat, char2gns, timediff, gtime_t, uGNSS, str2time, time2str, sat2prn, sat2id, \
-    rCST, rSigRnx, uSIG, uTYP
+from cssrlib.gnss import Nav, id2sat, char2sys, sat2id
+from cssrlib.gnss import epoch2time, time2epoch, timeadd, timediff, gtime_t
+from cssrlib.gnss import str2time
+from cssrlib.gnss import rCST, rSigRnx, uSIG, uTYP, uGNSS
+
 from cssrlib.rinex import rnxdec
 import numpy as np
 from math import pow, sin, cos
+
 
 NMAX = 10
 MAXDTE = 900.0
@@ -324,10 +327,7 @@ class peph:
         return dts, varc
 
     def peph2pos(self, time, sat, nav, var=False):
-        """
-        Satellite position, velocity and clock offset
-        NOTE: satellite position is wrt IF-free APC!
-        """
+        """ Satellite position, velocity and clock offset """
 
         tt = 1e-3
 
@@ -358,16 +358,12 @@ class peph:
             if dtst is None:
                 return None, None, False
 
-        # Get iono-free APC for satellite
-        #
-        dant = satantoff(time, rss, sat, nav)
-
         # Satellite position and velocity (from differentiation)
         #
         rs = np.zeros(6)
         dts = np.zeros(2)
 
-        rs[0:3] = rss + dant
+        rs[0:3] = rss
         rs[3:6] = (rst-rss)/tt
 
         # Apply relativistic correction to clock offset, compute clock rate from
@@ -385,9 +381,6 @@ class peph:
         return rs, dts, var
 
 
-NFREQ = 3
-
-
 class pcv_t():
     def __init__(self):
         self.sat = 0
@@ -395,93 +388,131 @@ class pcv_t():
         self.type = ''
         self.ts = gtime_t()
         self.te = gtime_t()
-        self.off = np.zeros((NFREQ, 3))
-        self.var = np.zeros((NFREQ, 19))
+        self.off = {}
+        self.var = {}
         self.zen = [0, 0, 0]
         self.nv = 0
         self.dazi = 0.0
 
 
-def readpcv(fname):
-    pcvs = []
-    pcvr = []
+class atxdec():
+    """ decoder for ANTEX files """
 
-    state = False
-    freq = 0
-    freqs = [1, 2, 5, 6, 7, 8, 0]
+    def __init__(self):
+        self.pcvs = []
+        self.pcvr = []
 
-    with open(fname, "r") as fh:
-        for line in fh:
-            if len(line) < 60 or "COMMENT" in line[60:]:
-                continue
-            if "START OF ANTENNA" in line[60:]:
-                pcv = pcv_t()
-                state = True
-            elif "END OF ANTENNA" in line[60:]:
-                if pcv.sat is None:
-                    pcvr.append(pcv)
-                else:
-                    pcvs.append(pcv)
-                state = False
-            if not state:
-                continue
-            if "TYPE / SERIAL NO" in line[60:]:
-                pcv.type = line[0:20]
-                pcv.code = line[20:40]
-                if not pcv.code.strip():
-                    pcv.sat = None
-                else:
-                    pcv.sat = id2sat(pcv.code.strip())
-            elif "VALID FROM" in line[60:]:
-                pcv.ts = str2time(line, 2, 40)
-            elif "VALID UNTIL" in line[60:]:
-                pcv.te = str2time(line, 2, 40)
-            elif "START OF FREQUENCY" in line[60:]:
-                f = int(line[4:6])
-                for i in range(NFREQ):
-                    if freqs[i] == f:
-                        break
-                if i < NFREQ:
-                    freq = i+1
-            elif "END OF FREQUENCY" in line[60:]:
-                freq = 0
-            elif "NORTH / EAST / UP" in line[60:]:
-                if freq < 1 or NFREQ < freq:
+    def readpcv(self, fname):
+        """ read ANTEX file """
+
+        state = False
+        sys = uGNSS.NONE
+        sig = rSigRnx()
+
+        with open(fname, "r") as fh:
+            for line in fh:
+                if len(line) < 60 or "COMMENT" in line[60:]:
                     continue
-                neu = [float(x)*1e-3 for x in line[3:30].split()]
-                pcv.off[freq-1, 0] = neu[0] if pcv.sat is not None else neu[1]
-                pcv.off[freq-1, 1] = neu[1] if pcv.sat is not None else neu[0]
-                pcv.off[freq-1, 2] = neu[2]
-            elif "ZEN1 / ZEN2 / DZEN" in line[60:]:
-                pcv.zen = [float(x) for x in line[3:20].split()]
-                pcv.nv = int((pcv.zen[1]-pcv.zen[0]+1)/pcv.zen[2])
-            elif "DAZI" in line[60:]:
-                pcv.dazi = float(line[3:8])
-            elif "NOAZI" in line[3:8]:
-                if freq < 1 or NFREQ < freq:
+                if "START OF ANTENNA" in line[60:]:
+                    pcv = pcv_t()
+                    state = True
+                elif "END OF ANTENNA" in line[60:]:
+                    if pcv.sat is None:
+                        self.pcvr.append(pcv)
+                    else:
+                        self.pcvs.append(pcv)
+                    state = False
+                if not state:
                     continue
-                var = [float(x) for x in line[8:].split()]
-                n = min(len(var), 19)
-                if n < 19:
-                    pcv.var[freq-1, n:] = var[n-1]
-                pcv.var[freq-1, :n] = var[0:n]
+                if "TYPE / SERIAL NO" in line[60:]:
+                    pcv.type = line[0:20]
+                    pcv.code = line[20:40]
+                    if not pcv.code.strip():
+                        pcv.sat = None
+                    else:
+                        pcv.sat = id2sat(pcv.code.strip())
+                elif "VALID FROM" in line[60:]:
+                    pcv.ts = str2time(line, 2, 40)
+                elif "VALID UNTIL" in line[60:]:
+                    pcv.te = str2time(line, 2, 40)
+                elif "START OF FREQUENCY" in line[60:]:
+                    sys = char2sys(line[3])
+                    sig = rSigRnx()
+                    sig.str2sig(sys, 'L'+line[5])
+                elif "END OF FREQUENCY" in line[60:]:
+                    sys = uGNSS.NONE
+                    sig = rSigRnx()
+                elif "NORTH / EAST / UP" in line[60:]:
+                    neu = [float(x)*1e-3 for x in line[3:30].split()]
+                    pcv.off.update({sig: np.zeros(3)})
+                    pcv.off[sig][0] = neu[0] if pcv.sat is not None else neu[1]
+                    pcv.off[sig][1] = neu[1] if pcv.sat is not None else neu[0]
+                    pcv.off[sig][2] = neu[2]
+                elif "ZEN1 / ZEN2 / DZEN" in line[60:]:
+                    pcv.zen = [float(x) for x in line[3:20].split()]
+                    pcv.nv = int((pcv.zen[1]-pcv.zen[0]+1)/pcv.zen[2])
+                elif "DAZI" in line[60:]:
+                    pcv.dazi = float(line[3:8])
+                elif "NOAZI" in line[3:8]:
+                    var = [float(x) for x in line[8:].split()]
+                    pcv.var.update({sig: np.array(var)})
 
-    return pcvs, pcvr
+    def searchpcvs(self, sat, time):
+        """ get satellite antenna pcv """
+        n = len(self.pcvs)
+        for i in range(n):
+            pcv = self.pcvs[i]
+            if pcv.sat != sat:
+                continue
+            if pcv.ts.time != 0 and timediff(pcv.ts, time) > 0.0:
+                continue
+            if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
+                continue
+            return pcv
+        return None
 
+    def searchpcvr(self, name, time):
+        """ get receiver antenna pcv """
+        n = len(self.pcvr)
+        for i in range(n):
+            pcv = self.pcvr[i]
+            if pcv.type != name:
+                continue
+            if pcv.ts.time != 0 and timediff(pcv.ts, time) > 0.0:
+                continue
+            if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
+                continue
+            return pcv
+        return None
 
-def searchpcv(name, time, pcvs):
-    n = len(pcvs)
-    for i in range(n):
-        pcv = pcvs[i]
-        if (pcv.sat is None and pcv.type != name) or \
-                (pcv.sat is not None and pcv.sat != name):
-            continue
-        if pcv.ts.time != 0 and timediff(pcv.ts, time) > 0.0:
-            continue
-        if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
-            continue
-        return pcv
-    return None
+    def satantoff(self, time, rs, sat, sig):
+        """ satellite antenna offset """
+
+        pcv = self.searchpcvs(sat, time)
+
+        # Select phase-center offset vector
+        #
+        sig = rSigRnx(sig.sys, uTYP.L, int(sig.sig/100)*100)
+        if sig in pcv.off.keys():
+            off = pcv.off[sig]
+        else:
+            return None
+
+        erpv = np.zeros(5)
+        rsun, _, _ = sunmoonpos(gpst2utc(time), erpv, True)
+        r = -rs
+        ez = r/np.linalg.norm(r)
+        r = rsun-rs
+        es = r/np.linalg.norm(r)
+        r = np.cross(ez, es)
+        ey = r/np.linalg.norm(r)
+        ex = np.cross(ey, ez)
+
+        dant = np.zeros(3)
+        for i in range(3):
+            dant = off[0]*ex[i]+off[1]*ey[i]+off[2]*ez[i]
+
+        return dant
 
 
 leaps_ = [[2017, 1, 1, 0, 0, 0, -18],
@@ -771,43 +802,6 @@ def sunmoonpos(tutc, erpv, rsun=False, rmoon=False, gmst=False):
     return rsun, rmoon, gmst
 
 
-def satantoff(time, rs, sat, nav):
-    pcv = searchpcv(sat, time, nav.pcvs)
-    dant = np.zeros(3)
-    erpv = np.zeros(5)
-    rsun, _, _ = sunmoonpos(gpst2utc(time), erpv, True)
-    r = -rs
-    ez = r/np.linalg.norm(r)
-    r = rsun-rs
-    es = r/np.linalg.norm(r)
-    r = np.cross(ez, es)
-    ey = r/np.linalg.norm(r)
-    ex = np.cross(ey, ez)
-
-    sys, _ = sat2prn(sat)
-    if sys == uGNSS.GPS or sys == uGNSS.QZS:
-        freq = [rCST.FREQ1, rCST.FREQ2]
-    # elif sys==uGNSS.GLO:
-        #freq = [sat2freq(sat,CODE_L1C,nav)]
-    elif sys == uGNSS.GAL:
-        freq = [rCST.FREQ1, rCST.FREQ7]
-    elif sys == uGNSS.BDS:
-        freq = [rCST.FREQ1_BDS, rCST.FREQ2_BDS]
-    elif sys == uGNSS.IRN:
-        freq = [rCST.FREQ5, rCST.FREQ9]
-
-    den = freq[0]**2-freq[1]**2
-    c1 = freq[0]**2/den
-    c2 = -freq[1]**2/den
-
-    for i in range(3):
-        dant1 = pcv.off[0][0]*ex[i]+pcv.off[0][1]*ey[i]+pcv.off[0][2]*ez[i]
-        dant2 = pcv.off[1][0]*ex[i]+pcv.off[1][1]*ey[i]+pcv.off[1][2]*ez[i]
-        dant[i] = c1*dant1+c2*dant2
-
-    return dant
-
-
 class bias_t():
     def __init__(self, sat: int, tst: gtime_t, ted: gtime_t, sig1: rSigRnx,
                  sig2=rSigRnx(), bias=0.0, std=0.0, svn=0):
@@ -887,7 +881,7 @@ class biasdec():
 
                     # Differential Signal Bias
 
-                    gns = char2gns(line[6])
+                    gns = char2sys(line[6])
                     svn = int(line[7:10])
                     prn = line[11:14]
                     sat = id2sat(prn)
@@ -919,10 +913,11 @@ class biasdec():
                         return -1
                     bias = float(line[70:91])
                     std = float(line[92:103])
+                    """
                     if len(line) >= 137:
                         slope = float(line[104:125])
                         std_s = float(line[126:137])
-
+                    """
                     dcb = bias_t(sat, tst, ted, sig1, sig2, bias, std, svn)
                     self.dcb.append(dcb)
 
@@ -935,7 +930,7 @@ class biasdec():
 
                     # Differential Signal Bias
 
-                    gns = char2gns(line[6])
+                    gns = char2sys(line[6])
                     svn = int(line[7:10])
                     prn = line[11:14]
                     sat = id2sat(prn)
@@ -960,10 +955,11 @@ class biasdec():
 
                     bias = float(line[70:91])
                     std = float(line[92:103])
+                    """
                     if len(line) >= 137:
                         slope = float(line[104:125])
                         std_s = float(line[126:137])
-
+                    """
                     osb = bias_t(sat, tst, ted, sig1, sig2, bias, std, svn)
                     self.osb.append(osb)
 
@@ -984,10 +980,15 @@ if __name__ == '__main__':
     nav = Nav()
 
     if False:
+
         sp = peph()
+        atx = atxdec()
+        atx.readpcv(atxfile)
+
         nav = sp.parse_sp3(obsfile, nav)
         nav = rnx.decode_clk(clkfile, nav)
-        nav.pcvs, pcvr = readpcv(atxfile)
+
+        nav.pcvs = atx.pcvs
 
         n = 10
         rs = np.zeros((n, 6))
@@ -996,11 +997,11 @@ if __name__ == '__main__':
             t = timeadd(time, 30*k)
             rs[k, :], dts[k, :], var = sp.peph2pos(t, sat, nav)
 
-    if False:
         rs, dts, var = sp.peph2pos(time, sat, nav)
-        off = satantoff(time, rs[0:3], sat, nav)
+        off = atx.satantoff(time, rs[0:3], sat, nav)
 
     if False:
+
         erpv = np.zeros(5)
         ep1 = [2010, 12, 31, 8, 9, 10]
         rs = [70842740307.0837, 115293403265.153, -57704700666.9715]

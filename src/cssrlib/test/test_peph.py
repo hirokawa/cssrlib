@@ -3,11 +3,11 @@ Test script for peph module
 """
 import numpy as np
 from os.path import expanduser
-from cssrlib.peph import biasdec, peph, satantoff, readpcv, searchpcv
+from cssrlib.peph import atxdec, biasdec, peph
 from cssrlib.rinex import rnxdec
 from cssrlib.gnss import Nav
-from cssrlib.gnss import epoch2time, time2epoch, timeadd, time2str
-from cssrlib.gnss import sat2id, id2sat
+from cssrlib.gnss import epoch2time, time2epoch, timeadd
+from cssrlib.gnss import sat2id, id2sat, sys2char
 from cssrlib.gnss import uGNSS, uTYP, uSIG, rSigRnx
 
 
@@ -19,6 +19,7 @@ dcbfile = bdir+"COD0IGSRAP/2021/COD0IGSRAP_20210780000_01D_01D_OSB.BIA"
 
 time = epoch2time([2021, 3, 19, 12, 0, 0])
 sat = id2sat("G01")
+sig = rSigRnx(uGNSS.GPS, uTYP.C, uSIG.L1C)
 
 if False:
 
@@ -28,7 +29,6 @@ if False:
 
     nav = sp.parse_sp3(orbfile, nav)
     nav = rnx.decode_clk(clkfile, nav)
-    nav.pcvs, nav.pcvr = readpcv(atxfile)
 
     n = 10
     rs = np.zeros((1, 6))
@@ -43,39 +43,45 @@ if False:
               .format(ep[0], ep[1], ep[2], ep[3], ep[4], ep[5], sat2id(sat),
                       rs[0, 0], rs[0, 1], rs[0, 2], dts[0, 0]*1e6))
 
-if False:
+if True:
 
     nav = Nav()
     sp = peph()
 
     nav = sp.parse_sp3(orbfile, nav)
-    nav.pcvs, nav.pcvr = readpcv(atxfile)
+
+    atx = atxdec()
+    atx.readpcv(atxfile)
+
+    antr = "{:16s}{:4s}".format("JAVRINGANT_DM", "SCIS")
+    antb = "{:16s}{:4s}".format("TRM59800.80", "NONE")
+
+    for ant in (antr, antb):
+
+        pcv = atx.searchpcvr(ant, time)
+        if pcv is None:
+            print("ERROR: no PCV data for {}".format(ant))
+
+        print("{:20s}".format(pcv.type))
+        for sig, off in pcv.off.items():
+            print("  {} {:3s} PCO  [m] E {:7.4f} N {:7.4f} U {:7.4f} \n"
+                  "        PCV [mm] {}"
+                  .format(sys2char(sig.sys), sig.str(),
+                          off[0], off[1], off[2],
+                          " ".join(["{:6.2f}".format(v) for v in pcv.var[sig]])))
+        print()
 
     """
-    for pcv in nav.pcvs:
-        print(sat2id(pcv.sat), pcv.type)
-    """
-
-    pcv = searchpcv(sat, time, nav.pcvs)
-    print(pcv.sat, pcv.type)
-
-    name = "TRM57971.00     NONE"
-    pcv = searchpcv(name, time, nav.pcvr)
-    print(pcv.sat, pcv.type)
-
     rs, dts, var = sp.peph2pos(time, sat, nav)
-    off = satantoff(time, rs[0:3], sat, nav)
-    print(off)
+    off = atx.satantoff(time, rs[0:3], sat, sig)
 
-    """
     ep = time2epoch(time)
-    print("{:4d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}  {:s}  "
-          "{:15.4f} {:15.4f} {:15.4f}"
+    print("{:4d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}  {:s}  {:s} {:7.4f}"
           .format(ep[0], ep[1], ep[2], ep[3], ep[4], ep[5], sat2id(sat),
-                  off[0], off[1], off[2]))
+                  sig.str(), off))
     """
 
-if True:
+if False:
 
     bd = biasdec()
     bd.parse(dcbfile)
