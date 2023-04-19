@@ -5,7 +5,7 @@ module for RINEX 3.0x processing
 import numpy as np
 from cssrlib.gnss import uGNSS, uTYP, rSigRnx
 from cssrlib.gnss import gpst2time, epoch2time, timediff, gtime_t
-from cssrlib.gnss import prn2sat, char2gns
+from cssrlib.gnss import prn2sat, char2sys
 from cssrlib.gnss import Eph, Obs
 
 
@@ -41,21 +41,21 @@ class rnxdec:
         """ define the signal list for each constellation """
 
         for sig in sigList:
-            if sig.gns not in self.sig_tab:
-                self.sig_tab.update({sig.gns: {}})
-            if sig.typ not in self.sig_tab[sig.gns]:
-                self.sig_tab[sig.gns].update({sig.typ: []})
-            if sig not in self.sig_tab[sig.gns][sig.typ]:
-                self.sig_tab[sig.gns][sig.typ].append(sig)
+            if sig.sys not in self.sig_tab:
+                self.sig_tab.update({sig.sys: {}})
+            if sig.typ not in self.sig_tab[sig.sys]:
+                self.sig_tab[sig.sys].update({sig.typ: []})
+            if sig not in self.sig_tab[sig.sys][sig.typ]:
+                self.sig_tab[sig.sys][sig.typ].append(sig)
 
         for _, sigs in self.sig_tab.items():
             for typ, sig in sigs.items():
                 self.nsig[typ] = max((self.nsig[typ], len(sig)))
 
-    def getSignals(self, gns, typ):
+    def getSignals(self, sys, typ):
         """ retrieve signal list for constellation and obs type """
-        if gns in self.sig_tab.keys() and typ in self.sig_tab[gns].keys():
-            return self.sig_tab[gns][typ]
+        if sys in self.sig_tab.keys() and typ in self.sig_tab[sys].keys():
+            return self.sig_tab[sys][typ]
         else:
             return []
 
@@ -95,7 +95,7 @@ class rnxdec:
 
             for line in fnav:
 
-                sys = char2gns(line[0])
+                sys = char2sys(line[0])
 
                 # Skip undesired constellations
                 #
@@ -214,7 +214,7 @@ class rnxdec:
                                      float(line[28:42])])
             elif line[60:79] == 'SYS / # / OBS TYPES':
 
-                gns = char2gns(line[0])
+                gns = char2sys(line[0])
                 nsig = int(line[3:6])
 
                 # Extract string list of signal codes
@@ -262,7 +262,7 @@ class rnxdec:
             for _ in range(nsat):
 
                 line = self.fobs.readline()
-                sys = char2gns(line[0])
+                sys = char2sys(line[0])
 
                 # Skip constellation not contained in RINEX header
                 #

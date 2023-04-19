@@ -75,7 +75,10 @@ class rCST():
 
 
 class uGNSS(IntEnum):
-    """ class for GNSS constants """
+    """ class for GNS systems """
+
+    NONE = -1
+
     GPS = 0
     SBS = 1
     GAL = 2
@@ -83,7 +86,9 @@ class uGNSS(IntEnum):
     QZS = 5
     GLO = 6
     IRN = 7
+
     GNSSMAX = 8
+
     GPSMAX = 32
     GALMAX = 36
     QZSMAX = 10
@@ -91,17 +96,13 @@ class uGNSS(IntEnum):
     GLOMAX = 24
     SBSMAX = 24
     IRNMAX = 10
-#    BDSMAX = 0
-#    GLOMAX = 0
-#    SBSMAX = 0
-#    IRNMAX = 0
-    NONE = -1
+
     MAXSAT = GPSMAX+GLOMAX+GALMAX+BDSMAX+QZSMAX+SBSMAX+IRNMAX
 
 
 class uTYP(IntEnum):
-    """ class to define signal types"""
-    NONE = 0
+    """ class for observation types"""
+    NONE = -1
 
     C = 1
     L = 2
@@ -110,8 +111,8 @@ class uTYP(IntEnum):
 
 
 class uSIG(IntEnum):
-    """ class to define signal band and attribute """
-    NONE = 0
+    """ class for signal band and attribute """
+    NONE = -1
 
     L1 = 100
     L1A = 101
@@ -200,22 +201,22 @@ class uSIG(IntEnum):
 
 class rSigRnx():
 
-    def __init__(self, gns=uGNSS.NONE, typ=uTYP.NONE, sig=uSIG.NONE):
-        self.gns = gns
+    def __init__(self, sys=uGNSS.NONE, typ=uTYP.NONE, sig=uSIG.NONE):
+        self.sys = sys
         self.typ = typ
         self.sig = sig
 
     def __eq__(self, other):
-        return self.gns == other.gns and \
+        return self.sys == other.sys and \
             self.typ == other.typ and \
             self.sig == other.sig
 
     def __hash__(self):
-        return hash((self.gns, self.typ, self.sig))
+        return hash((self.sys, self.typ, self.sig))
 
-    def str2sig(self, gns, s):
+    def str2sig(self, sys, s):
 
-        self.gns = gns
+        self.sys = sys
 
         if s[0] == 'C':
             self.typ = uTYP.C
@@ -234,11 +235,11 @@ class rSigRnx():
             self.sig += ord(s[2]) - ord('A') + 1
 
         if self.sig not in [v.value for v in uSIG] or \
-            (self.gns == uGNSS.NONE or
+            (self.sys == uGNSS.NONE or
              self.typ == uTYP.NONE or
              self.sig == uSIG.NONE):
 
-            self.gns = uGNSS.NONE
+            self.sys = uGNSS.NONE
             self.typ = uTYP.NONE
             self.sig = uSIG.NONE
 
@@ -269,7 +270,7 @@ class rSigRnx():
     def frequency(self, k=None):
         """ frequency in Hz """
 
-        if self.gns == uGNSS.GPS:
+        if self.sys == uGNSS.GPS:
             if int(self.sig / 100) == 1:
                 return rCST.FREQ_G1
             elif int(self.sig / 100) == 2:
@@ -278,7 +279,7 @@ class rSigRnx():
                 return rCST.FREQ_G5
             else:
                 return None
-        elif self.gns == uGNSS.GLO:
+        elif self.sys == uGNSS.GLO:
             if int(self.sig / 100) == 1 and k is not None:
                 return rCST.FREQ_R1 + k * rCST.FREQ_R1k
             elif int(self.sig / 100) == 2 and k is not None:
@@ -291,7 +292,7 @@ class rSigRnx():
                 return rCST.FREQ_R2a
             else:
                 return None
-        elif self.gns == uGNSS.GAL:
+        elif self.sys == uGNSS.GAL:
             if int(self.sig / 100) == 1:
                 return rCST.FREQ_E1
             elif int(self.sig / 100) == 5:
@@ -304,7 +305,7 @@ class rSigRnx():
                 return rCST.FREQ_E5
             else:
                 return None
-        elif self.gns == uGNSS.BDS:
+        elif self.sys == uGNSS.BDS:
             if int(self.sig / 100) == 1:
                 return rCST.FREQ_C1
             elif int(self.sig / 100) == 2:
@@ -319,7 +320,7 @@ class rSigRnx():
                 return rCST.FREQ_C2
             else:
                 return None
-        if self.gns == uGNSS.QZS:
+        if self.sys == uGNSS.QZS:
             if int(self.sig / 100) == 1:
                 return rCST.FREQ_J1
             elif int(self.sig / 100) == 2:
@@ -330,12 +331,12 @@ class rSigRnx():
                 return rCST.FREQ_J6
             else:
                 return None
-        if self.gns == uGNSS.SBS:
+        if self.sys == uGNSS.SBS:
             if int(self.sig / 100) == 1:
                 return rCST.FREQ_S1
             elif int(self.sig / 100) == 5:
                 return rCST.FREQ_S5
-        elif self.gns == uGNSS.IRN:
+        elif self.sys == uGNSS.IRN:
             if int(self.sig / 100) == 5:
                 return rCST.FREQ_I5
             elif int(self.sig / 100) == 9:
@@ -427,7 +428,6 @@ class Nav():
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
         self.gnss_t = [uGNSS.GPS, uGNSS.GAL, uGNSS.QZS]
-        # self.gnss_t = [uGNSS.GPS]
         self.loglevel = 1
         self.cnr_min = 35
         self.maxout = 5  # maximum outage [epoch]
@@ -603,7 +603,8 @@ def prn2sat(sys, prn):
     elif sys == uGNSS.SBS:
         sat = prn-100+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX
     elif sys == uGNSS.IRN:
-        sat = prn+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX
+        sat = prn+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX + \
+            uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX
     else:
         sat = 0
     return sat
@@ -612,10 +613,12 @@ def prn2sat(sys, prn):
 def sat2prn(sat):
     """ convert sat to sys+prn """
     if sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX:
-        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX)
+        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX +
+                   uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX)
         sys = uGNSS.IRN
     elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX:
-        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX)+100
+        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX +
+                   uGNSS.BDSMAX+uGNSS.QZSMAX)+100
         sys = uGNSS.SBS
     elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX:
         prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX)+192
@@ -639,7 +642,7 @@ def sat2id(sat):
     """ convert satellite number to id """
     sys, prn = sat2prn(sat)
     gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GLO: 'R', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
-                uGNSS.QZS: 'J', uGNSS.SBS: 'S', uGNSS.IRN: 'I' }
+                uGNSS.QZS: 'J', uGNSS.SBS: 'S', uGNSS.IRN: 'I'}
     if sys not in gnss_tbl:
         return -1
     if sys == uGNSS.QZS:
@@ -649,20 +652,9 @@ def sat2id(sat):
     return '%s%02d' % (gnss_tbl[sys], prn)
 
 
-def char2gns(c):
-    """ convert character to GNSS """
-    gnss_tbl = {'G': uGNSS.GPS, 'R': uGNSS.GLO, 'E': uGNSS.GAL, 'C': uGNSS.BDS,
-                'J': uGNSS.QZS, 'S': uGNSS.SBS, 'I': uGNSS.IRN}
-
-    if c not in gnss_tbl:
-        return uGNSS.NONE
-    else:
-        return gnss_tbl[c]
-
-
 def id2sat(id_):
     """ convert id to satellite number """
-    sys = char2gns(id_[0])
+    sys = char2sys(id_[0])
     if sys == uGNSS.NONE:
         return -1
 
@@ -673,6 +665,28 @@ def id2sat(id_):
         prn += 100
     sat = prn2sat(sys, prn)
     return sat
+
+
+def char2sys(c):
+    """ convert character to GNSS """
+    gnss_tbl = {'G': uGNSS.GPS, 'R': uGNSS.GLO, 'E': uGNSS.GAL, 'C': uGNSS.BDS,
+                'J': uGNSS.QZS, 'S': uGNSS.SBS, 'I': uGNSS.IRN}
+
+    if c not in gnss_tbl:
+        return uGNSS.NONE
+    else:
+        return gnss_tbl[c]
+
+
+def sys2char(sys):
+    """ convert character to GNSS """
+    gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GLO: 'R', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
+                uGNSS.QZS: 'J', uGNSS.SBS: 'S', uGNSS.IRN: 'I'}
+
+    if sys not in gnss_tbl:
+        return "?"
+    else:
+        return gnss_tbl[sys]
 
 
 def vnorm(r):
