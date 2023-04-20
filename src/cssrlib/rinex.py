@@ -227,8 +227,7 @@ class rnxdec:
                 # Convert to RINEX signal code and store in map
                 #
                 for i, sig in enumerate(sigs):
-                    rnxSig = rSigRnx()
-                    rnxSig.str2sig(gns, sig)
+                    rnxSig = rSigRnx(gns, sig)
                     if gns not in self.sig_map:
                         self.sig_map.update({gns: {}})
                     self.sig_map[gns].update({i: rnxSig})
