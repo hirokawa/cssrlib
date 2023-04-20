@@ -883,13 +883,13 @@ class biasdec():
 
                     # Differential Signal Bias
 
-                    gns = char2sys(line[6])
+                    sys = char2sys(line[6])
                     svn = int(line[7:10])
                     prn = line[11:14]
                     sat = id2sat(prn)
 
-                    sig1 = rSigRnx(gns, line[25:29])
-                    sig2 = rSigRnx(gns, line[30:34])
+                    sig1 = rSigRnx(sys, line[25:28])
+                    sig2 = rSigRnx(sys, line[30:33])
 
                     # year:doy:sec
                     ep1 = [int(line[35:39]), int(
@@ -929,12 +929,12 @@ class biasdec():
 
                     # Differential Signal Bias
 
-                    gns = char2sys(line[6])
+                    sys = char2sys(line[6])
                     svn = int(line[7:10])
                     prn = line[11:14]
                     sat = id2sat(prn)
 
-                    sig1 = rSigRnx(gns, line[25:29])
+                    sig1 = rSigRnx(sys, line[25:28])
                     sig2 = rSigRnx()
 
                     # year:doy:sec
