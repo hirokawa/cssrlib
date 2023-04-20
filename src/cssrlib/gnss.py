@@ -194,17 +194,72 @@ class uSIG(IntEnum):
 
 class rSigRnx():
 
-    def __init__(self, sys=uGNSS.NONE, typ=uTYP.NONE, sig=uSIG.NONE):
-        self.sys = sys
-        self.typ = typ
-        self.sig = sig
+
+    def __init__(self, *args, **kwargs):
+        """ Constructor """
+
+        self.sys = uGNSS.NONE
+        self.typ = uTYP.NONE
+        self.sig = uSIG.NONE
+
+        # Empty
+        if len(args) == 0:
+
+            self.sys = uGNSS.NONE
+            self.typ = uTYP.NONE
+            self.sig = uSIG.NONE
+
+        # Four char string e.g. GC1W
+        elif len(args) == 1:
+
+            [x] = args
+            if isinstance(x, str):
+                tmp = rSigRnx()
+                tmp.str2sig(char2sys(x[0]), x[1:4])
+                self.sys = tmp.sys
+                self.typ = tmp.typ
+                self.sig = tmp.sig
+            else:
+                raise ValueError
+
+        # System and three char string e.g. GPS, C1W
+        elif len(args) == 2:
+
+            sys, sig = args
+            if isinstance(sys, uGNSS) and isinstance(sig, str):
+                tmp = rSigRnx()
+                tmp.str2sig(sys, sig)
+                self.sys = tmp.sys
+                self.typ = tmp.typ
+                self.sig = tmp.sig
+            else:
+                raise ValueError
+
+        # System, type and signal
+        elif len(args) == 3:
+
+            sys, typ, sig = args
+            if isinstance(sys, uGNSS) and \
+                    isinstance(typ, uTYP) and \
+                    isinstance(sig, uSIG):
+                self.sys = sys
+                self.typ = typ
+                self.sig = sig
+            else:
+                raise ValueError
+
+        else:
+
+            raise ValueError
 
     def __eq__(self, other):
+        """ equality operator """
         return self.sys == other.sys and \
             self.typ == other.typ and \
             self.sig == other.sig
 
     def __hash__(self):
+        """ hash operator """
         return hash((self.sys, self.typ, self.sig))
 
     def str2sig(self, sys, s):
