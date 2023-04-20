@@ -27,16 +27,7 @@ class rCST():
     AS2R = D2R/3600.0
     DAY_SEC = 86400.0
     CENTURY_SEC = DAY_SEC*36525.0
-    ##### obsolete #################
-    FREQ1 = 1.57542E9
-    FREQ2 = 1.22760E9
-    FREQ5 = 1.17645E9
-    FREQ6 = 1.27875E9
-    FREQ7 = 1.20714E9
-    FREQ9 = 2.492028E9
-    FREQ1_BDS = 1.561098E9
-    FREQ2_BDS = 1.20714E9
-    ##### end obsolete #################
+
     FREQ_G1 = 1575.42e6      # [Hz] GPS L1
     FREQ_G2 = 1227.60e6      # [Hz] GPS L2
     FREQ_G5 = 1176.45e6      # [Hz] GPS L5
@@ -102,6 +93,7 @@ class uGNSS(IntEnum):
 
 class uTYP(IntEnum):
     """ class for observation types"""
+
     NONE = -1
 
     C = 1
@@ -112,6 +104,7 @@ class uTYP(IntEnum):
 
 class uSIG(IntEnum):
     """ class for signal band and attribute """
+
     NONE = -1
 
     L1 = 100
