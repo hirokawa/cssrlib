@@ -252,6 +252,10 @@ class rSigRnx():
 
             raise ValueError
 
+    def __repr__(self) -> str:
+        """ string representation """
+        return sys2char(self.sys)+self.str()
+
     def __eq__(self, other):
         """ equality operator """
         return self.sys == other.sys and \
@@ -261,6 +265,20 @@ class rSigRnx():
     def __hash__(self):
         """ hash operator """
         return hash((self.sys, self.typ, self.sig))
+
+    def toTyp(self, typ):
+        """ Replace signal type """
+        if isinstance(typ, uTYP):
+            return rSigRnx(self.sys, typ, self.sig)
+        else:
+            raise ValueError
+
+    def toAtt(self, att=""):
+        """ Replace signal type """
+        if isinstance(att, str):
+            return rSigRnx(self.sys, self.str()[0:2]+att)
+        else:
+            raise ValueError
 
     def str2sig(self, sys, str):
 
