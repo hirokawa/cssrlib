@@ -8,7 +8,7 @@ Created on Sun Aug 22 21:01:49 2021
 from cssrlib.gnss import Nav, id2sat, char2sys, sat2id
 from cssrlib.gnss import epoch2time, time2epoch, timeadd, timediff, gtime_t
 from cssrlib.gnss import str2time
-from cssrlib.gnss import rCST, rSigRnx, uSIG, uTYP, uGNSS
+from cssrlib.gnss import rCST, rSigRnx, uTYP, uGNSS
 
 from cssrlib.rinex import rnxdec
 import numpy as np
@@ -437,8 +437,7 @@ class atxdec():
                     pcv.te = str2time(line, 2, 40)
                 elif "START OF FREQUENCY" in line[60:]:
                     sys = char2sys(line[3])
-                    sig = rSigRnx()
-                    sig.str2sig(sys, 'L'+line[5])
+                    sig = rSigRnx(sys, 'L'+line[5])
                 elif "END OF FREQUENCY" in line[60:]:
                     sys = uGNSS.NONE
                     sig = rSigRnx()
@@ -490,9 +489,12 @@ class atxdec():
 
         pcv = self.searchpcvs(sat, time)
 
+        # Convert to phase observation code without tracking attribute
+        #
+        sig = sig.toTyp(uTYP.L).toAtt()
+
         # Select phase-center offset vector
         #
-        sig = rSigRnx(sig.sys, uTYP.L, int(sig.sig/100)*100)
         if sig in pcv.off.keys():
             off = pcv.off[sig]
         else:
@@ -510,7 +512,7 @@ class atxdec():
 
         dant = np.zeros(3)
         for i in range(3):
-            dant = off[0]*ex[i]+off[1]*ey[i]+off[2]*ez[i]
+            dant[i] = off[0]*ex[i]+off[1]*ey[i]+off[2]*ez[i]
 
         return dant
 
@@ -886,11 +888,8 @@ class biasdec():
                     prn = line[11:14]
                     sat = id2sat(prn)
 
-                    sig1 = rSigRnx()
-                    sig2 = rSigRnx()
-
-                    sig1.str2sig(gns, line[25:29])
-                    sig2.str2sig(gns, line[30:34])
+                    sig1 = rSigRnx(gns, line[25:29])
+                    sig2 = rSigRnx(gns, line[30:34])
 
                     # year:doy:sec
                     ep1 = [int(line[35:39]), int(
@@ -935,8 +934,7 @@ class biasdec():
                     prn = line[11:14]
                     sat = id2sat(prn)
 
-                    sig1 = rSigRnx()
-                    sig1.str2sig(gns, line[25:29])
+                    sig1 = rSigRnx(gns, line[25:29])
                     sig2 = rSigRnx()
 
                     # year:doy:sec
@@ -1017,7 +1015,7 @@ if __name__ == '__main__':
 
         time = epoch2time([2022, 12, 31, 0, 0, 0])
         sat = id2sat("G03")
-        sig = rSigRnx(uGNSS.GPS, uTYP.C, uSIG.L1W)
+        sig = rSigRnx("GC1W")
 
         bias, std, = bd.getosb(sat, time, sig)
         assert bias == 7.6934
@@ -1026,7 +1024,7 @@ if __name__ == '__main__':
         print("{:s} {:s} {:8.5f} {:6.4f}"
               .format(sat2id(sat), sig.str(), bias, std))
 
-        sig = rSigRnx(uGNSS.GPS, uTYP.L, uSIG.L1W)
+        sig = rSigRnx("GL1W")
 
         bias, std, = bd.getosb(sat, time, sig)
         assert bias == 0.00038
