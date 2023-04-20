@@ -194,7 +194,6 @@ class uSIG(IntEnum):
 
 class rSigRnx():
 
-
     def __init__(self, *args, **kwargs):
         """ Constructor """
 
@@ -213,9 +212,9 @@ class rSigRnx():
         elif len(args) == 1:
 
             [x] = args
-            if isinstance(x, str):
+            if isinstance(x, str) and 3<=len(x)<=4:
                 tmp = rSigRnx()
-                tmp.str2sig(char2sys(x[0]), x[1:4])
+                tmp.str2sig(char2sys(x[0]), x[1:])
                 self.sys = tmp.sys
                 self.typ = tmp.typ
                 self.sig = tmp.sig
@@ -226,7 +225,7 @@ class rSigRnx():
         elif len(args) == 2:
 
             sys, sig = args
-            if isinstance(sys, uGNSS) and isinstance(sig, str):
+            if isinstance(sys, uGNSS) and isinstance(sig, str) and 2<=len(sig)<=3:
                 tmp = rSigRnx()
                 tmp.str2sig(sys, sig)
                 self.sys = tmp.sys
@@ -280,32 +279,35 @@ class rSigRnx():
         else:
             raise ValueError
 
-    def str2sig(self, sys, str):
+    def str2sig(self, sys, s):
 
-        self.sys = sys
+        if isinstance(sys, uGNSS):
+            self.sys = sys
+        else:
+            raise ValueError
 
-        if str[0] == 'C':
+        s = s.strip()
+        if len(s)<2:
+            raise ValueError
+
+        if s[0] == 'C':
             self.typ = uTYP.C
-        elif str[0] == 'L':
+        elif s[0] == 'L':
             self.typ = uTYP.L
-        elif str[0] == 'D':
+        elif s[0] == 'D':
             self.typ = uTYP.D
-        elif str[0] == 'S':
+        elif s[0] == 'S':
             self.typ = uTYP.S
         else:
-            self.typ = uTYP.NONE
+            raise ValueError
 
-        sig = int(str[1])*100
-        if len(str) == 3 and str[2] != ' ':
-            sig += ord(str[2]) - ord('A') + 1
-
+        sig = int(s[1])*100
+        if len(s) == 3:
+            sig += ord(s[2]) - ord('A') + 1
         self.sig = uSIG(sig)
 
         if self.sig not in [v.value for v in uSIG] or \
-            (self.sys == uGNSS.NONE or
-             self.typ == uTYP.NONE or
-             self.sig == uSIG.NONE):
-
+                self.sig == uSIG.NONE:
             raise ValueError
 
     def str(self):
