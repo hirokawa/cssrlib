@@ -339,8 +339,8 @@ class rSigRnx():
 
     def wavelength(self, k=None):
         """ wavelength in [m] """
-        lam = self.frequency(k)
-        return rCST.CLIGHT/lam if lam is not None else None
+        frq = self.frequency(k)
+        return rCST.CLIGHT/frq if frq is not None else None
 
 
 class gtime_t():
