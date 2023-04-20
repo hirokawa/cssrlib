@@ -262,34 +262,33 @@ class rSigRnx():
         """ hash operator """
         return hash((self.sys, self.typ, self.sig))
 
-    def str2sig(self, sys, s):
+    def str2sig(self, sys, str):
 
         self.sys = sys
 
-        if s[0] == 'C':
+        if str[0] == 'C':
             self.typ = uTYP.C
-        elif s[0] == 'L':
+        elif str[0] == 'L':
             self.typ = uTYP.L
-        elif s[0] == 'D':
+        elif str[0] == 'D':
             self.typ = uTYP.D
-        elif s[0] == 'S':
+        elif str[0] == 'S':
             self.typ = uTYP.S
         else:
             self.typ = uTYP.NONE
 
-        self.sig = int(s[1])*100
+        sig = int(str[1])*100
+        if len(str) == 3 and str[2] != ' ':
+            sig += ord(str[2]) - ord('A') + 1
 
-        if len(s) == 3 and s[2] != ' ':
-            self.sig += ord(s[2]) - ord('A') + 1
+        self.sig = uSIG(sig)
 
         if self.sig not in [v.value for v in uSIG] or \
             (self.sys == uGNSS.NONE or
              self.typ == uTYP.NONE or
              self.sig == uSIG.NONE):
 
-            self.sys = uGNSS.NONE
-            self.typ = uTYP.NONE
-            self.sig = uSIG.NONE
+            raise ValueError
 
     def str(self):
 
