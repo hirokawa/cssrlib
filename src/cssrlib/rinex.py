@@ -27,13 +27,13 @@ class rnxdec:
 
         self.ver = -1.0
         self.fobs = None
-        self.nf = 3  # TODO: create dynamically!!
 
         self.sig_map = {}  # signal code mapping to columns in data section
         self.sig_tab = {}  # signal selection for internal data structure
         self.nsig = {uTYP.C: 0, uTYP.L: 0, uTYP.D: 0, uTYP.S: 0}
 
         self.pos = np.array([0, 0, 0])
+        self.ecc = np.array([0, 0, 0])
         self.rcv = None
         self.ant = None
 
@@ -212,6 +212,10 @@ class rnxdec:
                 self.pos = np.array([float(line[0:14]),
                                      float(line[14:28]),
                                      float(line[28:42])])
+            elif 'ANTENNA: DELTA H/E/N' in line[60:]:
+                self.ecc = np.array([float(line[14:28]),  # East
+                                     float(line[28:42]),  # North
+                                     float(line[0:14])])  # Up
             elif line[60:79] == 'SYS / # / OBS TYPES':
 
                 gns = char2sys(line[0])
