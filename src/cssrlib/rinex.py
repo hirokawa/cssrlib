@@ -36,6 +36,8 @@ class rnxdec:
         self.ecc = np.array([0, 0, 0])
         self.rcv = None
         self.ant = None
+        self.ts = None
+        self.te = None
 
     def setSignals(self, sigList):
         """ define the signal list for each constellation """
@@ -235,6 +237,10 @@ class rnxdec:
                     if gns not in self.sig_map:
                         self.sig_map.update({gns: {}})
                     self.sig_map[gns].update({i: rnxSig})
+            elif 'TIME OF FIRST OBS' in line[60:]:
+                self.ts = epoch2time([float(v) for v in line[0:44].split()])
+            elif 'TIME OF LAST OBS' in line[60:]:
+                self.te = epoch2time([float(v) for v in line[0:44].split()])
 
         return 0
 
