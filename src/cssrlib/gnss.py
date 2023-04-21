@@ -36,20 +36,20 @@ class rCST():
     FREQ_R1k = 562.500e3     # [Hz] GLO G1   FDMA frequency separation
     FREQ_R2 = 1246.000e6     # [Hz] GLO G2   FDMA center frequency
     FREQ_R2k = 437.500e3     # [Hz] GLO G2   FDMA frequency separation
-    FREQ_R1a = 1600.995e6     # [Hz] GLO G1a
-    FREQ_R2a = 1248.065e6     # [Hz] GLO G2a
+    FREQ_R1a = 1600.995e6    # [Hz] GLO G1a
+    FREQ_R2a = 1248.065e6    # [Hz] GLO G2a
     FREQ_R3 = 1202.025e6     # [Hz] GLO G3
 
     FREQ_E1 = 1575.42e6      # [Hz] GAL E1
-    FREQ_E5a = 1176.450e6     # [Hz] GAL E5a
-    FREQ_E5b = 1207.140e6     # [Hz] GAL E5b
+    FREQ_E5a = 1176.450e6    # [Hz] GAL E5a
+    FREQ_E5b = 1207.140e6    # [Hz] GAL E5b
     FREQ_E5 = 1191.795e6     # [Hz] GAL E5
     FREQ_E6 = 1278.750e6     # [Hz] GAL E6
 
     FREQ_C1 = 1575.42e6      # [Hz] BDS B1
-    FREQ_C12 = 1561.098e6     # [Hz] BDS B1-2
-    FREQ_C2a = 1176.450e6     # [Hz] BDS B2a
-    FREQ_C2b = 1207.140e6     # [Hz] BDS B2b
+    FREQ_C12 = 1561.098e6    # [Hz] BDS B1-2
+    FREQ_C2a = 1176.450e6    # [Hz] BDS B2a
+    FREQ_C2b = 1207.140e6    # [Hz] BDS B2b
     FREQ_C2 = 1191.795e6     # [Hz] BDS B2
     FREQ_C3 = 1268.520e6     # [Hz] BDS B3
 
@@ -84,7 +84,7 @@ class uGNSS(IntEnum):
     GALMAX = 36
     QZSMAX = 10
     BDSMAX = 63
-    GLOMAX = 24
+    GLOMAX = 27
     SBSMAX = 24
     IRNMAX = 10
 
@@ -107,6 +107,12 @@ class uSIG(IntEnum):
 
     NONE = -1
 
+    # GPS   L1  1575.42 MHz
+    # GLO   G1  1602+k*9/16 MHz
+    # GAL   E1  1575.42 MHz
+    # SBAS  L1  1575.42 MHz
+    # QZSS  L1  1575.42 MHz
+    # BDS-3 B1  1575.42 MHz
     L1 = 100
     L1A = 101
     L1B = 102
@@ -123,6 +129,10 @@ class uSIG(IntEnum):
     L1Y = 125
     L1Z = 126
 
+    # GPS   L2  1227.60  MHz
+    # GLO   G2  1246+k*7/16 MHz
+    # QZS   L2  1227.60  MHz
+    # BDS   B1  1561.098 MHz
     L2 = 200
     L2C = 203
     L2D = 204
@@ -137,16 +147,24 @@ class uSIG(IntEnum):
     L2X = 224
     L2Y = 225
 
+    # GLO G3 1202.025 MHz
     L3 = 300
     L3I = 309
     L3Q = 317
     L3X = 324
 
+    # GLO G1a 1600.995 MHz
     L4 = 400
     L4A = 401
     L4B = 402
     L4X = 424
 
+    # GPS   L5  1176.45 MHz
+    # GAL   E5  1176.45 MHz
+    # SBS   L5  1176.45 MHz
+    # QZS   L5  1176.45 MHz
+    # BDS-3 B2a 1176.45 MHz
+    # IRN   L5  1176.45 MHz
     L5 = 500
     L5A = 501
     L5B = 502
@@ -158,6 +176,10 @@ class uSIG(IntEnum):
     L5X = 524
     L5Z = 526
 
+    # GLO   G2a 1248.06 MHz
+    # GAL   E6  1278.75 MHz
+    # QZS   L6  1278.75 MHz
+    # BDS   B3  1278.75 MHz
     L6 = 600
     L6A = 601
     L6B = 602
@@ -170,6 +192,9 @@ class uSIG(IntEnum):
     L6X = 624
     L6Z = 626
 
+    # GAL   E5b 1207.14 MHz
+    # BDS-2 B2  1207.14 MHz
+    # BDS-3 B2b 1207.14 MHz
     L7 = 700
     L7D = 704
     L7I = 709
@@ -178,6 +203,8 @@ class uSIG(IntEnum):
     L7X = 724
     L7Z = 726
 
+    # GAL  E5a+b 1191.795 MHz
+    # BDS  B2a+b 1191.795 MHz
     L8 = 800
     L8D = 804
     L8I = 809
@@ -185,6 +212,7 @@ class uSIG(IntEnum):
     L8Q = 817
     L8X = 824
 
+    # IRN  S    2492.028 MHz
     L9 = 900
     L9A = 901
     L9B = 902
@@ -212,7 +240,7 @@ class rSigRnx():
         elif len(args) == 1:
 
             [x] = args
-            if isinstance(x, str) and 3<=len(x)<=4:
+            if isinstance(x, str) and 3 <= len(x) <= 4:
                 tmp = rSigRnx()
                 tmp.str2sig(char2sys(x[0]), x[1:])
                 self.sys = tmp.sys
@@ -225,7 +253,8 @@ class rSigRnx():
         elif len(args) == 2:
 
             sys, sig = args
-            if isinstance(sys, uGNSS) and isinstance(sig, str) and 2<=len(sig)<=3:
+            if isinstance(sys, uGNSS) and isinstance(sig, str) and \
+                    2 <= len(sig) <= 3:
                 tmp = rSigRnx()
                 tmp.str2sig(sys, sig)
                 self.sys = tmp.sys
@@ -273,13 +302,14 @@ class rSigRnx():
             raise ValueError
 
     def toAtt(self, att=""):
-        """ Replace signal type """
+        """ Replace signal attribute """
         if isinstance(att, str):
             return rSigRnx(self.sys, self.str()[0:2]+att)
         else:
             raise ValueError
 
     def str2sig(self, sys, s):
+        """ string to signal code conversion """
 
         if isinstance(sys, uGNSS):
             self.sys = sys
@@ -287,7 +317,7 @@ class rSigRnx():
             raise ValueError
 
         s = s.strip()
-        if len(s)<2:
+        if len(s) < 2:
             raise ValueError
 
         if s[0] == 'C':
@@ -311,6 +341,7 @@ class rSigRnx():
             raise ValueError
 
     def str(self):
+        """ signal code to string conversion """
 
         s = ''
 
@@ -413,6 +444,7 @@ class rSigRnx():
 
     def wavelength(self, k=None):
         """ wavelength in [m] """
+
         frq = self.frequency(k)
         return rCST.CLIGHT/frq if frq is not None else None
 
