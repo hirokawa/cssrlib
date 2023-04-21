@@ -984,25 +984,6 @@ def interpc(coef, lat):
     return coef[:, i-1]*(1.0-d)+coef[:, i]*d
 
 
-def antmodel(nav, el=0, nf=2, rtype=1):
-    """ antenna pco/pcv """
-    sE = sin(el)
-    za = 90-np.rad2deg(el)
-    za_t = np.arange(0, 90.1, 5)
-    dant = np.zeros(nf)
-    if rtype == 1:  # for rover
-        pcv_t = nav.ant_pcv
-        pco_t = nav.ant_pco
-    else:  # for base
-        pcv_t = nav.ant_pcv_b
-        pco_t = nav.ant_pco_b
-    for f in range(nf):
-        pcv = np.interp(za, za_t, pcv_t[f])
-        pco = -pco_t[f]*sE
-        dant[f] = (pco+pcv)*1e-3
-    return dant
-
-
 def mapf(el, a, b, c):
     """ simple tropospheric mapping function """
     sinel = np.sin(el)

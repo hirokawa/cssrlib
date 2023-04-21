@@ -8,7 +8,7 @@ Created on Sun Aug 22 21:01:49 2021
 from cssrlib.gnss import Nav, id2sat, char2sys, sat2id
 from cssrlib.gnss import epoch2time, time2epoch, timeadd, timediff, gtime_t
 from cssrlib.gnss import str2time
-from cssrlib.gnss import rCST, rSigRnx, uTYP, uGNSS
+from cssrlib.gnss import rCST, rSigRnx, uGNSS, uTYP, uSIG
 
 from cssrlib.rinex import rnxdec
 import numpy as np
@@ -408,6 +408,7 @@ class atxdec():
         state = False
         sys = uGNSS.NONE
         sig = rSigRnx()
+        pcv = pcv_t()
 
         with open(fname, "r") as fh:
             for line in fh:
@@ -426,11 +427,11 @@ class atxdec():
                     continue
                 if "TYPE / SERIAL NO" in line[60:]:
                     pcv.type = line[0:20]
-                    pcv.code = line[20:40]
-                    if not pcv.code.strip():
+                    pcv.code = line[20:40].strip()
+                    if not pcv.code:
                         pcv.sat = None
                     else:
-                        pcv.sat = id2sat(pcv.code.strip())
+                        pcv.sat = id2sat(pcv.code)
                 elif "VALID FROM" in line[60:]:
                     pcv.ts = str2time(line, 2, 40)
                 elif "VALID UNTIL" in line[60:]:
@@ -442,8 +443,9 @@ class atxdec():
                     sys = uGNSS.NONE
                     sig = rSigRnx()
                 elif "NORTH / EAST / UP" in line[60:]:
-                    neu = [float(x)*1e-3 for x in line[3:30].split()]
+                    neu = [float(x) for x in line[3:30].split()]
                     pcv.off.update({sig: np.zeros(3)})
+                    # For satellite use XYZ, for receiver use ENU
                     pcv.off[sig][0] = neu[0] if pcv.sat is not None else neu[1]
                     pcv.off[sig][1] = neu[1] if pcv.sat is not None else neu[0]
                     pcv.off[sig][2] = neu[2]
@@ -455,34 +457,6 @@ class atxdec():
                 elif "NOAZI" in line[3:8]:
                     var = [float(x) for x in line[8:].split()]
                     pcv.var.update({sig: np.array(var)})
-
-    def searchpcvs(self, sat, time):
-        """ get satellite antenna pcv """
-        n = len(self.pcvs)
-        for i in range(n):
-            pcv = self.pcvs[i]
-            if pcv.sat != sat:
-                continue
-            if pcv.ts.time != 0 and timediff(pcv.ts, time) > 0.0:
-                continue
-            if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
-                continue
-            return pcv
-        return None
-
-    def searchpcvr(self, name, time):
-        """ get receiver antenna pcv """
-        n = len(self.pcvr)
-        for i in range(n):
-            pcv = self.pcvr[i]
-            if pcv.type != name:
-                continue
-            if pcv.ts.time != 0 and timediff(pcv.ts, time) > 0.0:
-                continue
-            if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
-                continue
-            return pcv
-        return None
 
     def satantoff(self, time, rs, sat, sig):
         """ satellite antenna offset """
@@ -516,6 +490,170 @@ class atxdec():
 
         return dant
 
+
+def searchpcv(pcvs, name, time):
+    """ get satellite or receiver antenna pcv """
+    if isinstance(name,int):
+        for pcv in pcvs:
+            if pcv.sat != name:
+                continue
+            if pcv.ts.time != 0 and timediff(pcv.ts, time) > 0.0:
+                continue
+            if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
+                continue
+            return pcv
+    else:
+        for pcv in pcvs:
+            if pcv.type != name:
+                continue
+            if pcv.ts.time != 0 and timediff(pcv.ts, time) > 0.0:
+                continue
+            if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
+                continue
+            return pcv
+        return None
+
+    return None
+
+
+def substSigTx(pcv, sig):
+    """ Substitute frequency band for PCO/PCV selection of transmitting antenna """
+
+    # Convert to phase observation without tracking attribute
+    #
+    sig = sig.toTyp(uTYP.L).toAtt()
+
+    # Use directly if an corresponsing offset exists
+    #
+    if sig in pcv.off:
+        return sig
+
+    # Substitute if signal does not exist
+    #
+    if sig.sys == uGNSS.GPS:
+        if sig.sig == uSIG.L5:
+            sig = rSigRnx(sig.sys, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.GLO:
+        if sig.sig == uSIG.L3:
+            sig = rSigRnx(sig.sys, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.BDS:
+        if sig.sig == uSIG.L8:  # BDS-3 Ba+b
+            sig = rSigRnx(sig.sys, sig.typ, uSIG.L5)
+
+    return sig
+
+
+def substSigRx(pcv, sig):
+    """ Substitute frequency band for PCO/PCV selection of receving antenna """
+
+    # Convert to phase observation without tracking attribute
+    #
+    sig = sig.toTyp(uTYP.L).toAtt()
+
+    # Use directly if an corresponsing offset exists
+    #
+    if sig in pcv.off:
+        return sig
+
+    # Substitute if signal does not exist
+    #
+    if sig.sys == uGNSS.GPS:
+        if sig.sig == uSIG.L5:
+            sig = rSigRnx(sig.sys, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.GLO:
+        if sig.sig == uSIG.L1:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L1)
+        elif sig.sig == uSIG.L2 or sig.sig == uSIG.L3:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.GAL:
+        if sig.sig == uSIG.L1:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L1)
+        elif sig.sig == uSIG.L5 or sig.sig == uSIG.L6 or \
+                sig.sig == uSIG.L7 or sig.sig == uSIG.L8:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.BDS:
+        if sig.sig == uSIG.L1:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L1)
+        elif sig.sig == uSIG.L5 or sig.sig == uSIG.L6 or \
+                sig.sig == uSIG.L7 or sig.sig == uSIG.L8:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.QZS:
+        if sig.sig == uSIG.L1:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L1)
+        elif sig.sig == uSIG.L2 or sig.sig == uSIG.L5 or sig.sig == uSIG.L6:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.IRN:
+        if sig.sig == uSIG.L5:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.SBS:
+        if sig.sig == uSIG.L1:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L1)
+        elif sig.sig == uSIG.L5:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L2)
+
+    return sig
+
+def antModelTx(nav, e, sigs, sat, time):
+    """ transmitter antenna pco/pcv """
+
+    # Selet satellite antenna
+    #
+    ant_pcv = searchpcv(nav.sat_pcv, sat, time)
+
+    # Elevation angle, zenit angle and zenit angle grid
+    #
+    za = 90-np.rad2deg(np.arcsin(e[2]))
+    za_t = np.arange(ant_pcv.zen[0], ant_pcv.zen[1]+ant_pcv.zen[2],
+                     ant_pcv.zen[2])
+
+    # Interpolate PCV and map PCO on line-of-sight vector
+    #
+    dant = np.zeros(len(sigs))
+    for i, sig_ in enumerate(sigs):
+
+        sig = substSigTx(ant_pcv, sig_)
+
+        if sig not in ant_pcv.off or sig not in ant_pcv.var:
+            dant[i] = None
+        else:
+            pcv = np.interp(za, za_t, ant_pcv.var[sig])
+            pco = np.dot(ant_pcv.off[sig], e)
+            dant[i] = (pco+pcv)*1e-3
+
+    return dant
+
+
+def antModelRx(nav, e, sigs, rtype=1):
+    """ receiver antenna pco/pcv """
+
+    # Select rover or base antenna
+    #
+    if rtype == 1:  # for rover
+        ant_pcv = nav.ant_pcv
+    else:  # for base
+        ant_pcv = nav.ant_pcv_b
+
+    # Elevation angle, zenit angle and zenit angle grid
+    #
+    za = 90-np.rad2deg(np.arcsin(e[2]))
+    za_t = np.arange(ant_pcv.zen[0], ant_pcv.zen[1]+ant_pcv.zen[2],
+                     ant_pcv.zen[2])
+
+    # Interpolate PCV and map PCO on line-of-sight vector
+    #
+    dant = np.zeros(len(sigs))
+    for i, sig_ in enumerate(sigs):
+
+        sig = substSigRx(ant_pcv, sig_)
+
+        if sig not in ant_pcv.off or sig not in ant_pcv.var:
+            dant[i] = None
+        else:
+            pcv = np.interp(za, za_t, ant_pcv.var[sig])
+            pco = -np.dot(ant_pcv.off[sig], e)
+            dant[i] = (pco+pcv)*1e-3
+
+    return dant
 
 leaps_ = [[2017, 1, 1, 0, 0, 0, -18],
           [2015, 7, 1, 0, 0, 0, -17],
