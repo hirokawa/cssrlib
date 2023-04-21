@@ -3,7 +3,9 @@ Test script for peph module
 """
 import numpy as np
 from os.path import expanduser
+
 from cssrlib.peph import atxdec, biasdec, peph
+from cssrlib.peph import searchpcv, antModelRx, antModelTx
 from cssrlib.rinex import rnxdec
 from cssrlib.gnss import Nav
 from cssrlib.gnss import epoch2time, time2epoch, timeadd
@@ -56,20 +58,25 @@ if True:
     atx = atxdec()
     atx.readpcv(atxfile)
 
-    # Retrieve satellite antennas
-    #
-    pcv = atx.searchpcvs(sat, time)
-    if pcv is None:
-        print("ERROR: no PCV data for {}".format(sat))
+    for prn in ("G01", "R03", "E02", "C22", "J02"):
 
-    print("{}".format(sat2id(pcv.sat)))
-    for sig, off in pcv.off.items():
-        print("  {} {:3s} PCO  [m] X {:7.4f} Y {:7.4f} Z {:7.4f} \n"
-              "        PCV [mm] {}"
-              .format(sys2char(sig.sys), sig.str(),
-                      off[0], off[1], off[2],
-                      " ".join(["{:6.2f}".format(v) for v in pcv.var[sig]])))
-    print()
+        sat = id2sat(prn)
+
+        # Retrieve satellite antennas
+        #
+        pcv = searchpcv(atx.pcvs, sat, time)
+        if pcv is None:
+            print("ERROR: no PCV data for {}".format(sat2id(sat)))
+            continue
+
+        print("{}".format(sat2id(pcv.sat)))
+        for sig, off in pcv.off.items():
+            print("  {} {:3s} PCO  [m] X {:7.4f} Y {:7.4f} Z {:7.4f} \n"
+                  "        PCV [mm] {}"
+                  .format(sys2char(sig.sys), sig.str(),
+                          off[0], off[1], off[2],
+                          " ".join(["{:6.2f}".format(v) for v in pcv.var[sig]])))
+        print()
 
     # Retrieve station antennas
     #
@@ -78,9 +85,10 @@ if True:
 
     for ant in (antr, antb):
 
-        pcv = atx.searchpcvr(ant, time)
+        pcv = searchpcv(atx.pcvr, ant, time)
         if pcv is None:
             print("ERROR: no PCV data for {}".format(ant))
+            continue
 
         print("{:20s}".format(pcv.type))
         for sig, off in pcv.off.items():
@@ -91,14 +99,55 @@ if True:
                           " ".join(["{:6.2f}".format(v) for v in pcv.var[sig]])))
         print()
 
+    print("Test antenna module")
+    print()
+
     nav = Nav()
     sp = peph()
 
     nav = sp.parse_sp3(orbfile, nav)
 
+    # Store PCV/PCO information for satellites and receiver
     #
+    nav.sat_pcv = atx.pcvs
+    nav.ant_pcv = searchpcv(atx.pcvr, antr, time)
+    nav.ant_pcv_b = searchpcv(atx.pcvr, antb, time)
+
+    # LOS vector on local ENU frame
     #
-    sig = rSigRnx("GC1W")
+    az = np.deg2rad(45)
+    el = np.deg2rad(90)
+    e = np.array([np.sin(az)*np.cos(el),
+                  np.cos(az)*np.cos(el),
+                  np.sin(el)])
+
+    sat = id2sat("E02")
+    sigs = [rSigRnx("EC1C"), rSigRnx("EC5Q")]
+    dant = antModelRx(nav, e, sigs)
+
+    txt = "{:20s}".format(antr)
+    for i, sig in enumerate(sigs):
+        txt += " {} {:6.3f} m".format(sig, dant[i])
+    print(txt)
+
+    # LOS vector in local satellite antenna frame
+    #
+    az = np.deg2rad(45)
+    el = np.deg2rad(90)
+    e = np.array([np.sin(az)*np.cos(el),
+                  np.cos(az)*np.cos(el),
+                  np.sin(el)])
+
+    sat = id2sat("E02")
+    sigs = [rSigRnx("EC1C"), rSigRnx("EC5Q")]
+    dant = antModelTx(nav, e, sigs, sat, time)
+
+    txt = "{:20s}".format(sat2id(sat))
+    for i, sig in enumerate(sigs):
+        txt += " {} {:6.3f} m".format(sig, dant[i])
+    print(txt)
+
+    """
     rs, dts, var = sp.peph2pos(time, sat, nav)
     off = atx.satantoff(time, rs[0:3], sat, sig)
 
@@ -107,10 +156,11 @@ if True:
           "{:7.4f} {:7.4f} {:7.4f}"
           .format(ep[0], ep[1], ep[2], ep[3], ep[4], ep[5], sat2id(sat),
                   sig.str(), off[0], off[1], off[2]))
+    """
 
     print()
 
-if True:
+if False:
 
     print("Test Bias-SINEX module")
     print()
