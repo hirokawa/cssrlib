@@ -1,15 +1,14 @@
 from cssrlib.gnss import uGNSS, uSIG, uTYP, rSigRnx, sys2char
 
-
 signals = {}
-signals.update({uGNSS.GPS: [uSIG.L1, uSIG.L2, uSIG.L5]})
-signals.update({uGNSS.GLO: [uSIG.L1, uSIG.L2, uSIG.L3, uSIG.L4, uSIG.L5]})
-signals.update({uGNSS.GAL: [uSIG.L1, uSIG.L5, uSIG.L6, uSIG.L7, uSIG.L8]})
-signals.update({uGNSS.BDS: [uSIG.L1, uSIG.L2, uSIG.L5, uSIG.L6, uSIG.L7,
-                            uSIG.L8]})
-signals.update({uGNSS.QZS: [uSIG.L1, uSIG.L2, uSIG.L5, uSIG.L6]})
-signals.update({uGNSS.SBS: [uSIG.L1, uSIG.L5]})
-signals.update({uGNSS.IRN: [uSIG.L5, uSIG.L9]})
+signals.update({uGNSS.GPS: [uSIG.L1C, uSIG.L2W, uSIG.L5Q]})
+signals.update({uGNSS.GLO: [uSIG.L1P, uSIG.L2C, uSIG.L3X, uSIG.L4A, uSIG.L5B]})
+signals.update({uGNSS.GAL: [uSIG.L1C, uSIG.L5Q, uSIG.L6C, uSIG.L7Q, uSIG.L8X]})
+signals.update({uGNSS.BDS: [uSIG.L1C, uSIG.L2I, uSIG.L5P, uSIG.L6C, uSIG.L7I,
+                            uSIG.L8Q]})
+signals.update({uGNSS.QZS: [uSIG.L1C, uSIG.L2L, uSIG.L5Q, uSIG.L6S]})
+signals.update({uGNSS.SBS: [uSIG.L1C, uSIG.L5Q]})
+signals.update({uGNSS.IRN: [uSIG.L5A, uSIG.L9B]})
 
 for sys, sigs in signals.items():
     for sig in sigs:
@@ -34,7 +33,7 @@ print("<{:s}>".format(sig.__repr__()))
 sig = sig.toAtt()
 print("<{:s}>".format(sig.__repr__()))
 
-sig = sig.toTyp(uTYP.D).toAtt('A')
+sig = sig.toTyp(uTYP.D).toAtt('C')
 print("<{:s}>".format(sig.__repr__()))
 
 print()

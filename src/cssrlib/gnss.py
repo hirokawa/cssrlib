@@ -311,7 +311,7 @@ class rSigRnx():
     def str2sig(self, sys, s):
         """ string to signal code conversion """
 
-        if isinstance(sys, uGNSS):
+        if isinstance(sys, uGNSS) and isinstance(s, str):
             self.sys = sys
         else:
             raise ValueError
@@ -331,14 +331,58 @@ class rSigRnx():
         else:
             raise ValueError
 
+        # Convert frequency ID
+        #
         sig = int(s[1])*100
-        if len(s) == 3:
-            sig += ord(s[2]) - ord('A') + 1
-        self.sig = uSIG(sig)
 
-        if self.sig not in [v.value for v in uSIG] or \
-                self.sig == uSIG.NONE:
-            raise ValueError
+        # Check for valid tracking attribute
+        #
+        if len(s) == 3:
+            if sys == uGNSS.GPS:
+                if (s[1] == '1' and s[2] not in 'CSLXPWYM') or \
+                   (s[2] == '2' and s[2] not in 'CDSLXPWYMN') or \
+                   (s[2] == '5' and s[2] not in 'IQX'):
+                    raise ValueError
+            elif sys == uGNSS.GLO:
+                if (s[1] == '1' and s[2] not in 'CP') or \
+                   (s[1] == '2' and s[2] not in 'CP') or \
+                   (s[1] == '3' and s[2] not in 'IQX') or \
+                   (s[1] == '4' and s[2] not in 'ABX') or \
+                   (s[1] == '6' and s[2] not in 'ABX'):
+                    raise ValueError
+            elif sys == uGNSS.GAL:
+                if (s[1] == '1' and s[2] not in 'ABCXZ') or \
+                   (s[1] == '5' and s[2] not in 'IQX') or \
+                   (s[1] == '6' and s[2] not in 'ABCXZ') or \
+                   (s[1] == '7' and s[2] not in 'IQX') or \
+                   (s[1] == '8' and s[2] not in 'IQX'):
+                    raise ValueError
+            elif sys == uGNSS.SBS:
+                if (s[1] == '1' and s[2] not in 'C') or \
+                   (s[1] == '5' and s[2] not in 'IQX'):
+                    raise ValueError
+            elif sys == uGNSS.QZS:
+                if (s[1] == '1' and s[2] not in 'CESLXZB') or \
+                   (s[1] == '2' and s[2] not in 'SLX') or \
+                   (s[1] == '5' and s[2] not in 'IQXDPZ') or \
+                   (s[1] == '6' and s[2] not in 'SLXEZ'):
+                    raise ValueError
+            elif sys == uGNSS.BDS:
+                if (s[1] == '2' and s[2] not in 'IQX') or \
+                   (s[1] == '1' and s[2] not in 'DPXSLZ') or \
+                   (s[1] == '5' and s[2] not in 'DPX') or \
+                   (s[1] == '7' and s[2] not in 'IQXDPZ') or \
+                   (s[1] == '8' and s[2] not in 'DPX') or \
+                   (s[1] == '6' and s[2] not in 'IQXDPZ'):
+                    raise ValueError
+            elif sys == uGNSS.IRN:
+                if (s[1] == '5' and s[2] not in 'ABCX') or \
+                   (s[1] == '9' and s[2] not in 'ABCX'):
+                    raise ValueError
+
+            sig += ord(s[2]) - ord('A') + 1
+
+        self.sig = uSIG(sig)
 
     def str(self):
         """ signal code to string conversion """
