@@ -921,6 +921,11 @@ def xyz2enu(pos):
     return E
 
 
+def enu2xyz(pos):
+    """ return ENU to ECEF conversion matrix from LLH """
+    return np.array(np.matrix(xyz2enu(pos)).I)
+
+
 def ecef2pos(r):
     """  ECEF to LLH position conversion """
     e2 = rCST.FE_WGS84*(2-rCST.FE_WGS84)
@@ -960,7 +965,7 @@ def pos2ecef(pos, isdeg: bool = False):
 
 
 def ecef2enu(pos, r):
-    """ releative ECEF to ENU conversion """
+    """ relative ECEF to ENU conversion """
     E = xyz2enu(pos)
     e = E@r
     return e
