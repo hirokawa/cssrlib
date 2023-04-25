@@ -8,6 +8,7 @@ Created on Sun Aug 22 21:01:49 2021
 from cssrlib.gnss import Nav, id2sat, char2sys, sat2id
 from cssrlib.gnss import epoch2time, time2epoch, timeadd, timediff, gtime_t
 from cssrlib.gnss import str2time
+from cssrlib.gnss import ecef2enu
 from cssrlib.gnss import rCST, rSigRnx, uGNSS, uTYP, uSIG
 
 from cssrlib.rinex import rnxdec
@@ -455,42 +456,11 @@ class atxdec():
                     var = [float(x) for x in line[8:].split()]
                     pcv.var.update({sig: np.array(var)})
 
-    def satantoff(self, time, rs, sat, sig):
-        """ satellite antenna offset """
-
-        pcv = self.searchpcvs(sat, time)
-
-        # Convert to phase observation code without tracking attribute
-        #
-        sig = sig.toTyp(uTYP.L).toAtt()
-
-        # Select phase-center offset vector
-        #
-        if sig in pcv.off.keys():
-            off = pcv.off[sig]
-        else:
-            return None
-
-        erpv = np.zeros(5)
-        rsun, _, _ = sunmoonpos(gpst2utc(time), erpv, True)
-        r = -rs
-        ez = r/np.linalg.norm(r)
-        r = rsun-rs
-        es = r/np.linalg.norm(r)
-        r = np.cross(ez, es)
-        ey = r/np.linalg.norm(r)
-        ex = np.cross(ey, ez)
-
-        dant = np.zeros(3)
-        for i in range(3):
-            dant[i] = off[0]*ex[i]+off[1]*ey[i]+off[2]*ez[i]
-
-        return dant
-
 
 def searchpcv(pcvs, name, time):
     """ get satellite or receiver antenna pcv """
-    if isinstance(name,int):
+
+    if isinstance(name, int):
         for pcv in pcvs:
             if pcv.sat != name:
                 continue
@@ -514,7 +484,25 @@ def searchpcv(pcvs, name, time):
 
 
 def substSigTx(pcv, sig):
-    """ Substitute frequency band for PCO/PCV selection of transmitting antenna """
+    """
+    Substitute frequency band for PCO/PCV selection of transmitting antenna.
+
+    This function converts a RINEX observation code to a phase observation code
+    without tracking attribute. If the signal is not available in the list of
+    PCOs, a substitution based on system and frequency band is done.
+
+    Parameters
+    ----------
+    pcv : pcv_t
+        Receiver antenna PCV element
+    sig : rRnxSig
+        RINEX signal code
+
+    Returns
+    -------
+    sig : rRnxSig
+        Substituted RINEX signal code
+    """
 
     # Convert to phase observation without tracking attribute
     #
@@ -541,7 +529,25 @@ def substSigTx(pcv, sig):
 
 
 def substSigRx(pcv, sig):
-    """ Substitute frequency band for PCO/PCV selection of receving antenna """
+    """
+    Substitute frequency band for PCO/PCV selection of receving antenna.
+
+    This function converts a RINEX observation code to a phase observation code
+    without tracking attribute. If the signal is not available in the list of
+    PCOs, a substitution based on system and frequency band is done.
+
+    Parameters
+    ----------
+    pcv : pcv_t
+        Receiver antenna PCV element
+    sig : rRnxSig
+        RINEX signal code
+
+    Returns
+    -------
+    sig : rRnxSig
+        Substituted RINEX signal code
+    """
 
     # Convert to phase observation without tracking attribute
     #
@@ -590,67 +596,154 @@ def substSigRx(pcv, sig):
 
     return sig
 
-def antModelTx(nav, e, sigs, sat, time):
-    """ transmitter antenna pco/pcv """
 
-    # Selet satellite antenna
-    #
-    ant_pcv = searchpcv(nav.sat_pcv, sat, time)
+def antModelTx(nav, e, sigs, sat, time, rs):
+    """
+    Range correction for transmitting antenna
 
-    # Elevation angle, zenit angle and zenit angle grid
+    This function computes the range correction for the transmitting antenna
+    from the PCO correction projected on line-of-sight vector as well as the
+    interpolated phase variation correction depending on the zenith angle.
+
+    Parameters
+    ----------
+    nav : Nav()
+        contains the PCO/PCV corrections for rover and base antenna
+    pos : np.array
+        receiver position in ECEF
+    e : np.array
+        line-of-sight vector in ECEF from receiver to satellite
+    sigs : list of rRnxSig
+        RINEX signal codes
+    sat : int
+        satellite number
+    time : gtime_t
+        epoch
+    rs : np.array() of float
+        satellite position in ECEF
+
+    Returns
+    -------
+    dant : np.array of float values
+        range correction for each specified signal
+    """
+
+    # Satellite antenna frame unit vectors in ECEF assuming standard yaw
+    # attitude law
     #
-    za = 90-np.rad2deg(np.arcsin(e[2]))
-    za_t = np.arange(ant_pcv.zen[0], ant_pcv.zen[1]+ant_pcv.zen[2],
-                     ant_pcv.zen[2])
+    erpv = np.zeros(5)
+    rsun, _, _ = sunmoonpos(gpst2utc(time), erpv, True)
+    r = -rs
+    ez = r/np.linalg.norm(r)
+    r = rsun-rs
+    es = r/np.linalg.norm(r)
+    r = np.cross(ez, es)
+    ey = r/np.linalg.norm(r)
+    ex = np.cross(ey, ez)
+
+    # Select satellite antenna
+    #
+    ant = searchpcv(nav.sat_ant, sat, time)
+
+    # Zenit angle and zenit angle grid
+    #
+    za = np.rad2deg(np.arccos(np.dot(ez,-e)))
+    za_t = np.arange(ant.zen[0], ant.zen[1]+ant.zen[2], ant.zen[2])
 
     # Interpolate PCV and map PCO on line-of-sight vector
     #
     dant = np.zeros(len(sigs))
     for i, sig_ in enumerate(sigs):
 
-        sig = substSigTx(ant_pcv, sig_)
+        # Subsititute signal if not available
+        #
+        sig = substSigTx(ant, sig_)
 
-        if sig not in ant_pcv.off or sig not in ant_pcv.var:
+        # Satellite PCO in local antenna frame
+        #
+        off = ant.off[sig]
+
+        # Satellite PCO in ECEF frame
+        #
+        pco_v = np.zeros(3)
+        for j in range(3):
+            pco_v[j] = off[0]*ex[j]+off[1]*ey[j]+off[2]*ez[j]
+
+        # Interpolate PCV and map PCO on line-of-sight vector
+        #
+        if sig not in ant.off or sig not in ant.var:
             dant[i] = None
         else:
-            pcv = np.interp(za, za_t, ant_pcv.var[sig])
-            pco = np.dot(ant_pcv.off[sig], e)
+            pcv = np.interp(za, za_t, ant.var[sig])
+            pco = -np.dot(pco_v, -e)
             dant[i] = (pco+pcv)*1e-3
 
     return dant
 
 
-def antModelRx(nav, e, sigs, rtype=1):
-    """ receiver antenna pco/pcv """
+def antModelRx(nav, pos, e, sigs, rtype=1):
+    """
+    Range correction for receiving antenna
+
+    This function computes the range correction for the receiving antenna
+    from the PCO correction projected on line-of-sight vector as well as the
+    interpolated phase variation correction depending on the zenith angle.
+
+    Parameters
+    ----------
+    nav : Nav()
+        contains the PCO/PCV corrections for rover and base antenna
+    pos : np.array
+        Receiver position in ECEF
+    e : np.array of float
+        Line-of-sight vector in ECEF from receiver to satellite
+    sigs : list of rRnxSig
+        RINEX signal codes
+    rtype : int
+        flag 1 for rover, else for base PCO/PCV
+
+    Returns
+    -------
+    dant : np.array of float
+        Range correction for each specified signal
+    """
+
+    # Convert LOS vector to local antenna frame
+    #
+    e = ecef2enu(pos, e)
 
     # Select rover or base antenna
     #
     if rtype == 1:  # for rover
-        ant_pcv = nav.ant_pcv
+        ant = nav.rcv_ant
     else:  # for base
-        ant_pcv = nav.ant_pcv_b
+        ant = nav.rcv_ant_b
 
     # Elevation angle, zenit angle and zenit angle grid
     #
-    za = 90-np.rad2deg(np.arcsin(e[2]))
-    za_t = np.arange(ant_pcv.zen[0], ant_pcv.zen[1]+ant_pcv.zen[2],
-                     ant_pcv.zen[2])
+    za = np.rad2deg(np.arccos(e[2]))
+    za_t = np.arange(ant.zen[0], ant.zen[1]+ant.zen[2], ant.zen[2])
 
-    # Interpolate PCV and map PCO on line-of-sight vector
+    # Loop over singals
     #
     dant = np.zeros(len(sigs))
     for i, sig_ in enumerate(sigs):
 
-        sig = substSigRx(ant_pcv, sig_)
+        # Subsititute signal if not available
+        #
+        sig = substSigRx(ant, sig_)
 
-        if sig not in ant_pcv.off or sig not in ant_pcv.var:
+        # Interpolate PCV and map PCO on line-of-sight vector
+        #
+        if sig not in ant.off or sig not in ant.var:
             dant[i] = None
         else:
-            pcv = np.interp(za, za_t, ant_pcv.var[sig])
-            pco = -np.dot(ant_pcv.off[sig], e)
+            pcv = np.interp(za, za_t, ant.var[sig])
+            pco = -np.dot(ant.off[sig], e)
             dant[i] = (pco+pcv)*1e-3
 
     return dant
+
 
 leaps_ = [[2017, 1, 1, 0, 0, 0, -18],
           [2015, 7, 1, 0, 0, 0, -17],

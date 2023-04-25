@@ -11,6 +11,7 @@ from cssrlib.gnss import Nav
 from cssrlib.gnss import epoch2time, time2epoch, timeadd
 from cssrlib.gnss import sat2id, id2sat, sys2char
 from cssrlib.gnss import rSigRnx
+from cssrlib.gnss import pos2ecef, enu2xyz
 
 
 bdir = expanduser('~/GNSS_DAT/')
@@ -58,7 +59,7 @@ if True:
     atx = atxdec()
     atx.readpcv(atxfile)
 
-    for prn in ("G01", "R03", "E02", "C22", "J02"):
+    for prn in ("G01", "R03", "C22", "J02", "E02"):
 
         sat = id2sat(prn)
 
@@ -71,7 +72,7 @@ if True:
 
         print("{}".format(sat2id(pcv.sat)))
         for sig, off in pcv.off.items():
-            print("  {} {:3s} PCO  [m] X {:7.4f} Y {:7.4f} Z {:7.4f} \n"
+            print("  {} {:3s} PCO [mm] X {:7.4f} Y {:7.4f} Z {:7.4f} \n"
                   "        PCV [mm] {}"
                   .format(sys2char(sig.sys), sig.str(),
                           off[0], off[1], off[2],
@@ -83,7 +84,7 @@ if True:
     antr = "{:16s}{:4s}".format("JAVRINGANT_DM", "SCIS")
     antb = "{:16s}{:4s}".format("TRM59800.80", "NONE")
 
-    for ant in (antr, antb):
+    for ant in (antb, antr):
 
         pcv = searchpcv(atx.pcvr, ant, time)
         if pcv is None:
@@ -92,71 +93,80 @@ if True:
 
         print("{:20s}".format(pcv.type))
         for sig, off in pcv.off.items():
-            print("  {} {:3s} PCO  [m] E {:7.4f} N {:7.4f} U {:7.4f} \n"
+            print("  {} {:3s} PCO [mm] E {:7.4f} N {:7.4f} U {:7.4f} \n"
                   "        PCV [mm] {}"
                   .format(sys2char(sig.sys), sig.str(),
                           off[0], off[1], off[2],
                           " ".join(["{:6.2f}".format(v) for v in pcv.var[sig]])))
         print()
 
-    print("Test antenna module")
+    print("Test antenna modules")
     print()
 
     nav = Nav()
-    sp = peph()
-
-    nav = sp.parse_sp3(orbfile, nav)
 
     # Store PCV/PCO information for satellites and receiver
     #
-    nav.sat_pcv = atx.pcvs
-    nav.ant_pcv = searchpcv(atx.pcvr, antr, time)
-    nav.ant_pcv_b = searchpcv(atx.pcvr, antb, time)
+    nav.sat_ant = atx.pcvs
+    nav.rcv_ant = searchpcv(atx.pcvr, antr, time)
+    nav.rcv_ant_b = searchpcv(atx.pcvr, antb, time)
+
+    # Satellite antenna model
+    #
+
+    # Receiver position
+    #
+    lat = np.deg2rad(45)
+    lon = np.deg2rad(11)
+    hgt = 0
+
+    rr = pos2ecef(np.array([lat, lon, hgt]))
 
     # LOS vector on local ENU frame
     #
     az = np.deg2rad(45)
-    el = np.deg2rad(90)
+    el = np.deg2rad(45)
     e = np.array([np.sin(az)*np.cos(el),
                   np.cos(az)*np.cos(el),
                   np.sin(el)])
 
-    sat = id2sat("E02")
-    sigs = [rSigRnx("EC1C"), rSigRnx("EC5Q")]
-    dant = antModelRx(nav, e, sigs)
-
-    txt = "{:20s}".format(antr)
-    for i, sig in enumerate(sigs):
-        txt += " {} {:6.3f} m".format(sig, dant[i])
-    print(txt)
-
-    # LOS vector in local satellite antenna frame
+    # Convert from ENU to ECEF
     #
-    az = np.deg2rad(45)
-    el = np.deg2rad(90)
-    e = np.array([np.sin(az)*np.cos(el),
-                  np.cos(az)*np.cos(el),
-                  np.sin(el)])
+    A = enu2xyz(rr)
+    e = A@e
 
     sat = id2sat("E02")
     sigs = [rSigRnx("EC1C"), rSigRnx("EC5Q")]
-    dant = antModelTx(nav, e, sigs, sat, time)
+    dant = antModelRx(nav, rr, e, sigs)
 
-    txt = "{:20s}".format(sat2id(sat))
+    txt = "{:20s}  (El {:5.2f} deg)  ".format(antr, np.rad2deg(el))
     for i, sig in enumerate(sigs):
         txt += " {} {:6.3f} m".format(sig, dant[i])
     print(txt)
 
-    """
-    rs, dts, var = sp.peph2pos(time, sat, nav)
-    off = atx.satantoff(time, rs[0:3], sat, sig)
+    # Satellite antenna model
+    #
 
-    ep = time2epoch(time)
-    print("{:4d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}  {:s}  {:s} "
-          "{:7.4f} {:7.4f} {:7.4f}"
-          .format(ep[0], ep[1], ep[2], ep[3], ep[4], ep[5], sat2id(sat),
-                  sig.str(), off[0], off[1], off[2]))
-    """
+    # LOS vector in local antenna frame
+    #
+    az = np.deg2rad(0)
+    el = np.deg2rad(0)
+    e = np.array([np.sin(az)*np.cos(el),
+                  np.cos(az)*np.cos(el),
+                  np.sin(el)])
+
+    # Satellite position
+    #
+    rs = rr + e*20180e3
+
+    sat = id2sat("E02")
+    sigs = [rSigRnx("EC1C"), rSigRnx("EC5Q")]
+    dant = antModelTx(nav, e, sigs, sat, time, rs)
+
+    txt = "{:20s}  (El {:5.2f} deg)  ".format(sat2id(sat), np.rad2deg(el))
+    for i, sig in enumerate(sigs):
+        txt += " {} {:6.3f} m".format(sig, dant[i])
+    print(txt)
 
     print()
 
