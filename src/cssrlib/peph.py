@@ -392,7 +392,6 @@ class pcv_t():
         self.var = {}
         self.zen = [0, 0, 0]
         self.nv = 0
-        self.dazi = 0.0
 
 
 class atxdec():
@@ -442,7 +441,7 @@ class atxdec():
                 elif "END OF FREQUENCY" in line[60:]:
                     sys = uGNSS.NONE
                     sig = rSigRnx()
-                elif "NORTH / EAST / UP" in line[60:]:
+                elif "NORTH / EAST / UP" in line[60:]:  # unit [mm]
                     neu = [float(x) for x in line[3:30].split()]
                     pcv.off.update({sig: np.zeros(3)})
                     # For satellite use XYZ, for receiver use ENU
@@ -452,9 +451,7 @@ class atxdec():
                 elif "ZEN1 / ZEN2 / DZEN" in line[60:]:
                     pcv.zen = [float(x) for x in line[3:20].split()]
                     pcv.nv = int((pcv.zen[1]-pcv.zen[0]+1)/pcv.zen[2])
-                elif "DAZI" in line[60:]:
-                    pcv.dazi = float(line[3:8])
-                elif "NOAZI" in line[3:8]:
+                elif "NOAZI" in line[3:8]:  # unit [mm]
                     var = [float(x) for x in line[8:].split()]
                     pcv.var.update({sig: np.array(var)})
 
