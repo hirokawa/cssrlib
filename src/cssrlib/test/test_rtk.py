@@ -7,6 +7,8 @@ import numpy as np
 import cssrlib.rinex as rn
 import cssrlib.gnss as gn
 from cssrlib.rtk import rtkinit, relpos
+from cssrlib.peph import searchpcv, atxdec
+from os.path import expanduser
 
 bdir = '../data/'
 navfile = bdir+'SEPT078M.21P'
@@ -16,17 +18,54 @@ basefile = bdir+'3034078M1.21O'
 xyz_ref = [-3962108.673,   3381309.574,   3668678.638]
 pos_ref = gn.ecef2pos(xyz_ref)
 
+sigs_b = [rn.rSigRnx("GC1C"), rn.rSigRnx("EC1X"),
+          rn.rSigRnx("GC2W"), rn.rSigRnx("EC5X"),
+          rn.rSigRnx("GL1C"), rn.rSigRnx("EL1X"),
+          rn.rSigRnx("GL2W"), rn.rSigRnx("EL5X")]
+
+sigs = [rn.rSigRnx("GC1C"), rn.rSigRnx("EC1C"),
+        rn.rSigRnx("GC2W"), rn.rSigRnx("EC5Q"),
+        rn.rSigRnx("GL1C"), rn.rSigRnx("EL1C"),
+        rn.rSigRnx("GL2W"), rn.rSigRnx("EL5Q")]
+
 # rover
 dec = rn.rnxdec()
+dec.setSignals(sigs)
+
 nav = gn.Nav()
 dec.decode_nav(navfile, nav)
 
 # base
 decb = rn.rnxdec()
+decb.setSignals(sigs_b)
+
 decb.decode_obsh(basefile)
 dec.decode_obsh(obsfile)
 
 nep = 60
+#nep = 45
+
+time = gn.epoch2time([2021, 3, 19, 12, 0, 0])
+
+if True:
+
+    bdir = expanduser('~/GNSS_DAT/')
+    atxfile = bdir+"IGS/ANTEX/igs14.atx"
+    
+    atx = atxdec()
+    atx.readpcv(atxfile)
+    
+    antr = "{:16s}{:4s}".format("JAVRINGANT_DM", "SCIS")
+    antb = "{:16s}{:4s}".format("TRM59800.80", "NONE")
+
+    # Store PCV/PCO information for satellites and receiver
+    #
+    nav.sat_ant = atx.pcvs
+    nav.rcv_ant = searchpcv(atx.pcvr, antr, time)
+    nav.rcv_ant_b = searchpcv(atx.pcvr, antb, time)
+    nav.sig_tab = dec.sig_tab
+    nav.sig_tab_b = decb.sig_tab
+
 
 # GSI 3034 fujisawa
 nav.rb = [-3959400.631, 3385704.533, 3667523.111]

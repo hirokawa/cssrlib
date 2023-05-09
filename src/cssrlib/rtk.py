@@ -9,6 +9,8 @@ from cssrlib.ephemeris import satposs
 from cssrlib.ppp import tidedisp
 from cssrlib.mlambda import mlambda
 
+from cssrlib.peph import searchpcv, antModelRx, antModelTx
+
 VAR_HOLDAMB = 0.001
 
 
@@ -94,18 +96,24 @@ def zdres(nav, obs, rs, dts, svh, rr, rtype=1):
         mapfh, _ = gn.tropmapf(obs.t, pos, el[i])
         r += mapfh*zhd
 
-        dant = gn.antmodel(nav, el[i], nav.nf, rtype)
-
+        #dant = gn.antmodel(nav, el[i], nav.nf, rtype)
+        if rtype == 1:
+            sigs = nav.sig_tab[sys][gn.uTYP.C]
+        else:
+            sigs = nav.sig_tab_b[sys][gn.uTYP.C]
+        
+        dant = antModelRx(nav, rr_, e[i, :], sigs, rtype)
+        
         for f in range(nf):
             j = nav.obs_idx[f][sys]
-            if obs.L[i, j] == 0.0:
+            if obs.L[i, f] == 0.0:
                 y[i, f] = 0.0
             else:
-                y[i, f] = obs.L[i, j]*_c/nav.freq[j]-r-dant[f]
-            if obs.P[i, j] == 0.0:
+                y[i, f] = obs.L[i, f]*_c/nav.freq[j]-r-dant[f]
+            if obs.P[i, f] == 0.0:
                 y[i, f+nf] = 0.0
             else:
-                y[i, f+nf] = obs.P[i, j]-r-dant[f]
+                y[i, f+nf] = obs.P[i, f]-r-dant[f]
     return y, e, el
 
 
@@ -383,7 +391,7 @@ def udstate(nav, obs, obsb, iu, ir):
             if sys[i] not in nav.gnss_t:
                 continue
             j = nav.obs_idx[f][sys[i]]
-            if obsb.lli[ir[i], j] & 1 == 0 and obs.lli[iu[i], j] & 1 == 0:
+            if obsb.lli[ir[i], f] & 1 == 0 and obs.lli[iu[i], f] & 1 == 0:
                 continue
             initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
         # bias
@@ -395,8 +403,8 @@ def udstate(nav, obs, obsb, iu, ir):
                 continue
             j = nav.obs_idx[f][sys[i]]
             freq = nav.obs_freq[f][sys[i]]
-            cp = obs.L[iu[i], j]-obsb.L[ir[i], j]
-            pr = obs.P[iu[i], j]-obsb.P[ir[i], j]
+            cp = obs.L[iu[i], f]-obsb.L[ir[i], f]
+            pr = obs.P[iu[i], f]-obsb.P[ir[i], f]
             bias[i] = cp-pr*freq/gn.rCST.CLIGHT
             amb = nav.x[IB(sat[i], f, nav.na)]
             if amb != 0.0:
@@ -425,9 +433,9 @@ def selsat(nav, obs, obsb, elb):
         sys, _ = gn.sat2prn(sat)
         j0 = nav.obs_idx[0][sys]
         j1 = nav.obs_idx[1][sys]
-        if obs.P[k, j0] == 0.0 or obs.P[k, j1] == 0.0 or \
-           obs.L[k, j0] == 0.0 or obs.L[k, j1] == 0.0 or \
-           obs.lli[k, j0] > 0 or obs.lli[k, j1] > 0:
+        if obs.P[k, 0] == 0.0 or obs.P[k, 1] == 0.0 or \
+           obs.L[k, 0] == 0.0 or obs.L[k, 1] == 0.0 or \
+           obs.lli[k, 0] > 0 or obs.lli[k, 1] > 0:
             continue
         idx_u.append(k)
 
@@ -437,9 +445,9 @@ def selsat(nav, obs, obsb, elb):
         sys, _ = gn.sat2prn(sat)
         j0 = nav.obs_idx[0][sys]
         j1 = nav.obs_idx[1][sys]
-        if obsb.P[k, j0] == 0.0 or obsb.P[k, j1] == 0.0 or \
-           obsb.L[k, j0] == 0.0 or obsb.L[k, j1] == 0.0 or \
-           obsb.lli[k, j0] > 0 or obsb.lli[k, j1] > 0 or \
+        if obsb.P[k, 0] == 0.0 or obsb.P[k, 1] == 0.0 or \
+           obsb.L[k, 0] == 0.0 or obsb.L[k, 1] == 0.0 or \
+           obsb.lli[k, 0] > 0 or obsb.lli[k, 1] > 0 or \
            elb[k] < nav.elmin:
             continue
         idx_r.append(k)

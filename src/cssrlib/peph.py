@@ -5,11 +5,16 @@ Created on Sun Aug 22 21:01:49 2021
 @author: ruihi
 """
 
-from cssrlib.gnss import Nav, epoch2time, time2epoch, timeadd, \
-    id2sat, timediff, gtime_t, uGNSS, str2time, sat2prn, rCST, rSIG
+from cssrlib.gnss import Nav, id2sat, char2sys, sat2id
+from cssrlib.gnss import epoch2time, time2epoch, timeadd, timediff, gtime_t
+from cssrlib.gnss import str2time
+from cssrlib.gnss import ecef2enu
+from cssrlib.gnss import rCST, rSigRnx, uGNSS, uTYP, uSIG
+
 from cssrlib.rinex import rnxdec
 import numpy as np
 from math import pow, sin, cos
+import gzip
 
 NMAX = 10
 MAXDTE = 900.0
@@ -323,9 +328,7 @@ class peph:
         return dts, varc
 
     def peph2pos(self, time, sat, nav, var=False):
-        """
-        Satellite position and clock offset wrt to APC!!
-        """
+        """ Satellite position, velocity and clock offset """
 
         tt = 1e-3
 
@@ -333,35 +336,42 @@ class peph:
         #
         rss, dtss, vare, varc = self.pephpos(time, sat, nav, var, var)
         if rss is None:
-            return None, None, (False, False)
+            return None, None, False
 
         # Satellite clock based on Clock-RINEX
         #
         if nav.nc >= 2:
             dtss, varc = self.pephclk(time, sat, nav, var)
             if dtss is None:
-                return None, False
-        time_tt = timeadd(time, tt)
+                return None, None, False
 
         # Satellite position based on SP3 at epoch plus delta t
         #
+        time_tt = timeadd(time, tt)
         rst, dtst, _, _ = self.pephpos(time_tt, sat, nav)
         if rss is None:
-            return None, None, (False, False)
+            return None, None, False
+
+        # Get clock offset from Clock-RINEX
+        #
         if nav.nc >= 2:
             dtst, _ = self.pephclk(time_tt, sat, nav)
             if dtst is None:
-                return None, False
+                return None, None, False
 
-        dant = satantoff(time, rss, sat, nav)
+        # Satellite position and velocity (from differentiation)
+        #
         rs = np.zeros(6)
         dts = np.zeros(2)
 
-        rs[0:3] = rss + dant
+        rs[0:3] = rss
         rs[3:6] = (rst-rss)/tt
 
+        # Apply relativistic correction to clock offset, compute clock rate from
+        # differentiation
+        #
         if dtss[0] != 0.0:
-            dts[0] = dtss[0]-2.0*(rs[0:3]@rs[3:6])/(rCST.CLIGHT**2)
+            dts[0] = dtss[0] - 2.0*(rs[0:3]@rs[3:6])/(rCST.CLIGHT**2)
             dts[1] = (dtst[0]-dtss[0])/tt
         else:
             dts = dtss
@@ -372,9 +382,6 @@ class peph:
         return rs, dts, var
 
 
-NFREQ = 3
-
-
 class pcv_t():
     def __init__(self):
         self.sat = 0
@@ -382,85 +389,360 @@ class pcv_t():
         self.type = ''
         self.ts = gtime_t()
         self.te = gtime_t()
-        self.off = np.zeros((NFREQ, 3))
-        self.var = np.zeros((NFREQ, 19))
+        self.off = {}
+        self.var = {}
         self.zen = [0, 0, 0]
         self.nv = 0
-        self.dazi = 0.0
 
 
-def readpcv(fname):
-    pcvs = []
-    state = False
-    freq = 0
-    freqs = [1, 2, 5, 6, 7, 8, 0]
+class atxdec():
+    """ decoder for ANTEX files """
 
-    with open(fname, "r") as fh:
-        for line in fh:
-            if len(line) < 60 or "COMMENT" in line[60:]:
-                continue
-            if "START OF ANTENNA" in line[60:]:
-                pcv = pcv_t()
-                state = True
-            elif "END OF ANTENNA" in line[60:]:
-                pcvs.append(pcv)
-                state = False
-            if not state:
-                continue
-            if "TYPE / SERIAL NO" in line[60:]:
-                pcv.type = line[0:20]
-                pcv.code = line[20:40]
-                if pcv.code[3:11] == "        ":
-                    pcv.sat = id2sat(pcv.code)
-            elif "VALID FROM" in line[60:]:
-                pcv.ts = str2time(line, 2, 40)
-            elif "VALID UNTIL" in line[60:]:
-                pcv.te = str2time(line, 2, 40)
-            elif "START OF FREQUENCY" in line[60:]:
-                f = int(line[4:6])
-                for i in range(NFREQ):
-                    if freqs[i] == f:
-                        break
-                if i < NFREQ:
-                    freq = i+1
-            elif "END OF FREQUENCY" in line[60:]:
-                freq = 0
-            elif "NORTH / EAST / UP" in line[60:]:
-                if freq < 1 or NFREQ < freq:
+    def __init__(self):
+        self.pcvs = []
+        self.pcvr = []
+
+    def readpcv(self, fname):
+        """ read ANTEX file """
+
+        state = False
+        sys = uGNSS.NONE
+        sig = rSigRnx()
+        pcv = pcv_t()
+
+        with open(fname, "r") as fh:
+            for line in fh:
+                if len(line) < 60 or "COMMENT" in line[60:]:
                     continue
-                neu = [float(x)*1e-3 for x in line[3:30].split()]
-                pcv.off[freq-1, 0] = neu[0] if pcv.sat > 0 else neu[1]
-                pcv.off[freq-1, 1] = neu[1] if pcv.sat > 0 else neu[0]
-                pcv.off[freq-1, 2] = neu[2]
-            elif "ZEN1 / ZEN2 / DZEN" in line[60:]:
-                pcv.zen = [float(x) for x in line[3:20].split()]
-                pcv.nv = int((pcv.zen[1]-pcv.zen[0]+1)/pcv.zen[2])
-            elif "DAZI" in line[60:]:
-                pcv.dazi = float(line[3:8])
-            elif "NOAZI" in line[3:8]:
-                if freq < 1 or NFREQ < freq:
+                if "START OF ANTENNA" in line[60:]:
+                    pcv = pcv_t()
+                    state = True
+                elif "END OF ANTENNA" in line[60:]:
+                    if pcv.sat is None:
+                        self.pcvr.append(pcv)
+                    else:
+                        self.pcvs.append(pcv)
+                    state = False
+                if not state:
                     continue
-                var = [float(x) for x in line[8:].split()]
-                n = min(len(var), 19)
-                if n < 19:
-                    pcv.var[freq-1, n:] = var[n-1]
-                pcv.var[freq-1, :n] = var[0:n]
+                if "TYPE / SERIAL NO" in line[60:]:
+                    pcv.type = line[0:20]
+                    pcv.code = line[20:40].strip()
+                    if not pcv.code:
+                        pcv.sat = None
+                    else:
+                        pcv.sat = id2sat(pcv.code)
+                elif "VALID FROM" in line[60:]:
+                    pcv.ts = str2time(line, 2, 40)
+                elif "VALID UNTIL" in line[60:]:
+                    pcv.te = str2time(line, 2, 40)
+                elif "START OF FREQUENCY" in line[60:]:
+                    sys = char2sys(line[3])
+                    sig = rSigRnx(sys, 'L'+line[5])
+                elif "END OF FREQUENCY" in line[60:]:
+                    sys = uGNSS.NONE
+                    sig = rSigRnx()
+                elif "NORTH / EAST / UP" in line[60:]:  # unit [mm]
+                    neu = [float(x) for x in line[3:30].split()]
+                    pcv.off.update({sig: np.zeros(3)})
+                    # For satellite use XYZ, for receiver use ENU
+                    pcv.off[sig][0] = neu[0] if pcv.sat is not None else neu[1]
+                    pcv.off[sig][1] = neu[1] if pcv.sat is not None else neu[0]
+                    pcv.off[sig][2] = neu[2]
+                elif "ZEN1 / ZEN2 / DZEN" in line[60:]:
+                    pcv.zen = [float(x) for x in line[3:20].split()]
+                    pcv.nv = int((pcv.zen[1]-pcv.zen[0]+1)/pcv.zen[2])
+                elif "NOAZI" in line[3:8]:  # unit [mm]
+                    var = [float(x) for x in line[8:].split()]
+                    pcv.var.update({sig: np.array(var)})
 
-    return pcvs
+
+def searchpcv(pcvs, name, time):
+    """ get satellite or receiver antenna pcv """
+
+    if isinstance(name, int):
+        for pcv in pcvs:
+            if pcv.sat != name:
+                continue
+            if pcv.ts.time != 0 and timediff(pcv.ts, time) > 0.0:
+                continue
+            if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
+                continue
+            return pcv
+    else:
+        for pcv in pcvs:
+            if pcv.type != name:
+                continue
+            if pcv.ts.time != 0 and timediff(pcv.ts, time) > 0.0:
+                continue
+            if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
+                continue
+            return pcv
+        return None
+
+    return None
 
 
-def searchpcv(sat, time, pcvs):
-    n = len(pcvs)
-    for i in range(n):
-        pcv = pcvs[i]
-        if pcv.sat != sat:
-            continue
-        if pcv.ts.time != 0 and timediff(pcv.ts, time) > 0.0:
-            continue
-        if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
-            continue
-        return pcv
-    return False
+def substSigTx(pcv, sig):
+    """
+    Substitute frequency band for PCO/PCV selection of transmitting antenna.
+
+    This function converts a RINEX observation code to a phase observation code
+    without tracking attribute. If the signal is not available in the list of
+    PCOs, a substitution based on system and frequency band is done.
+
+    Parameters
+    ----------
+    pcv : pcv_t
+        Receiver antenna PCV element
+    sig : rRnxSig
+        RINEX signal code
+
+    Returns
+    -------
+    sig : rRnxSig
+        Substituted RINEX signal code
+    """
+
+    # Convert to phase observation without tracking attribute
+    #
+    sig = sig.toTyp(uTYP.L).toAtt()
+
+    # Use directly if an corresponsing offset exists
+    #
+    if sig in pcv.off:
+        return sig
+
+    # Substitute if signal does not exist
+    #
+    if sig.sys == uGNSS.GPS:
+        if sig.sig == uSIG.L5:
+            sig = rSigRnx(sig.sys, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.GLO:
+        if sig.sig == uSIG.L3:
+            sig = rSigRnx(sig.sys, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.BDS:
+        if sig.sig == uSIG.L8:  # BDS-3 Ba+b
+            sig = rSigRnx(sig.sys, sig.typ, uSIG.L5)
+
+    return sig
+
+
+def substSigRx(pcv, sig):
+    """
+    Substitute frequency band for PCO/PCV selection of receving antenna.
+
+    This function converts a RINEX observation code to a phase observation code
+    without tracking attribute. If the signal is not available in the list of
+    PCOs, a substitution based on system and frequency band is done.
+
+    Parameters
+    ----------
+    pcv : pcv_t
+        Receiver antenna PCV element
+    sig : rRnxSig
+        RINEX signal code
+
+    Returns
+    -------
+    sig : rRnxSig
+        Substituted RINEX signal code
+    """
+
+    # Convert to phase observation without tracking attribute
+    #
+    sig = sig.toTyp(uTYP.L).toAtt()
+
+    # Use directly if an corresponsing offset exists
+    #
+    if sig in pcv.off:
+        return sig
+
+    # Substitute if signal does not exist
+    #
+    if sig.sys == uGNSS.GPS:
+        if sig.sig == uSIG.L5:
+            sig = rSigRnx(sig.sys, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.GLO:
+        if sig.sig == uSIG.L1:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L1)
+        elif sig.sig == uSIG.L2 or sig.sig == uSIG.L3:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.GAL:
+        if sig.sig == uSIG.L1:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L1)
+        elif sig.sig == uSIG.L5 or sig.sig == uSIG.L6 or \
+                sig.sig == uSIG.L7 or sig.sig == uSIG.L8:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.BDS:
+        if sig.sig == uSIG.L1:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L1)
+        elif sig.sig == uSIG.L5 or sig.sig == uSIG.L6 or \
+                sig.sig == uSIG.L7 or sig.sig == uSIG.L8:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.QZS:
+        if sig.sig == uSIG.L1:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L1)
+        elif sig.sig == uSIG.L2 or sig.sig == uSIG.L5 or sig.sig == uSIG.L6:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.IRN:
+        if sig.sig == uSIG.L5:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L2)
+    elif sig.sys == uGNSS.SBS:
+        if sig.sig == uSIG.L1:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L1)
+        elif sig.sig == uSIG.L5:
+            sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L2)
+
+    return sig
+
+
+def antModelTx(nav, e, sigs, sat, time, rs):
+    """
+    Range correction for transmitting antenna
+
+    This function computes the range correction for the transmitting antenna
+    from the PCO correction projected on line-of-sight vector as well as the
+    interpolated phase variation correction depending on the zenith angle.
+
+    Parameters
+    ----------
+    nav : Nav()
+        contains the PCO/PCV corrections for rover and base antenna
+    pos : np.array
+        receiver position in ECEF
+    e : np.array
+        line-of-sight vector in ECEF from receiver to satellite
+    sigs : list of rRnxSig
+        RINEX signal codes
+    sat : int
+        satellite number
+    time : gtime_t
+        epoch
+    rs : np.array() of float
+        satellite position in ECEF
+
+    Returns
+    -------
+    dant : np.array of float values
+        range correction for each specified signal
+    """
+
+    # Satellite antenna frame unit vectors in ECEF assuming standard yaw
+    # attitude law
+    #
+    erpv = np.zeros(5)
+    rsun, _, _ = sunmoonpos(gpst2utc(time), erpv, True)
+    r = -rs
+    ez = r/np.linalg.norm(r)
+    r = rsun-rs
+    es = r/np.linalg.norm(r)
+    r = np.cross(ez, es)
+    ey = r/np.linalg.norm(r)
+    ex = np.cross(ey, ez)
+
+    # Select satellite antenna
+    #
+    ant = searchpcv(nav.sat_ant, sat, time)
+
+    # Zenit angle and zenit angle grid
+    #
+    za = np.rad2deg(np.arccos(np.dot(ez,-e)))
+    za_t = np.arange(ant.zen[0], ant.zen[1]+ant.zen[2], ant.zen[2])
+
+    # Interpolate PCV and map PCO on line-of-sight vector
+    #
+    dant = np.zeros(len(sigs))
+    for i, sig_ in enumerate(sigs):
+
+        # Subsititute signal if not available
+        #
+        sig = substSigTx(ant, sig_)
+
+        # Satellite PCO in local antenna frame
+        #
+        off = ant.off[sig]
+
+        # Satellite PCO in ECEF frame
+        #
+        pco_v = np.zeros(3)
+        for j in range(3):
+            pco_v[j] = off[0]*ex[j]+off[1]*ey[j]+off[2]*ez[j]
+
+        # Interpolate PCV and map PCO on line-of-sight vector
+        #
+        if sig not in ant.off or sig not in ant.var:
+            dant[i] = None
+        else:
+            pcv = np.interp(za, za_t, ant.var[sig])
+            pco = -np.dot(pco_v, -e)
+            dant[i] = (pco+pcv)*1e-3
+
+    return dant
+
+
+def antModelRx(nav, pos, e, sigs, rtype=1):
+    """
+    Range correction for receiving antenna
+
+    This function computes the range correction for the receiving antenna
+    from the PCO correction projected on line-of-sight vector as well as the
+    interpolated phase variation correction depending on the zenith angle.
+
+    Parameters
+    ----------
+    nav : Nav()
+        contains the PCO/PCV corrections for rover and base antenna
+    pos : np.array
+        Receiver position in ECEF
+    e : np.array of float
+        Line-of-sight vector in ECEF from receiver to satellite
+    sigs : list of rRnxSig
+        RINEX signal codes
+    rtype : int
+        flag 1 for rover, else for base PCO/PCV
+
+    Returns
+    -------
+    dant : np.array of float
+        Range correction for each specified signal
+    """
+
+    # Convert LOS vector to local antenna frame
+    #
+    e = ecef2enu(pos, e)
+
+    # Select rover or base antenna
+    #
+    if rtype == 1:  # for rover
+        ant = nav.rcv_ant
+    else:  # for base
+        ant = nav.rcv_ant_b
+
+    # Elevation angle, zenit angle and zenit angle grid
+    #
+    za = np.rad2deg(np.arccos(e[2]))
+    za_t = np.arange(ant.zen[0], ant.zen[1]+ant.zen[2], ant.zen[2])
+
+    # Loop over singals
+    #
+    dant = np.zeros(len(sigs))
+    for i, sig_ in enumerate(sigs):
+
+        # Subsititute signal if not available
+        #
+        sig = substSigRx(ant, sig_)
+
+        # Interpolate PCV and map PCO on line-of-sight vector
+        #
+        if sig not in ant.off or sig not in ant.var:
+            dant[i] = None
+        else:
+            pcv = np.interp(za, za_t, ant.var[sig])
+            pco = -np.dot(ant.off[sig], e)
+            dant[i] = (pco+pcv)*1e-3
+
+    return dant
 
 
 leaps_ = [[2017, 1, 1, 0, 0, 0, -18],
@@ -750,53 +1032,14 @@ def sunmoonpos(tutc, erpv, rsun=False, rmoon=False, gmst=False):
     return rsun, rmoon, gmst
 
 
-def satantoff(time, rs, sat, nav):
-    pcv = searchpcv(sat, time, nav.pcvs)
-    dant = np.zeros(3)
-    erpv = np.zeros(5)
-    rsun, _, _ = sunmoonpos(gpst2utc(time), erpv, True)
-    r = -rs
-    ez = r/np.linalg.norm(r)
-    r = rsun-rs
-    es = r/np.linalg.norm(r)
-    r = np.cross(ez, es)
-    ey = r/np.linalg.norm(r)
-    ex = np.cross(ey, ez)
-
-    sys, _ = sat2prn(sat)
-    if sys == uGNSS.GPS or sys == uGNSS.QZS:
-        freq = [rCST.FREQ1, rCST.FREQ2]
-    # elif sys==uGNSS.GLO:
-        #freq = [sat2freq(sat,CODE_L1C,nav)]
-    elif sys == uGNSS.GAL:
-        freq = [rCST.FREQ1, rCST.FREQ7]
-    elif sys == uGNSS.BDS:
-        freq = [rCST.FREQ1_BDS, rCST.FREQ2_BDS]
-    elif sys == uGNSS.IRN:
-        freq = [rCST.FREQ5, rCST.FREQ9]
-
-    den = freq[0]**2-freq[1]**2
-    c1 = freq[0]**2/den
-    c2 = -freq[1]**2/den
-
-    for i in range(3):
-        dant1 = pcv.off[0][0]*ex[i]+pcv.off[0][1]*ey[i]+pcv.off[0][2]*ez[i]
-        dant2 = pcv.off[1][0]*ex[i]+pcv.off[1][1]*ey[i]+pcv.off[1][2]*ez[i]
-        dant[i] = c1*dant1+c2*dant2
-
-    return dant
-
-
 class bias_t():
-    def __init__(self, sat: int, tst: gtime_t, ted: gtime_t, type1, code1,
-                 type2=0, code2=0, bias=0.0, std=0.0, svn=0):
+    def __init__(self, sat: int, tst: gtime_t, ted: gtime_t, sig1: rSigRnx,
+                 sig2=rSigRnx(), bias=0.0, std=0.0, svn=0):
         self.sat = sat
         self.tst = tst
         self.ted = ted
-        self.type1 = type1
-        self.code1 = code1
-        self.type2 = type2
-        self.code2 = code2
+        self.sig1 = sig1
+        self.sig2 = sig2
         self.bias = bias
         self.std = std
         self.svn = svn
@@ -804,25 +1047,8 @@ class bias_t():
 
 class biasdec():
     def __init__(self):
-        self.gnss_tbl = {'G': uGNSS.GPS, 'E': uGNSS.GAL, 'J': uGNSS.QZS}
-        self.sig_tbl = {'1C': rSIG.L1C, '1X': rSIG.L1X, '1W': rSIG.L1W,
-                        '2W': rSIG.L2W, '2L': rSIG.L2L, '2X': rSIG.L2X,
-                        '5Q': rSIG.L5Q, '5X': rSIG.L5X, '7Q': rSIG.L7Q,
-                        '7X': rSIG.L7X}
         self.dcb = []
         self.osb = []
-
-    def sig2code(self, sig):
-        sig_t = {'C': 0, 'L': 1}
-        if sig[0] in sig_t:
-            type_ = sig_t[sig[0]]
-        else:
-            type_ = -1
-        if sig[1:3] in self.sig_tbl:
-            code = self.sig_tbl[sig[1:3]]
-        else:
-            code = -1
-        return type_, code
 
     def doy2time(self, ep):
         """ calculate time from doy """
@@ -835,15 +1061,12 @@ class biasdec():
         return gtime_t(days*86400+sec)
 
     def getdcb(self, sat, time, sig):
+        """ retrieve DCB based on satellite, epoch and signal code """
         bias, std, bcode = None, None, None
-
-        type,code = self.sig2code(sig)
-        if type==-1 or code==-1:
-            return bias, std, bcode
 
         for dcb in self.dcb:
             if dcb.sat == sat and \
-                    dcb.type2 == type and dcb.code2 == code and \
+                    dcb.sig2 == sig and \
                     timediff(time, dcb.tst) >= 0.0 and \
                     timediff(time, dcb.ted) < 0.0:
                 bias = dcb.bias
@@ -854,15 +1077,13 @@ class biasdec():
         return bias, std, bcode
 
     def getosb(self, sat, time, sig):
+        """ retrieve OSB based on satellite, epoch and signal code """
         bias, std = None, None
 
-        type,code = self.sig2code(sig)
-        if type==-1 or code==-1:
-            return bias, std
-
         for osb in self.osb:
+
             if osb.sat == sat and \
-                    osb.type1 == type and osb.code1 == code and \
+                    osb.sig1 == sig and \
                     timediff(time, osb.tst) >= 0.0 and \
                     timediff(time, osb.ted) < 0.0:
                 bias = osb.bias
@@ -889,13 +1110,15 @@ class biasdec():
                         continue
 
                     # Differential Signal Bias
+
+                    sys = char2sys(line[6])
                     svn = int(line[7:10])
                     prn = line[11:14]
                     sat = id2sat(prn)
-                    obs1 = line[25:29]
-                    obs2 = line[30:34]
-                    type1, code1 = self.sig2code(obs1)
-                    type2, code2 = self.sig2code(obs2)
+
+                    sig1 = rSigRnx(sys, line[25:28])
+                    sig2 = rSigRnx(sys, line[30:33])
+
                     # year:doy:sec
                     ep1 = [int(line[35:39]), int(
                         line[40:43]), int(line[44:49])]
@@ -904,26 +1127,25 @@ class biasdec():
                     tst = self.doy2time(ep1)
                     ted = self.doy2time(ep2)
                     unit = line[65:69]
-                    if type1 != type2:
-                        print("format error: type1!=type2")
+
+                    if sig1.typ != sig2.typ:
+                        print("format error: different type of sig1 and sig2")
                         return -1
-                    if (type1 == 0 and unit[0:2] != 'ns') or (type1 == 1 and unit[0:3] != 'cyc'):
+                    if (sig1.typ == uTYP.C and unit[0:2] != 'ns') or \
+                       (sig1.typ == uTYP.L and unit[0:3] != 'cyc'):
                         print("format error: inconsistent dimension")
                         return -1
-
+                    if (sig1 == rSigRnx() or sig2 == rSigRnx()):
+                        print("ERROR: invalid signal code!")
+                        return -1
                     bias = float(line[70:91])
                     std = float(line[92:103])
+                    """
                     if len(line) >= 137:
                         slope = float(line[104:125])
                         std_s = float(line[126:137])
-
                     """
-                    print("{:3d} {:3d} {:s} {:s} {:7.3f}"
-                          .format(svn, sat, obs1, obs2, bias))
-                    """
-
-                    dcb = bias_t(sat, tst, ted, type1, code1,
-                                 type2, code2, bias, std, svn)
+                    dcb = bias_t(sat, tst, ted, sig1, sig2, bias, std, svn)
                     self.dcb.append(dcb)
 
                 elif status and line[0:5] == ' OSB ':
@@ -934,14 +1156,15 @@ class biasdec():
                         continue
 
                     # Differential Signal Bias
+
+                    sys = char2sys(line[6])
                     svn = int(line[7:10])
                     prn = line[11:14]
                     sat = id2sat(prn)
 
-                    obs1 = line[25:29]
-                    obs2 = None
-                    type1, code1 = self.sig2code(obs1)
-                    type2, code2 = None, None
+                    sig1 = rSigRnx(sys, line[25:28])
+                    sig2 = rSigRnx()
+
                     # year:doy:sec
                     ep1 = [int(line[35:39]), int(
                         line[40:43]), int(line[44:49])]
@@ -950,25 +1173,20 @@ class biasdec():
                     tst = self.doy2time(ep1)
                     ted = self.doy2time(ep2)
                     unit = line[65:69]
-                    #if (type1 == 0 and unit[0:2] != 'ns') or (type1 == 1 and unit[0:3] != 'cyc'):
-                    if (type1 == 0 and unit[0:2] != 'ns'):
+                    # if (type1 == 0 and unit[0:2] != 'ns') or (type1 == 1 and unit[0:3] != 'cyc'):
+                    if (sig1.typ == uTYP.L and unit[0:2] != 'ns'):
                         print("format error: inconsistent dimension {} in {}"
-                              .format(type1,unit))
+                              .format(sig1.str(), unit))
                         return -1
 
                     bias = float(line[70:91])
                     std = float(line[92:103])
+                    """
                     if len(line) >= 137:
                         slope = float(line[104:125])
                         std_s = float(line[126:137])
-
                     """
-                    print("{:3d} {:3d} {:s}     {:7.3f}"
-                          .format(svn, sat, obs1, bias))
-                    """
-
-                    osb = bias_t(sat, tst, ted, type1, code1,
-                                 type2, code2, bias, std, svn)
+                    osb = bias_t(sat, tst, ted, sig1, sig2, bias, std, svn)
                     self.osb.append(osb)
 
 
@@ -988,10 +1206,15 @@ if __name__ == '__main__':
     nav = Nav()
 
     if False:
+
         sp = peph()
+        atx = atxdec()
+        atx.readpcv(atxfile)
+
         nav = sp.parse_sp3(obsfile, nav)
         nav = rnx.decode_clk(clkfile, nav)
-        nav.pcvs = readpcv(atxfile)
+
+        nav.pcvs = atx.pcvs
 
         n = 10
         rs = np.zeros((n, 6))
@@ -1000,11 +1223,11 @@ if __name__ == '__main__':
             t = timeadd(time, 30*k)
             rs[k, :], dts[k, :], var = sp.peph2pos(t, sat, nav)
 
-    if False:
         rs, dts, var = sp.peph2pos(time, sat, nav)
-        off = satantoff(time, rs[0:3], sat, nav)
+        off = atx.satantoff(time, rs[0:3], sat, nav)
 
     if False:
+
         erpv = np.zeros(5)
         ep1 = [2010, 12, 31, 8, 9, 10]
         rs = [70842740307.0837, 115293403265.153, -57704700666.9715]
@@ -1014,14 +1237,26 @@ if __name__ == '__main__':
         assert np.all(abs((rmoon-rm)/rmoon) < 0.03)
 
     if True:
-        time = epoch2time([2022, 12, 31, 0, 0, 0])
-        sat = 3
 
         bd = biasdec()
         bd.parse(dcbfile)
-        bias, std, bcode = bd.getdcb(sat, time, rSIG.L1W)
-        assert bias == -1.2715
-        assert std == 0.0058
-        assert bcode == rSIG.L1C
 
-    #satantoff(time, rs, sat, nav)
+        time = epoch2time([2022, 12, 31, 0, 0, 0])
+        sat = id2sat("G03")
+        sig = rSigRnx("GC1W")
+
+        bias, std, = bd.getosb(sat, time, sig)
+        assert bias == 7.6934
+        assert std == 0.0
+
+        print("{:s} {:s} {:8.5f} {:6.4f}"
+              .format(sat2id(sat), sig.str(), bias, std))
+
+        sig = rSigRnx("GL1W")
+
+        bias, std, = bd.getosb(sat, time, sig)
+        assert bias == 0.00038
+        assert std == 0.0
+
+        print("{:s} {:s} {:8.5f} {:6.4f}"
+              .format(sat2id(sat), sig.str(), bias, std))

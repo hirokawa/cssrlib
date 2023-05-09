@@ -42,11 +42,11 @@ def plot_elv(t, elv, elmask=0, satlist=None):
         sys, _ = sat2prn(sat)
         idx = elv[:, k] > elmask
         nsat[idx, sys] += 1
-        plt.plot(t/3600, np.rad2deg(elv[:, k]), '-'+col_tbl[sys])
-    tmax = t[-1]//3600+1
-    plt.ylabel('elevation [deg]')
-    plt.xlabel('time [h]')
-    plt.grid()
+        plt.plot(t/60, np.rad2deg(elv[:, k]), '-'+col_tbl[sys])
+
+    tmax = t[-1]//60+1
+    plt.ylabel('Elevation Angle [deg]')
+    plt.xlabel('Time [min]')    plt.grid()
     plt.axis([0, tmax, 0, 90])
     plt.show()
     return nsat
@@ -82,4 +82,5 @@ def skyplot(azm, elv, elmask=0, satlist=None):
         ax.scatter(theta, z, s=5, c=col_tbl[sys])
         ax.text(theta[0], z[0], sat2id(sat), fontsize=8)
         nsat += 1
+    plt.show()
     return nsat

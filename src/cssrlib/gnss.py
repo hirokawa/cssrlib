@@ -27,18 +27,48 @@ class rCST():
     AS2R = D2R/3600.0
     DAY_SEC = 86400.0
     CENTURY_SEC = DAY_SEC*36525.0
-    FREQ1 = 1.57542E9
-    FREQ2 = 1.22760E9
-    FREQ5 = 1.17645E9
-    FREQ6 = 1.27875E9
-    FREQ7 = 1.20714E9
-    FREQ9 = 2.492028E9
-    FREQ1_BDS = 1.561098E9
-    FREQ2_BDS = 1.20714E9
+
+    FREQ_G1 = 1575.42e6      # [Hz] GPS L1
+    FREQ_G2 = 1227.60e6      # [Hz] GPS L2
+    FREQ_G5 = 1176.45e6      # [Hz] GPS L5
+
+    FREQ_R1 = 1602.000e6     # [Hz] GLO G1   FDMA center frequency
+    FREQ_R1k = 562.500e3     # [Hz] GLO G1   FDMA frequency separation
+    FREQ_R2 = 1246.000e6     # [Hz] GLO G2   FDMA center frequency
+    FREQ_R2k = 437.500e3     # [Hz] GLO G2   FDMA frequency separation
+    FREQ_R1a = 1600.995e6    # [Hz] GLO G1a
+    FREQ_R2a = 1248.065e6    # [Hz] GLO G2a
+    FREQ_R3 = 1202.025e6     # [Hz] GLO G3
+
+    FREQ_E1 = 1575.42e6      # [Hz] GAL E1
+    FREQ_E5a = 1176.450e6    # [Hz] GAL E5a
+    FREQ_E5b = 1207.140e6    # [Hz] GAL E5b
+    FREQ_E5 = 1191.795e6     # [Hz] GAL E5
+    FREQ_E6 = 1278.750e6     # [Hz] GAL E6
+
+    FREQ_C1 = 1575.42e6      # [Hz] BDS B1
+    FREQ_C12 = 1561.098e6    # [Hz] BDS B1-2
+    FREQ_C2a = 1176.450e6    # [Hz] BDS B2a
+    FREQ_C2b = 1207.140e6    # [Hz] BDS B2b
+    FREQ_C2 = 1191.795e6     # [Hz] BDS B2
+    FREQ_C3 = 1268.520e6     # [Hz] BDS B3
+
+    FREQ_J1 = 1575.42e6      # [Hz] QZS L1
+    FREQ_J2 = 1227.60e6      # [Hz] QZS L2
+    FREQ_J5 = 1176.45e6      # [Hz] QZS L5
+    FREQ_J6 = 1278.75e6      # [Hz] QZS LEX
+
+    FREQ_S1 = 1575.42e6      # [Hz] SBS L1
+    FREQ_S5 = 1176.45e6      # [Hz] SBS L5
+
+    FREQ_I5 = 1191.795e6     # [Hz] IRS L5
+    FREQ_IS = 2492.028e6     # [Hz] IRS S
 
 
 class uGNSS(IntEnum):
-    """ class for GNSS constants """
+    """ class for GNS systems """
+    NONE = -1
+
     GPS = 0
     SBS = 1
     GAL = 2
@@ -46,62 +76,418 @@ class uGNSS(IntEnum):
     QZS = 5
     GLO = 6
     IRN = 7
+
     GNSSMAX = 8
+
     GPSMAX = 32
     GALMAX = 36
     QZSMAX = 10
     BDSMAX = 63
-    GLOMAX = 24
+    GLOMAX = 27
     SBSMAX = 24
     IRNMAX = 10
-#    BDSMAX = 0
-#    GLOMAX = 0
-#    SBSMAX = 0
-#    IRNMAX = 0
-    NONE = -1
+
     MAXSAT = GPSMAX+GLOMAX+GALMAX+BDSMAX+QZSMAX+SBSMAX+IRNMAX
 
 
-class uSIG(IntEnum):
-    """ class for GNSS signals """
-    GPS_L1CA = 0
-    GPS_L2W = 2
-    GPS_L2CL = 3
-    GPS_L2CM = 4
-    GPS_L5Q = 6
-    SBS_L1CA = 0
-    GAL_E1C = 0
-    GAL_E1B = 1
-    GAL_E5BI = 5
-    GAL_E5BQ = 6
-    BDS_B1ID1 = 0
-    BDS_B1ID2 = 1
-    BDS_B2ID1 = 2
-    BDS_B2ID2 = 3
-    QZS_L1CA = 0
-    QZS_L1S = 1
-    QZS_L2CM = 4
-    QZS_L2CL = 5
-    GLO_L1OF = 0
-    GLO_L2OF = 2
+class uTYP(IntEnum):
+    """ class for observation types"""
+
     NONE = -1
-    SIGMAX = 8
+
+    C = 1
+    L = 2
+    D = 3
+    S = 4
+
+class uSIG(IntEnum):
+    """ class for signal band and attribute """
+    NONE = -1
+
+    # GPS   L1  1575.42 MHz
+    # GLO   G1  1602+k*9/16 MHz
+    # GAL   E1  1575.42 MHz
+    # SBAS  L1  1575.42 MHz
+    # QZSS  L1  1575.42 MHz
+    # BDS-3 B1  1575.42 MHz
+    L1 = 100
+    L1A = 101
+    L1B = 102
+    L1C = 103
+    L1D = 104
+    L1E = 105
+    L1L = 112
+    L1M = 113
+    L1N = 114
+    L1P = 116
+    L1S = 119
+    L1W = 123
+    L1X = 124
+    L1Y = 125
+    L1Z = 126
+
+    # GPS   L2  1227.60  MHz
+    # GLO   G2  1246+k*7/16 MHz
+    # QZS   L2  1227.60  MHz
+    # BDS   B1  1561.098 MHz
+    L2 = 200
+    L2C = 203
+    L2D = 204
+    L2I = 209
+    L2L = 212
+    L2M = 213
+    L2N = 214
+    L2P = 216
+    L2Q = 217
+    L2S = 219
+    L2W = 223
+    L2X = 224
+    L2Y = 225
+
+    # GLO G3 1202.025 MHz
+    L3 = 300
+    L3I = 309
+    L3Q = 317
+    L3X = 324
+
+    # GLO G1a 1600.995 MHz
+    L4 = 400
+    L4A = 401
+    L4B = 402
+    L4X = 424
+
+    # GPS   L5  1176.45 MHz
+    # GAL   E5  1176.45 MHz
+    # SBS   L5  1176.45 MHz
+    # QZS   L5  1176.45 MHz
+    # BDS-3 B2a 1176.45 MHz
+    # IRN   L5  1176.45 MHz
+    L5 = 500
+    L5A = 501
+    L5B = 502
+    L5C = 503
+    L5D = 504
+    L5I = 509
+    L5P = 516
+    L5Q = 517
+    L5X = 524
+    L5Z = 526
+
+    # GLO   G2a 1248.06 MHz
+    # GAL   E6  1278.75 MHz
+    # QZS   L6  1278.75 MHz
+    # BDS   B3  1278.75 MHz
+    L6 = 600
+    L6A = 601
+    L6B = 602
+    L6C = 603
+    L6E = 605
+    L6I = 609
+    L6L = 612
+    L6Q = 617
+    L6S = 619
+    L6X = 624
+    L6Z = 626
+
+    # GAL   E5b 1207.14 MHz
+    # BDS-2 B2  1207.14 MHz
+    # BDS-3 B2b 1207.14 MHz
+    L7 = 700
+    L7D = 704
+    L7I = 709
+    L7P = 716
+    L7Q = 717
+    L7X = 724
+    L7Z = 726
+
+    # GAL  E5a+b 1191.795 MHz
+    # BDS  B2a+b 1191.795 MHz
+    L8 = 800
+    L8D = 804
+    L8I = 809
+    L8P = 816
+    L8Q = 817
+    L8X = 824
+
+    # IRN  S    2492.028 MHz
+    L9 = 900
+    L9A = 901
+    L9B = 902
+    L9C = 903
+    L9X = 924
 
 
-class rSIG(IntEnum):
-    """ class to define signals """
-    NONE = 0
-    L1C = 1
-    L1X = 2
-    L1W = 3
-    L2L = 4
-    L2X = 5
-    L2W = 6
-    L5Q = 7
-    L5X = 8
-    L7Q = 9
-    L7X = 10
-    SIGMAX = 16
+class rSigRnx():
+
+    def __init__(self, *args, **kwargs):
+        """ Constructor """
+
+        self.sys = uGNSS.NONE
+        self.typ = uTYP.NONE
+        self.sig = uSIG.NONE
+
+        # Empty
+        if len(args) == 0:
+
+            self.sys = uGNSS.NONE
+            self.typ = uTYP.NONE
+            self.sig = uSIG.NONE
+
+        # Four char string e.g. GC1W
+        elif len(args) == 1:
+
+            [x] = args
+            if isinstance(x, str) and 3 <= len(x) <= 4:
+                tmp = rSigRnx()
+                tmp.str2sig(char2sys(x[0]), x[1:])
+                self.sys = tmp.sys
+                self.typ = tmp.typ
+                self.sig = tmp.sig
+            else:
+                raise ValueError
+
+        # System and three char string e.g. GPS, C1W
+        elif len(args) == 2:
+
+            sys, sig = args
+            if isinstance(sys, uGNSS) and isinstance(sig, str) and \
+                    2 <= len(sig) <= 3:
+                tmp = rSigRnx()
+                tmp.str2sig(sys, sig)
+                self.sys = tmp.sys
+                self.typ = tmp.typ
+                self.sig = tmp.sig
+            else:
+                raise ValueError
+
+        # System, type and signal
+        elif len(args) == 3:
+
+            sys, typ, sig = args
+            if isinstance(sys, uGNSS) and \
+                    isinstance(typ, uTYP) and \
+                    isinstance(sig, uSIG):
+                self.sys = sys
+                self.typ = typ
+                self.sig = sig
+            else:
+                raise ValueError
+
+        else:
+
+            raise ValueError
+
+    def __repr__(self) -> str:
+        """ string representation """
+        return sys2char(self.sys)+self.str()
+
+    def __eq__(self, other):
+        """ equality operator """
+        return self.sys == other.sys and \
+            self.typ == other.typ and \
+            self.sig == other.sig
+
+    def __hash__(self):
+        """ hash operator """
+        return hash((self.sys, self.typ, self.sig))
+
+    def toTyp(self, typ):
+        """ Replace signal type """
+        if isinstance(typ, uTYP):
+            return rSigRnx(self.sys, typ, self.sig)
+        else:
+            raise ValueError
+
+    def toAtt(self, att=""):
+        """ Replace signal attribute """
+        if isinstance(att, str):
+            return rSigRnx(self.sys, self.str()[0:2]+att)
+        else:
+            raise ValueError
+
+    def str2sig(self, sys, s):
+        """ string to signal code conversion """
+
+        if isinstance(sys, uGNSS) and isinstance(s, str):
+            self.sys = sys
+        else:
+            raise ValueError
+
+        s = s.strip()
+        if len(s) < 2:
+            raise ValueError
+
+        if s[0] == 'C':
+            self.typ = uTYP.C
+        elif s[0] == 'L':
+            self.typ = uTYP.L
+        elif s[0] == 'D':
+            self.typ = uTYP.D
+        elif s[0] == 'S':
+            self.typ = uTYP.S
+        else:
+            raise ValueError
+
+        # Convert frequency ID
+        #
+        sig = int(s[1])*100
+
+        # Check for valid tracking attribute
+        #
+        if len(s) == 3:
+            if sys == uGNSS.GPS:
+                if (s[1] == '1' and s[2] not in 'CSLXPWYM') or \
+                   (s[2] == '2' and s[2] not in 'CDSLXPWYMN') or \
+                   (s[2] == '5' and s[2] not in 'IQX'):
+                    raise ValueError
+            elif sys == uGNSS.GLO:
+                if (s[1] == '1' and s[2] not in 'CP') or \
+                   (s[1] == '2' and s[2] not in 'CP') or \
+                   (s[1] == '3' and s[2] not in 'IQX') or \
+                   (s[1] == '4' and s[2] not in 'ABX') or \
+                   (s[1] == '6' and s[2] not in 'ABX'):
+                    raise ValueError
+            elif sys == uGNSS.GAL:
+                if (s[1] == '1' and s[2] not in 'ABCXZ') or \
+                   (s[1] == '5' and s[2] not in 'IQX') or \
+                   (s[1] == '6' and s[2] not in 'ABCXZ') or \
+                   (s[1] == '7' and s[2] not in 'IQX') or \
+                   (s[1] == '8' and s[2] not in 'IQX'):
+                    raise ValueError
+            elif sys == uGNSS.SBS:
+                if (s[1] == '1' and s[2] not in 'C') or \
+                   (s[1] == '5' and s[2] not in 'IQX'):
+                    raise ValueError
+            elif sys == uGNSS.QZS:
+                if (s[1] == '1' and s[2] not in 'CESLXZB') or \
+                   (s[1] == '2' and s[2] not in 'SLX') or \
+                   (s[1] == '5' and s[2] not in 'IQXDPZ') or \
+                   (s[1] == '6' and s[2] not in 'SLXEZ'):
+                    raise ValueError
+            elif sys == uGNSS.BDS:
+                if (s[1] == '2' and s[2] not in 'IQX') or \
+                   (s[1] == '1' and s[2] not in 'DPXSLZ') or \
+                   (s[1] == '5' and s[2] not in 'DPX') or \
+                   (s[1] == '7' and s[2] not in 'IQXDPZ') or \
+                   (s[1] == '8' and s[2] not in 'DPX') or \
+                   (s[1] == '6' and s[2] not in 'IQXDPZ'):
+                    raise ValueError
+            elif sys == uGNSS.IRN:
+                if (s[1] == '5' and s[2] not in 'ABCX') or \
+                   (s[1] == '9' and s[2] not in 'ABCX'):
+                    raise ValueError
+
+            sig += ord(s[2]) - ord('A') + 1
+
+        self.sig = uSIG(sig)
+
+    def str(self):
+        """ signal code to string conversion """
+
+        s = ''
+
+        if self.typ == uTYP.C:
+            s += 'C'
+        elif self.typ == uTYP.L:
+            s += 'L'
+        elif self.typ == uTYP.D:
+            s += 'D'
+        elif self.typ == uTYP.S:
+            s += 'S'
+        else:
+            return '???'
+
+        s += '{}'.format(int(self.sig/100))
+
+        if self.sig % 100 == 0:
+            s += ' '
+        else:
+            s += '{}'.format(chr(self.sig % 100+ord('A')-1))
+
+        return s
+
+    def frequency(self, k=None):
+        """ frequency in Hz """
+
+        if self.sys == uGNSS.GPS:
+            if int(self.sig / 100) == 1:
+                return rCST.FREQ_G1
+            elif int(self.sig / 100) == 2:
+                return rCST.FREQ_G2
+            elif int(self.sig / 100) == 5:
+                return rCST.FREQ_G5
+            else:
+                return None
+        elif self.sys == uGNSS.GLO:
+            if int(self.sig / 100) == 1 and k is not None:
+                return rCST.FREQ_R1 + k * rCST.FREQ_R1k
+            elif int(self.sig / 100) == 2 and k is not None:
+                return rCST.FREQ_R2 + k * rCST.FREQ_R2k
+            elif int(self.sig / 100) == 3:
+                return rCST.FREQ_R3
+            elif int(self.sig / 100) == 4:
+                return rCST.FREQ_R1a
+            elif int(self.sig / 100) == 5:
+                return rCST.FREQ_R2a
+            else:
+                return None
+        elif self.sys == uGNSS.GAL:
+            if int(self.sig / 100) == 1:
+                return rCST.FREQ_E1
+            elif int(self.sig / 100) == 5:
+                return rCST.FREQ_E5a
+            elif int(self.sig / 100) == 6:
+                return rCST.FREQ_E6
+            elif int(self.sig / 100) == 7:
+                return rCST.FREQ_E5b
+            elif int(self.sig / 100) == 8:
+                return rCST.FREQ_E5
+            else:
+                return None
+        elif self.sys == uGNSS.BDS:
+            if int(self.sig / 100) == 1:
+                return rCST.FREQ_C1
+            elif int(self.sig / 100) == 2:
+                return rCST.FREQ_C12
+            elif int(self.sig / 100) == 5:
+                return rCST.FREQ_C2a
+            elif int(self.sig / 100) == 6:
+                return rCST.FREQ_C3
+            elif int(self.sig / 100) == 7:
+                return rCST.FREQ_C2b
+            elif int(self.sig / 100) == 8:
+                return rCST.FREQ_C2
+            else:
+                return None
+        if self.sys == uGNSS.QZS:
+            if int(self.sig / 100) == 1:
+                return rCST.FREQ_J1
+            elif int(self.sig / 100) == 2:
+                return rCST.FREQ_J2
+            elif int(self.sig / 100) == 5:
+                return rCST.FREQ_J5
+            elif int(self.sig / 100) == 6:
+                return rCST.FREQ_J6
+            else:
+                return None
+        if self.sys == uGNSS.SBS:
+            if int(self.sig / 100) == 1:
+                return rCST.FREQ_S1
+            elif int(self.sig / 100) == 5:
+                return rCST.FREQ_S5
+        elif self.sys == uGNSS.IRN:
+            if int(self.sig / 100) == 5:
+                return rCST.FREQ_I5
+            elif int(self.sig / 100) == 9:
+                return rCST.FREQ_IS
+        else:
+            return None
+
+    def wavelength(self, k=None):
+        """ wavelength in [m] """
+
+        frq = self.frequency(k)
+        return rCST.CLIGHT/frq if frq is not None else None
 
 
 class gtime_t():
@@ -179,38 +565,20 @@ class Nav():
         self.ne = 0
         self.nc = 0
         self.excl_sat = []
-        self.freq = [1.57542e9, 1.22760e9, 1.17645e9, 1.20714e9]
+        self.freq = [1.57542e9, 1.22760e9,  # L1,L2
+                     1.17645e9, 1.20714e9]  # L5/E5a/B2a,E5b/B2b
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
         self.gnss_t = [uGNSS.GPS, uGNSS.GAL, uGNSS.QZS]
-        # self.gnss_t = [uGNSS.GPS]
         self.loglevel = 1
         self.cnr_min = 35
         self.maxout = 5  # maximum outage [epoch]
 
-        # antenna type:  JAVAD RINGANT SCIT
-        self.ant_pcv = [[+0.00, -0.38, -1.46, -3.06, -4.94, -6.81, -8.45,
-                         -9.66, -10.31, -10.35, -9.77, -8.62, -6.97, -4.85,
-                         -2.22, 1.11, 5.45, 11.03, 17.84],
-                        [+0.00, -0.16, -0.60, -1.26, -2.06, -2.91, -3.77,
-                         -4.57, -5.21, -5.54, -5.43, -4.81, -3.69, -2.21,
-                         -0.46, 1.58, 4.16, 7.70, 12.53],
-                        [+0.00, -0.16, -0.60, -1.26, -2.06, -2.91, -3.77,
-                         -4.57, -5.21, -5.54, -5.43, -4.81, -3.69, -2.21,
-                         -0.46, 1.58, 4.16, 7.70, 12.53]]
-        self.ant_pco = [+85.44, +115.05, +115.05]
-
-        # antenna type: TRM59800.80     NONE [mm] 0:5:90 [deg]
-        self.ant_pcv_b = [[+0.00, -0.22, -0.86, -1.87, -3.17, -4.62, -6.03,
-                           -7.21, -7.98, -8.26, -8.02, -7.32, -6.20, -4.65,
-                           -2.54, +0.37, +4.34, +9.45, +15.42],
-                          [+0.00, -0.14, -0.53, -1.13, -1.89, -2.74, -3.62,
-                           -4.43, -5.07, -5.40, -5.32, -4.79, -3.84, -2.56,
-                           -1.02, +0.84, +3.24, +6.51, +10.84],
-                          [+0.00, -0.14, -0.53, -1.13, -1.89, -2.74, -3.62,
-                           -4.43, -5.07, -5.40, -5.32, -4.79, -3.84, -2.56,
-                           -1.02, +0.84, +3.24, +6.51, +10.84]]
-        self.ant_pco_b = [+89.51, +117.13, +117.13]
+        self.sat_ant = None
+        self.rcv_ant = None
+        self.rcv_ant_b = None
+        self.sig_tab = None
+        self.sig_tab_b = None
 
         # SSR correction placeholder
         self.dorb = np.zeros(uGNSS.MAXSAT)
@@ -338,6 +706,11 @@ def str2time(s, i, n):
     return epoch2time(ep)
 
 
+def time2str(t):
+    e = time2epoch(t)
+    return "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}"\
+        .format(e[0], e[1], e[2], e[3], e[4], int(e[5]))
+
 def prn2sat(sys, prn):
     """ convert sys+prn to sat """
     if sys == uGNSS.GPS:
@@ -350,6 +723,11 @@ def prn2sat(sys, prn):
         sat = prn+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX
     elif sys == uGNSS.QZS:
         sat = prn-192+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX
+    elif sys == uGNSS.SBS:
+        sat = prn-100+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX
+    elif sys == uGNSS.IRN:
+        sat = prn+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX + \
+            uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX
     else:
         sat = 0
     return sat
@@ -357,7 +735,15 @@ def prn2sat(sys, prn):
 
 def sat2prn(sat):
     """ convert sat to sys+prn """
-    if sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX:
+    if sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX:
+        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX +
+                   uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX)
+        sys = uGNSS.IRN
+    elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX:
+        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX +
+                   uGNSS.BDSMAX+uGNSS.QZSMAX)+100
+        sys = uGNSS.SBS
+    elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX:
         prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX)+192
         sys = uGNSS.QZS
     elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX:
@@ -378,8 +764,8 @@ def sat2prn(sat):
 def sat2id(sat):
     """ convert satellite number to id """
     sys, prn = sat2prn(sat)
-    gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
-                uGNSS.QZS: 'J', uGNSS.GLO: 'R'}
+    gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GLO: 'R', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
+                uGNSS.QZS: 'J', uGNSS.SBS: 'S', uGNSS.IRN: 'I'}
     if sys not in gnss_tbl:
         return -1
     if sys == uGNSS.QZS:
@@ -391,13 +777,10 @@ def sat2id(sat):
 
 def id2sat(id_):
     """ convert id to satellite number """
-    # gnss_tbl={'G':uGNSS.GPS,'S':uGNSS.SBS,'E':uGNSS.GAL,'C':uGNSS.BDS,
-    #           'I':uGNSS.IRN,'J':uGNSS.QZS,'R':uGNSS.GLO}
-    gnss_tbl = {'G': uGNSS.GPS, 'E': uGNSS.GAL, 'C': uGNSS.BDS,
-                'J': uGNSS.QZS, 'R': uGNSS.GLO}
-    if id_[0] not in gnss_tbl:
+    sys = char2sys(id_[0])
+    if sys == uGNSS.NONE:
         return -1
-    sys = gnss_tbl[id_[0]]
+
     prn = int(id_[1:3])
     if sys == uGNSS.QZS:
         prn += 192
@@ -405,6 +788,27 @@ def id2sat(id_):
         prn += 100
     sat = prn2sat(sys, prn)
     return sat
+
+def char2sys(c):
+    """ convert character to GNSS """
+    gnss_tbl = {'G': uGNSS.GPS, 'R': uGNSS.GLO, 'E': uGNSS.GAL, 'C': uGNSS.BDS,
+                'J': uGNSS.QZS, 'S': uGNSS.SBS, 'I': uGNSS.IRN}
+
+    if c not in gnss_tbl:
+        return uGNSS.NONE
+    else:
+        return gnss_tbl[c]
+
+
+def sys2char(sys):
+    """ convert character to GNSS """
+    gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GLO: 'R', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
+                uGNSS.QZS: 'J', uGNSS.SBS: 'S', uGNSS.IRN: 'I'}
+
+    if sys not in gnss_tbl:
+        return "?"
+    else:
+        return gnss_tbl[sys]
 
 
 def vnorm(r):
@@ -496,6 +900,9 @@ def xyz2enu(pos):
     return E
 
 
+def enu2xyz(pos):
+    """ return ENU to ECEF conversion matrix from LLH """
+    return np.array(np.matrix(xyz2enu(pos)).I)
 def ecef2pos(r):
     """  ECEF to LLH position conversion """
     e2 = rCST.FE_WGS84*(2-rCST.FE_WGS84)
@@ -535,7 +942,7 @@ def pos2ecef(pos, isdeg: bool = False):
 
 
 def ecef2enu(pos, r):
-    """ releative ECEF to ENU conversion """
+    """ relative ECEF to ENU conversion """
     E = xyz2enu(pos)
     e = E@r
     return e
@@ -603,25 +1010,6 @@ def interpc(coef, lat):
     return coef[:, i-1]*(1.0-d)+coef[:, i]*d
 
 
-def antmodel(nav, el=0, nf=2, rtype=1):
-    """ antenna pco/pcv """
-    sE = sin(el)
-    za = 90-np.rad2deg(el)
-    za_t = np.arange(0, 90.1, 5)
-    dant = np.zeros(nf)
-    if rtype == 1:  # for rover
-        pcv_t = nav.ant_pcv
-        pco_t = nav.ant_pco
-    else:  # for base
-        pcv_t = nav.ant_pcv_b
-        pco_t = nav.ant_pco_b
-    for f in range(nf):
-        pcv = np.interp(za, za_t, pcv_t[f])
-        pco = -pco_t[f]*sE
-        dant[f] = (pco+pcv)*1e-3
-    return dant
-
-
 def mapf(el, a, b, c):
     """ simple tropospheric mapping function """
     sinel = np.sin(el)
@@ -660,13 +1048,19 @@ def tropmapf(t, pos, el):
     return mapfh, mapfw
 
 
+def meteo(hgt, humi):
+    """ standard atmosphere model """
+    pres = 1013.25*np.power(1-2.2557e-5*hgt, 5.2568)
+    temp = 15.0-6.5e-3*hgt+273.16
+    e = 6.108*humi*np.exp((17.15*temp-4684.0)/(temp-38.45))
+    return pres, temp, e
+
+
 def tropmodel(t, pos, el=np.pi/2, humi=0.7):
     """ saastamoinen tropospheric delay model """
     hgt = pos[2]
     # standard atmosphere
-    pres = 1013.25*np.power(1-2.2557e-5*hgt, 5.2568)
-    temp = 15.0-6.5e-3*hgt+273.16
-    e = 6.108*humi*np.exp((17.15*temp-4684.0)/(temp-38.45))
+    pres, temp, e = meteo(hgt, humi)
     # saastamoinen
     z = np.pi/2.0-el
     trop_hs = 0.0022768*pres/(1.0-0.00266*np.cos(2*pos[0])-0.00028e-3*hgt)
