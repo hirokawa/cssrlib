@@ -31,7 +31,7 @@ class rnxdec:
         # signal code mapping from RINEX header to columns in data section
         self.sig_map = {}
         # signal selection for internal data structure
-        self.sig_tab = {}  
+        self.sig_tab = {}
         self.nsig = {uTYP.C: 0, uTYP.L: 0, uTYP.D: 0, uTYP.S: 0}
 
         self.pos = np.array([0, 0, 0])
@@ -266,7 +266,7 @@ class rnxdec:
             minute = int(line[16:18])
             sec = float(line[19:29])
             obs.t = epoch2time([year, month, day, hour, minute, sec])
-            
+
             obs.sig = self.sig_tab
             obs.P = np.empty((0, self.nsig[uTYP.C]), dtype=np.float64)
             obs.L = np.empty((0, self.nsig[uTYP.L]), dtype=np.float64)
@@ -322,7 +322,7 @@ class rnxdec:
 
                     # Convert from string to numerical value
                     #
-                    val = None if not sval else float(sval)
+                    val = 0.0 if not sval else float(sval)
                     lli = 1 if slli == '1' else 0
 
                     j = self.sig_tab[sys][sig.typ].index(sig)
