@@ -28,8 +28,10 @@ class rnxdec:
         self.ver = -1.0
         self.fobs = None
 
-        self.sig_map = {}  # signal code mapping to columns in data section
-        self.sig_tab = {}  # signal selection for internal data structure
+        # signal code mapping from RINEX header to columns in data section
+        self.sig_map = {}
+        # signal selection for internal data structure
+        self.sig_tab = {}  
         self.nsig = {uTYP.C: 0, uTYP.L: 0, uTYP.D: 0, uTYP.S: 0}
 
         self.pos = np.array([0, 0, 0])
@@ -168,19 +170,20 @@ class rnxdec:
         return nav
 
     def decode_clk(self, clkfile, nav):
-        """decode RINEX Navigation message from file """
+        """decode Clock-RINEX data from file """
         nav.pclk = []
         with open(clkfile, 'rt') as fnav:
             for line in fnav:
+
                 if line[0:2] != 'AS':
                     continue
-                if line[3] not in self.gnss_tbl:
-                    continue
-                sys = self.gnss_tbl[line[3]]
+
+                sys = char2sys(line[3])
                 prn = int(line[4:7])
                 if sys == uGNSS.QZS:
                     prn += 192
                 sat = prn2sat(sys, prn)
+
                 t = self.decode_time(line, 8, 9)
                 if nav.nc <= 0 or abs(timediff(nav.pclk[-1].time, t)) > 1e-9:
                     nav.nc += 1
@@ -246,7 +249,9 @@ class rnxdec:
 
     def decode_obs(self):
         """decode RINEX Observation message from file """
+
         obs = Obs()
+
         for line in self.fobs:
 
             if line[0] != '>':
@@ -261,7 +266,8 @@ class rnxdec:
             minute = int(line[16:18])
             sec = float(line[19:29])
             obs.t = epoch2time([year, month, day, hour, minute, sec])
-
+            
+            obs.sig = self.sig_tab
             obs.P = np.empty((0, self.nsig[uTYP.C]), dtype=np.float64)
             obs.L = np.empty((0, self.nsig[uTYP.L]), dtype=np.float64)
             obs.S = np.empty((0, self.nsig[uTYP.S]), dtype=np.float64)
@@ -288,6 +294,8 @@ class rnxdec:
                 prn = int(line[1:3])
                 if sys == uGNSS.QZS:
                     prn += 192
+                elif sys == uGNSS.SBS:
+                    prn += 100
                 sat = prn2sat(sys, prn)
 
                 pr = np.zeros(len(self.getSignals(sys, uTYP.C)),
@@ -307,23 +315,27 @@ class rnxdec:
                             sig not in self.sig_tab[sys][sig.typ]:
                         continue
 
+                    # Get string representation of measurement value
+                    #
+                    sval = line[16*i+3:16*i+17].strip()
+                    slli = line[16*i+17] if len(line) > 16*i+17 else ''
+
+                    # Convert from string to numerical value
+                    #
+                    val = None if not sval else float(sval)
+                    lli = 1 if slli == '1' else 0
+
                     j = self.sig_tab[sys][sig.typ].index(sig)
                     obs_ = line[16*i+4:16*i+17].strip()
 
-                    # Replace empty string with zero
-                    # TBD: consider using None-type instead?
-                    #
-                    if not obs_:
-                        obs_ = '0.0'
-
                     if sig.typ == uTYP.C:
-                        pr[j] = float(obs_)
+                        pr[j] = val
                     elif sig.typ == uTYP.L:
-                        cp[j] = float(obs_)
+                        cp[j] = val
                         if line[16*i+17] == '1':
                             ll[j] = 1
                     elif sig.typ == uTYP.S:
-                        cn[j] = float(obs_)
+                        cn[j] = val
                     else:
                         continue
 

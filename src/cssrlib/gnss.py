@@ -506,11 +506,11 @@ class Obs():
 
     def __init__(self):
         self.t = gtime_t()
-        self.P = []
-        self.L = []
-        self.S = []
-        self.lli = []
-        self.sat = []
+        self.P = {}
+        self.L = {}
+        self.S = {}
+        self.lli = {}
+        self.sat = np.empty(0, dtype=np.int)
 
 
 class Eph():
@@ -562,15 +562,22 @@ class Nav():
             [0.1167E+06, -0.2294E+06, -0.1311E+06, 0.1049E+07]])
         self.elmin = np.deg2rad(15.0)
         self.tidecorr = False
+        ######## START OBSOLETE ################################################
         self.nf = 2
+        ######## END   OBSOLETE ################################################
         self.ne = 0
         self.nc = 0
         self.excl_sat = []
+        ######## START OBSOLETE ################################################
         self.freq = [1.57542e9, 1.22760e9,  # L1,L2
                      1.17645e9, 1.20714e9]  # E5a,E5b
+        ######## END   OBSOLETE ################################################
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
+        ######## START OBSOLETE ################################################
         self.gnss_t = [uGNSS.GPS, uGNSS.GAL, uGNSS.QZS]
+        ######## END   OBSOLETE ################################################
+
         self.loglevel = 1
         self.cnr_min = 35
         self.maxout = 5  # maximum outage [epoch]

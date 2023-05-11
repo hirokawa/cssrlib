@@ -7,16 +7,11 @@ from datetime import datetime
 import numpy as np
 import sys
 import cssrlib.gnss as gn
-from cssrlib.gnss import tropmodel, antmodel, uGNSS, rCST, sat2id, sat2prn, timeadd, time2epoch
-from cssrlib.cssrlib import sSigGPS, sSigGAL, sSigQZS
+from cssrlib.gnss import tropmodel, uGNSS, rCST, sat2id, sat2prn
+from cssrlib.gnss import timeadd, time2epoch, time2str
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.rtk import IB, ddres, resamb_lambda, valpos, holdamb, initx
-
-
-def time2str(time):
-    ep = time2epoch(time)
-    return ("{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02.0f}"
-            .format(ep[0], ep[1], ep[2], ep[3], ep[4], ep[5]))
+from cssrlib.peph import antModelRx, antModelTx
 
 
 def rtkinit(nav, pos0=np.zeros(3)):
@@ -27,7 +22,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
 
     # Number of frequencies
     #
-    nav.nf = 2
+    nav.nf = 2  # TODO: make obsolete if possible
 
     # Positioning mode
     # 0:static, 1:kinematic
@@ -104,7 +99,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.tidecorr = True
     nav.armode = 3  # 1:continuous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20)  # elevation mask for AR
-    nav.gnss_t = [uGNSS.GPS, uGNSS.GAL]
+    #nav.gnss_t = [uGNSS.GPS, uGNSS.GAL]
 
     # Initial state vector
     nav.x[0:3] = pos0
@@ -130,19 +125,6 @@ def rtkinit(nav, pos0=np.zeros(3)):
         nav.q[0:3] = nav.sig_qp**2
     nav.q[nav.idx_ztd] = nav.sig_qztd**2
     nav.q[nav.idx_ion:nav.idx_ion+nav.nChan] = nav.sig_qion**2
-
-    # obs index
-    i0 = {gn.uGNSS.GPS: 0, gn.uGNSS.GAL: 0, gn.uGNSS.QZS: 0}
-    i1 = {gn.uGNSS.GPS: 1, gn.uGNSS.GAL: 2, gn.uGNSS.QZS: 1}
-    freq0 = {gn.uGNSS.GPS: nav.freq[0], gn.uGNSS.GAL: nav.freq[0],
-             gn.uGNSS.QZS: nav.freq[0]}
-    freq1 = {gn.uGNSS.GPS: nav.freq[1], gn.uGNSS.GAL: nav.freq[2],
-             gn.uGNSS.QZS: nav.freq[1]}
-    nav.obs_idx = [i0, i1]
-    nav.obs_freq = [freq0, freq1]
-    nav.cs_sig_idx = {gn.uGNSS.GPS: [sSigGPS.L1C, sSigGPS.L2W],
-                      gn.uGNSS.GAL: [sSigGAL.L1X, sSigGAL.L5X],
-                      gn.uGNSS.QZS: [sSigQZS.L1C, sSigQZS.L2X]}
 
     nav.fout = None
     nav.logfile = 'log.txt'
@@ -568,7 +550,7 @@ def satpreposs(obs, nav, orb):
 
 
 def pppigspos(nav, obs, orb, bsx):
-    """ PPP positioning with IGS files and conventions"""
+    """ PPP positioning with IGS files and conventions """
 
     # GNSS satellite positions, velocities and clock offsets
     #
@@ -633,14 +615,17 @@ def pppigspos(nav, obs, orb, bsx):
     print()
     """
 
-    # ???
+    # Check if observations of at least 6 satellites are left over after editing
+    #
     ny = y.shape[0]
     if ny < 6:
         nav.P[np.diag_indices(3)] = 1.0
         nav.smode = 5
         return -1
 
-    # DD residual
+    # SD residuals
+    #
+    # NOTE: where are working on a reduced list of observations from here on
     #
     v, H, R = ddres(nav, obs.t, xp, y, e, sat, el)
     Pp = nav.P.copy()
@@ -649,7 +634,7 @@ def pppigspos(nav, obs, orb, bsx):
     #
     xp, Pp, _ = kfupdate(xp, Pp, H, v, R)
 
-    # non-differential residuals after measurement update
+    # Non-differential residuals after measurement update
     #
     yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, svh, xp[0:3])
     y = yu[iu, :]
@@ -661,7 +646,7 @@ def pppigspos(nav, obs, orb, bsx):
 
     # Residuals for float solution
     #
-    v, H, R = ddres(nav, obs.t, xp, y, e, sat, el)
+    v, H, R = ddres(nav, obs, xp, y, e, sat, el)
     if valpos(nav, v, R):
         nav.x = xp
         nav.P = Pp
@@ -687,12 +672,14 @@ def pppigspos(nav, obs, orb, bsx):
         yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, svh, xa[0:3])
         y = yu[iu, :]
         e = eu[iu, :]
-        v, H, R = ddres(nav, obs.t, xa, y, e, sat, el)
+        v, H, R = ddres(nav, obs, xa, y, e, sat, el)
         if valpos(nav, v, R):       # R <= Q=H'PH+R  chisq<max_inno[3] (0.5)
             if nav.armode == 3:     # fix and hold
                 holdamb(nav, xa)    # hold fixed ambiguity
             nav.smode = 4           # fix
 
+    # Store epoch for solution
+    #
     nav.t = obs.t
 
     return 0
