@@ -511,6 +511,7 @@ class Obs():
         self.S = []
         self.lli = []
         self.sat = []
+        self.sig = {}
 
 
 class Eph():

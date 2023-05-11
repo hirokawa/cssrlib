@@ -248,7 +248,7 @@ class rnxdec:
         return 0
 
     def decode_obs(self):
-        """decode RINEX Observation message from file """
+        """ decode RINEX Observation message from file """
 
         obs = Obs()
 
@@ -267,12 +267,14 @@ class rnxdec:
             sec = float(line[19:29])
             obs.t = epoch2time([year, month, day, hour, minute, sec])
 
-            obs.sig = self.sig_tab
+            # Initialize data structures
+            #
             obs.P = np.empty((0, self.nsig[uTYP.C]), dtype=np.float64)
             obs.L = np.empty((0, self.nsig[uTYP.L]), dtype=np.float64)
             obs.S = np.empty((0, self.nsig[uTYP.S]), dtype=np.float64)
             obs.lli = np.empty((0, self.nsig[uTYP.L]), dtype=np.int)
             obs.sat = np.empty(0, dtype=np.int)
+            obs.sig = self.sig_tab
 
             for _ in range(nsat):
 
@@ -325,15 +327,15 @@ class rnxdec:
                     val = 0.0 if not sval else float(sval)
                     lli = 1 if slli == '1' else 0
 
+                    # Singal index in data structure
+                    #
                     j = self.sig_tab[sys][sig.typ].index(sig)
-                    obs_ = line[16*i+4:16*i+17].strip()
 
                     if sig.typ == uTYP.C:
                         pr[j] = val
                     elif sig.typ == uTYP.L:
                         cp[j] = val
-                        if line[16*i+17] == '1':
-                            ll[j] = 1
+                        ll[j] = lli
                     elif sig.typ == uTYP.S:
                         cn[j] = val
                     else:
