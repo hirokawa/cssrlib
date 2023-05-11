@@ -9,6 +9,7 @@ import sys
 import cssrlib.gnss as gn
 from cssrlib.gnss import tropmodel, uGNSS, rCST, sat2id, sat2prn
 from cssrlib.gnss import timeadd, time2epoch, time2str
+from cssrlib.gnss import uTYP
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.rtk import IB, ddres, resamb_lambda, valpos, holdamb, initx
 from cssrlib.peph import antModelRx, antModelTx
@@ -186,6 +187,7 @@ def udstate(nav, obs):
 
     # bias
     for f in range(nav.nf):
+
         # reset phase-bias if instantaneous AR or expire obs outage counter
         for i in range(gn.uGNSS.MAXSAT):
             sat_ = i+1
@@ -203,7 +205,7 @@ def udstate(nav, obs):
         for i in range(ns):
             if sys[i] not in nav.gnss_t:
                 continue
-            j = nav.obs_idx[f][sys[i]]
+            j = f  # nav.obs_idx[f][sys[i]]
             if obs.lli[i, j] & 1 == 0:
                 continue
             initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
@@ -219,13 +221,17 @@ def udstate(nav, obs):
         offset = 0
         na = 0
         for i in range(ns):
+
             if sys[i] not in nav.gnss_t:
                 continue
-            j = nav.obs_idx[f][sys[i]]
-            freq = nav.obs_freq[f][sys[i]]
+
+            j = f  # nav.obs_idx[f][sys[i]]
+            sig = obs.sig[sys[i]][uTYP.L][j]
+            freq = sig.frequency()
+
             cp = obs.L[i, j]
             pr = obs.P[i, j]
-            if cp == 0.0 or pr == 0.0 or freq == 0.0:
+            if cp == 0.0 or pr == 0.0 or freq is None:
                 continue
             bias[i] = cp-pr*freq/gn.rCST.CLIGHT
             amb = nav.x[IB(sat[i], f, nav.na)]
@@ -244,6 +250,7 @@ def udstate(nav, obs):
             if bias[i] == 0.0 or nav.x[j] != 0.0:
                 continue
             initx(nav, bias[i], nav.sig_n0**2, j)
+
     return 0
 
 
@@ -287,9 +294,13 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         #
         flg_m = True
         for f in range(nav.nf):
-            k = nav.obs_idx[f][sys]
+
+            k = f  # nav.obs_idx[f][sys]
             if obs.P[i, k] == 0.0 or obs.L[i, k] == 0.0 or obs.lli[i, k] == 1:
                 flg_m = False
+
+        # Check C/N0 at first frequency
+        #
         if obs.S[i, 0] < nav.cnr_min:
             flg_m = False
         if flg_m is False:
@@ -303,24 +314,20 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         freq = np.zeros(nav.nf)
         lam = np.zeros(nav.nf)
         for f in range(nav.nf):
-            freq[f] = nav.obs_freq[f][sys]
-            lam[f] = gn.rCST.CLIGHT/freq[f]
+            sig = obs.sig[sys][uTYP.L][f]
+            freq[f] = sig.frequency()
+            lam[f] = sig.wavelength()
 
         # Code and phase signal bias [ns]
         #
         cbias = np.zeros(nav.nf)
         pbias = np.zeros(nav.nf)
 
-        if sys == uGNSS.GPS:
-            cbias[0], _ = bsx.getosb(sat, obs.t, "C1C")
-            cbias[1], _ = bsx.getosb(sat, obs.t, "C2W")
-            pbias[0], _ = bsx.getosb(sat, obs.t, "L1C")
-            pbias[1], _ = bsx.getosb(sat, obs.t, "L2W")
-        elif sys == uGNSS.GAL:
-            cbias[0], _ = bsx.getosb(sat, obs.t, "C1X")
-            cbias[1], _ = bsx.getosb(sat, obs.t, "C5X")
-            pbias[0], _ = bsx.getosb(sat, obs.t, "L1X")
-            pbias[1], _ = bsx.getosb(sat, obs.t, "L5X")
+        for f in range(nav.nf):
+            sig = obs.sig[sys][uTYP.C][f]
+            cbias[f], _ = bsx.getosb(sat, obs.t, sig)
+            sig = obs.sig[sys][uTYP.L][f]
+            pbias[f], _ = bsx.getosb(sat, obs.t, sig)
 
         # relativity effect
         #
@@ -342,7 +349,10 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
 
         # Receiver antenna offset
         #
-        antr = antmodel(nav, el[i], nav.nf)
+        # TODO: find a solution for the antenna modeling
+        #
+        #antr = antModelRx(nav, rr, e, sigs)
+        antr = 0.0
 
         # range correction
         #
@@ -354,7 +364,7 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         r += -_c*dts[i]
 
         for f in range(nf):
-            k = nav.obs_idx[f][sys]
+            k = f  # nav.obs_idx[f][sys]
             y[i, f] = obs.L[i, k]*lam[f]-(r+cpc[i, f])
             y[i, f+nf] = obs.P[i, k]-(r+prc[i, f])
 
@@ -420,17 +430,17 @@ def ddres(nav, t, x, y, e, sat, el, log=False):
             else:  # code
                 mu = +(nav.freq[idx_f[0]]/freq)**2
 
-            # Select reference satellite
+            # Select satellites from one constellation only
+            #
             idx = sysidx(sat, sys)
 
-            if log and 1 == 0:
-                for i in idx:
-                    print(sys, sat[i])
-
+            # Select reference satellite with highest elevation
+            #
             if len(idx) > 0:
                 i = idx[np.argmax(el[idx])]
 
-            # Loop over satellite
+            # Loop over satellites
+            #
             for j in idx:
 
                 # Skip reference satellite
@@ -532,11 +542,6 @@ def satpreposs(obs, nav, orb):
 
         sat = obs.sat[i]
         sys, _ = sat2prn(sat)
-
-        if sat < 1:
-            continue
-        if sys not in nav.gnss_t:
-            continue
 
         pr = obs.P[i, 0]
         t = timeadd(obs.t, -pr/rCST.CLIGHT)
