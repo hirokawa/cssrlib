@@ -506,11 +506,11 @@ class Obs():
 
     def __init__(self):
         self.t = gtime_t()
-        self.P = {}
-        self.L = {}
-        self.S = {}
-        self.lli = {}
-        self.sat = np.empty(0, dtype=np.int)
+        self.P = []
+        self.L = []
+        self.S = []
+        self.lli = []
+        self.sat = []
 
 
 class Eph():
