@@ -132,7 +132,7 @@ def satposs(obs, nav, cs=None):
     for i in range(n):
         sat = obs.sat[i]
         sys, _ = sat2prn(sat)
-        if sys not in nav.gnss_t:
+        if sys not in obs.sig.keys():
             continue
         pr = obs.P[i, 0]
         t = timeadd(obs.t, -pr/rCST.CLIGHT)

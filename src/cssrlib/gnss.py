@@ -576,7 +576,7 @@ class Nav():
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
         ######## START OBSOLETE ################################################
-        self.gnss_t = [uGNSS.GPS, uGNSS.GAL, uGNSS.QZS]
+        #self.gnss_t = [uGNSS.GPS, uGNSS.GAL, uGNSS.QZS]
         ######## END   OBSOLETE ################################################
 
         self.loglevel = 1
