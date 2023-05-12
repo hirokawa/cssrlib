@@ -459,7 +459,7 @@ class atxdec():
 
 def searchpcv(pcvs, name, time):
     """ get satellite or receiver antenna pcv """
-    
+
     if isinstance(name, str):
 
         for pcv in pcvs:
