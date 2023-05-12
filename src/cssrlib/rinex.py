@@ -273,7 +273,7 @@ class rnxdec:
             obs.L = np.empty((0, self.nsig[uTYP.L]), dtype=np.float64)
             obs.S = np.empty((0, self.nsig[uTYP.S]), dtype=np.float64)
             obs.lli = np.empty((0, self.nsig[uTYP.L]), dtype=np.int)
-            obs.sat = np.empty(0, dtype=np.int)
+            obs.sat = np.empty(0, dtype=np.int32)
             obs.sig = self.sig_tab
 
             for _ in range(nsat):
