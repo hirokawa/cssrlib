@@ -810,12 +810,24 @@ def char2sys(c):
 
 
 def sys2char(sys):
-    """ convert character to GNSS """
+    """ convert gnss to character """
     gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GLO: 'R', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
                 uGNSS.QZS: 'J', uGNSS.SBS: 'S', uGNSS.IRN: 'I'}
 
     if sys not in gnss_tbl:
         return "?"
+    else:
+        return gnss_tbl[sys]
+
+
+def sys2str(sys):
+    """ convert gnss to string """
+    gnss_tbl = {uGNSS.GPS: 'GPS', uGNSS.GLO: 'GLONASS',
+                uGNSS.GAL: 'GALILEO', uGNSS.BDS: 'BEIDOU',
+                uGNSS.QZS: 'QZSS', uGNSS.SBS: 'SBAS', uGNSS.IRN: 'IRNSS'}
+
+    if sys not in gnss_tbl:
+        return "???"
     else:
         return gnss_tbl[sys]
 
