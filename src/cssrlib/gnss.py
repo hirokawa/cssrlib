@@ -572,7 +572,7 @@ class Nav():
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
 
-        self.loglevel = 1
+        self.monlevel = 1
         self.cnr_min = 35
         self.maxout = 5  # maximum outage [epoch]
 
