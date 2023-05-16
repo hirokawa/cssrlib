@@ -59,7 +59,7 @@ Run RTK sample.
  python test_rtk.py
 ```
 
-Other samples are also available in a separate repository `cssrlib-data` including :
+Other samples are also available in a separate repository [`cssrlib-data`](https://github.com/hirokawa/cssrlib-data) including :
 
 - Galileo-HAS decoder
 - BDS-PPP decoder
