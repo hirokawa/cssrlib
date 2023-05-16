@@ -564,20 +564,13 @@ class Nav():
         self.elmin = np.deg2rad(15.0)
         self.tidecorr = False
         ######## START OBSOLETE ################################################
-        self.nf = 2
+        self.nf = 2  # TODO: make this obsolte if possible
         ######## END   OBSOLETE ################################################
         self.ne = 0
         self.nc = 0
         self.excl_sat = []
-        ######## START OBSOLETE ################################################
-        self.freq = [1.57542e9, 1.22760e9,  # L1,L2
-                     1.17645e9, 1.20714e9]  # E5a,E5b
-        ######## END   OBSOLETE ################################################
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
-        ######## START OBSOLETE ################################################
-        #self.gnss_t = [uGNSS.GPS, uGNSS.GAL, uGNSS.QZS]
-        ######## END   OBSOLETE ################################################
 
         self.loglevel = 1
         self.cnr_min = 35
