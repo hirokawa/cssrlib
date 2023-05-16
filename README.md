@@ -2,7 +2,7 @@
 CSSRlib - Toolkit for PPP-RTK/RTK in Python using Compact SSR
 *************************
 
-# What is CSSRlib? 
+# What is CSSRlib?
 
 CSSRLIB is a open toolkit in Python for high accuracy GNSS positioning. It supports SSR (State-Space Representation) based potitioning such as PPP (Precise Point Positioning) or PPP-RTK (Realtime Kinematic), but also supporting RTK. The goal of the CSSRlib toolkit is to provide an easy-to-understand open implementation to learn PPP/PPP-RTK positioning provided by satellite-based open PPP/PPP-RTK services such as QZSS CLAS, Galileo HAS, BeiDou 3 PPP. It also supports ground based open service by IGS. The code is based on RTKlib.
 
@@ -17,10 +17,9 @@ Prerequisites
 Additional python packages are required as prerequisites and can be installed via the following commands
 
 ```
-pip install bitstruct
-pip install cbitstruct
-pip install galois
-pip install cartopy
+pip install bitstruct, cbitstruct
+pip install galois, cartopy
+pip install notebook, numpy, matplotlib
 ```
 
 If the installation of `cartopy` fails, try installing `libgeos++-dev` first.
@@ -31,18 +30,19 @@ sudo apt-get install libgeos++-dev
 
 Install
 =======
-You can install CSSRlib using pip.
+You can install the official version of CSSRlib using pip
 
 ```
 pip install cssrlib
 ```
 
-additional python packages are required as prerequisites and can be installed via the following commands:
+If you want to install the development version from this repository, first clone or download the sources and then run
 
 ```
-pip install notebook, numpy, matplotlib
-pip install bitstruct,cbitstruct,galois,cartopy
+pip install .
 ```
+
+in the root directory, where the ``setup.cfg`` file is located.
 
 Testing
 =======
