@@ -7,11 +7,12 @@ import numpy as np
 import sys
 
 import cssrlib.gnss as gn
+from cssrlib.ephemeris import findeph
 from cssrlib.gnss import tropmodel, rCST, sat2id, sat2prn
-from cssrlib.gnss import timeadd, time2str
+from cssrlib.gnss import timeadd, time2str, time2str
 from cssrlib.gnss import uTYP
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
-from cssrlib.rtk import IB, ddres, ddcov, resamb_lambda, valpos, holdamb, initx
+from cssrlib.rtk import IB, ddcov, resamb_lambda, valpos, holdamb, initx
 
 
 def rtkinit(nav, pos0=np.zeros(3)):
@@ -19,7 +20,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
 
     # Logging level
     #
-    nav.monlevel = 1
+    nav.monlevel = 0
 
     # Number of frequencies
     #
@@ -83,7 +84,9 @@ def rtkinit(nav, pos0=np.zeros(3)):
     # parameter for PPP
 
     # observation noise parameters
-    nav.eratio = [50, 50]
+    #nav.eratio = [50, 50]
+    #nav.err = [0, 0.01, 0.005]/np.sqrt(2)
+    nav.eratio = [1, 1]
     nav.err = [0, 0.01, 0.005]/np.sqrt(2)
 
     # initial sigma for state covariance
@@ -255,6 +258,7 @@ def udstate(nav, obs):
 
 def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
     """ non-differential residual """
+
     _c = gn.rCST.CLIGHT
     nf = nav.nf
     n = len(obs.P)
@@ -263,12 +267,14 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
     e = np.zeros((n, 3))
     rr_ = rr.copy()
 
-    # Tide corrections
+    # Solid Earth tide corrections
     #
     if nav.tidecorr:
         pos = gn.ecef2pos(rr_)
         disp = tidedisp(gn.gpst2utc(obs.t), pos)
         rr_ += disp
+    else:
+        disp = np.zeros(3)
 
     # Geodetic position
     #
@@ -305,11 +311,15 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         if flg_m is False:
             continue
 
+        # Geometric distance corrected for Earth rotation during flight time
+        #
         r, e[i, :] = gn.geodist(rs[i, :], rr_)
         _, el[i] = gn.satazel(pos, e[i, :])
         if el[i] < nav.elmin:
             continue
 
+        # Wavelength
+        #
         lam = np.zeros(nav.nf)
         for f in range(nav.nf):
             sig = obs.sig[sys][uTYP.L][f]
@@ -325,17 +335,17 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
             sig = obs.sig[sys][uTYP.L][f]
             pbias[f], _ = bsx.getosb(sat, obs.t, sig)
 
-        # relativity effect
+        # Shapipo relativistic effect
         #
         relatv = shapiro(rs[i, :], rr_)
 
-        # tropospheric delay mapping functions
+        # Tropospheric delay mapping functions
         #
         mapfh, mapfw = gn.tropmapf(obs.t, pos, el[i])
 
         # tropospheric delay
         #
-        trop = 0.0  # mapfh*trop_hs + mapfw*trop_wet
+        trop = mapfh*trop_hs + mapfw*trop_wet
 
         # phase wind-up effect
         #
@@ -352,12 +362,12 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
 
         # range correction
         #
-        prc_c = trop + relatv + antr
+        prc_c = trop + antr
 
-        prc[i, :] = prc_c + cbias*_c*1e-9
-        cpc[i, :] = prc_c + pbias*_c*1e-9 + phw
+        prc[i, :] = 0.0  # prc_c + cbias*_c*1e-9
+        cpc[i, :] = 0.0  # prc_c + pbias*_c*1e-9 + phw
 
-        r += -_c*dts[i]
+        r += relatv - _c*dts[i]
 
         for f in range(nf):
             y[i, f] = obs.L[i, f]*lam[f]-(r+cpc[i, f])
@@ -366,17 +376,36 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
     return y, e, el
 
 
-def ddres(nav, obs, x, y, e, sat, el):
+def sdres(nav, obs, x, y, e, sat, el):
     """
-    SD/DD phase/code residuals
+    SD phase/code residuals
 
-        nav :
-        obs :
-        x   :
-        y   :
-        e   :
-        sat :
-        el  :
+    Parameters
+    ----------
+
+    nav : Nav()
+        Auxiliary data structure
+    obs : Obs()
+        Data structure with observations
+    x   :
+        State vector elements
+    y   :
+        Un-differenced observations
+    e   :
+        Line-of-sight vectors
+    sat : np.array of int
+        List of satellites
+    el  : np.array of float values
+        Elevation angles
+
+    Returns
+    -------
+    v   : np.array of float values
+        Residuals of single-difference measurements
+    H   : np.array of float values
+        Jacobian matrix with partial derivatives of state variables
+    R   : np.array of float values
+        Covariance matrix of single-difference measurements
     """
 
     # Reference frequency of slant ionospheric scaling factor
@@ -450,13 +479,14 @@ def ddres(nav, obs, x, y, e, sat, el):
                 #
                 H[nv, 0:3] = -e[i, :] + e[j, :]
 
+                """
                 # SD troposphere
                 #
                 _, mapfwi = gn.tropmapf(obs.t, pos, el[i])
                 _, mapfwj = gn.tropmapf(obs.t, pos, el[j])
-                H[nv, nav.idx_ztd] = 0  # (mapfwi-mapfwj)
-                v[nv] -= 0  # (mapfwi-mapfwj)*x[nav.idx_ztd]
-
+                H[nv, nav.idx_ztd] = (mapfwi-mapfwj)
+                v[nv] -= (mapfwi-mapfwj)*x[nav.idx_ztd]
+                """
                 """
                 print("{} {:10.3f} {:10.3f} {:10.3f} "
                       .format(time2str(obs.t),
@@ -480,6 +510,13 @@ def ddres(nav, obs, x, y, e, sat, el):
                               x[idx_i], x[idx_j],
                               np.sqrt(nav.P[idx_i, idx_i]),
                               np.sqrt(nav.P[idx_j, idx_j])))
+                """
+
+                """
+                print(sig, sat2id(sat[i]),
+                      np.sqrt(varerr(nav, el[i], f)),
+                      sat2id(sat[j]),
+                      np.sqrt(varerr(nav, el[j], f)))
                 """
 
                 # SD ambiguity
@@ -529,7 +566,37 @@ def kfupdate(x, P, H, v, R):
 
 
 def satpreposs(obs, nav, orb):
-    """ calculate pos/vel/clk for observed satellites  """
+    """
+    Calculate pos/vel/clk for observed satellites
+
+    The satellite position, velocity and clock offset are computed at
+    transmission epoch. The signal time-of-flight is computed from a pseudorange
+    measurement corrected by the satellite clock offset, hence the observations
+    are required at this stage. The satellite clock is already corrected for the
+    relativistic effects. The satellite health indicator is extracted from the
+    broadcast navigation message.
+
+    Parameters
+    ----------
+    obs : Obs()
+        contains GNSS measurments
+    nav : Nav()
+        contains coarse satellite orbit and clock offset information
+    obs : peph()
+        contains precise satellite orbit and clock offset information
+
+    Returns
+    -------
+    rs  : np.array() of float
+        satellite position in ECEF [m]
+    vs  : np.array() of float
+        satellite velocities in ECEF [m/s]
+    dts : np.array() of float
+        satellite clock offsets [s]
+    svh : np.array() of int
+        satellite health code [-]
+    """
+
     n = obs.sat.shape[0]
     rs = np.zeros((n, 6))
     dts = np.zeros((n, 2))
@@ -541,12 +608,21 @@ def satpreposs(obs, nav, orb):
         sys, _ = sat2prn(sat)
 
         pr = obs.P[i, 0]
+        if pr == 0.0:
+            continue
+
         t = timeadd(obs.t, -pr/rCST.CLIGHT)
 
         rs[i, :], dts[i, :], _ = orb.peph2pos(t, sat, nav)
 
         t = timeadd(t, -dts[i, 0])
         rs[i, :], dts[i, :], _ = orb.peph2pos(t, sat, nav)
+
+        eph = findeph(nav.eph, t, sat)
+        if eph is None:
+            svh[i] = 1
+            continue
+        svh[i] = eph.svh
 
     return rs[:, 0:3], rs[:, 3:6], dts[:, 0], svh
 
@@ -557,6 +633,15 @@ def pppigspos(nav, obs, orb, bsx):
     # GNSS satellite positions, velocities and clock offsets
     #
     rs, vs, dts, svh = satpreposs(obs, nav, orb)
+
+    if nav.monlevel > 5:
+        for i, sat in enumerate(obs.sat):
+            print("{} {} {} {} {:14.4f} {:3d}"
+                  .format(time2str(obs.t), sat2id(sat),
+                          " ".join("{:14.4f}".format(v) for v in rs[i, :]),
+                          " ".join("{:14.4f}".format(v) for v in vs[i, :]),
+                          dts[i]*rCST.CLIGHT, svh[i]))
+        print()
 
     # Kalman filter time propagation
     #
@@ -597,7 +682,8 @@ def pppigspos(nav, obs, orb, bsx):
         if s not in sat and s is not None:
             idx = nav.satIdx.pop(s)
             nav.satIdx[None].append(idx)
-            print("Removing {} at {}".format(sat2id(s), idx))
+            print("{} removing {} at idx {:2d}"
+                  .format(time2str(obs.t), sat2id(s), idx))
 
     # Add new satellites
     #
@@ -607,7 +693,8 @@ def pppigspos(nav, obs, orb, bsx):
             if len(idx) > 0:
                 nav.satIdx[s] = idx[0]
                 nav.satIdx[None] = idx[1:]
-                print("Adding   {} at {}".format(sat2id(s), idx[0]))
+                print("{} adding   {} at idx {:2d}"
+                      .format(time2str(obs.t), sat2id(s), idx[0]))
             else:
                 print("ERROR: satellite index full!")
                 sys.exit(1)
@@ -632,7 +719,7 @@ def pppigspos(nav, obs, orb, bsx):
     #
     # NOTE: where are working on a reduced list of observations from here on
     #
-    v, H, R = ddres(nav, obs, xp, y, e, sat, el)
+    v, H, R = sdres(nav, obs, xp, y, e, sat, el)
     Pp = nav.P.copy()
 
     # Kalman filter measurement update
@@ -659,13 +746,12 @@ def pppigspos(nav, obs, orb, bsx):
     y = yu[iu, :]
     e = eu[iu, :]
     ny = y.shape[0]
-    nav.y2 = y
     if ny < 6:
         return -1
 
     # Residuals for float solution
     #
-    v, H, R = ddres(nav, obs, xp, y, e, sat, el)
+    v, H, R = sdres(nav, obs, xp, y, e, sat, el)
     if valpos(nav, v, R):
         nav.x = xp
         nav.P = Pp
@@ -691,7 +777,7 @@ def pppigspos(nav, obs, orb, bsx):
         yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, svh, xa[0:3])
         y = yu[iu, :]
         e = eu[iu, :]
-        v, H, R = ddres(nav, obs, xa, y, e, sat, el)
+        v, H, R = sdres(nav, obs, xa, y, e, sat, el)
         if valpos(nav, v, R):       # R <= Q=H'PH+R  chisq<max_inno[3] (0.5)
             if nav.armode == 3:     # fix and hold
                 holdamb(nav, xa)    # hold fixed ambiguity
