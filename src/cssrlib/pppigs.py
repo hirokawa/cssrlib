@@ -3,31 +3,28 @@ module for standard PPP positioning
 """
 from collections import defaultdict
 from copy import copy
-from datetime import datetime
 import numpy as np
 import sys
+
 import cssrlib.gnss as gn
-from cssrlib.gnss import tropmodel, antmodel, uGNSS, rCST, sat2id, sat2prn, timeadd, time2epoch
-from cssrlib.cssrlib import sSigGPS, sSigGAL, sSigQZS
+from cssrlib.ephemeris import findeph
+from cssrlib.gnss import tropmodel, rCST, sat2id, sat2prn
+from cssrlib.gnss import timeadd, time2str, time2str
+from cssrlib.gnss import uTYP
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
-from cssrlib.rtk import IB, ddres, resamb_lambda, valpos, holdamb, initx
-
-
-def time2str(time):
-    ep = time2epoch(time)
-    return ("{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02.0f}"
-            .format(ep[0], ep[1], ep[2], ep[3], ep[4], ep[5]))
+from cssrlib.rtk import IB, ddcov, resamb_lambda, valpos, holdamb, initx
 
 
 def rtkinit(nav, pos0=np.zeros(3)):
     """ initialize variables for RTK """
 
     # Logging level
-    nav.monlevel = 1
+    #
+    nav.monlevel = 0
 
     # Number of frequencies
     #
-    nav.nf = 2
+    nav.nf = 2  # TODO: make obsolete if possible
 
     # Positioning mode
     # 0:static, 1:kinematic
@@ -53,10 +50,12 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.nq = 3 if nav.pmode == 0 else 6
 
     # Zenith tropospheric delay state
+    #
     nav.na += 1
     nav.nq += 1
 
     # Slant ionospheric delay states
+    #
     nav.na += nav.nChan
     nav.nq += nav.nChan
 
@@ -85,7 +84,9 @@ def rtkinit(nav, pos0=np.zeros(3)):
     # parameter for PPP
 
     # observation noise parameters
-    nav.eratio = [50, 50]
+    #nav.eratio = [50, 50]
+    #nav.err = [0, 0.01, 0.005]/np.sqrt(2)
+    nav.eratio = [1, 1]
     nav.err = [0, 0.01, 0.005]/np.sqrt(2)
 
     # initial sigma for state covariance
@@ -104,7 +105,6 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.tidecorr = True
     nav.armode = 3  # 1:continuous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20)  # elevation mask for AR
-    nav.gnss_t = [uGNSS.GPS, uGNSS.GAL]
 
     # Initial state vector
     nav.x[0:3] = pos0
@@ -131,27 +131,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.q[nav.idx_ztd] = nav.sig_qztd**2
     nav.q[nav.idx_ion:nav.idx_ion+nav.nChan] = nav.sig_qion**2
 
-    # obs index
-    i0 = {gn.uGNSS.GPS: 0, gn.uGNSS.GAL: 0, gn.uGNSS.QZS: 0}
-    i1 = {gn.uGNSS.GPS: 1, gn.uGNSS.GAL: 2, gn.uGNSS.QZS: 1}
-    freq0 = {gn.uGNSS.GPS: nav.freq[0], gn.uGNSS.GAL: nav.freq[0],
-             gn.uGNSS.QZS: nav.freq[0]}
-    freq1 = {gn.uGNSS.GPS: nav.freq[1], gn.uGNSS.GAL: nav.freq[2],
-             gn.uGNSS.QZS: nav.freq[1]}
-    nav.obs_idx = [i0, i1]
-    nav.obs_freq = [freq0, freq1]
-    nav.cs_sig_idx = {gn.uGNSS.GPS: [sSigGPS.L1C, sSigGPS.L2W],
-                      gn.uGNSS.GAL: [sSigGAL.L1X, sSigGAL.L5X],
-                      gn.uGNSS.QZS: [sSigQZS.L1C, sSigQZS.L2X]}
-
     nav.fout = None
-    nav.logfile = 'log.txt'
-    if nav.loglevel >= 2:
-        nav.fout = open(nav.logfile, 'w')
-        nav.fout.write(
-            "# tow\tsys\tprn\tpb1\tpb2\tcb1\tcb2\ttrop\tiono\tantr1\tantr2")
-        nav.fout.write(
-            "# \trelatv\twup1\twup2\tCPC1\tCPC2\tPRC1\tPRC2\tdorb\tdclk\n")
 
 
 def sysidx(satlist, sys_ref):
@@ -202,15 +182,18 @@ def udstate(nav, obs):
     dP.flags['WRITEABLE'] = True
     dP[0:nav.nq] += nav.q[0:nav.nq]*tt
 
-    # bias
+    # Carrier-phase ambiguity
+    #
     for f in range(nav.nf):
-        # reset phase-bias if instantaneous AR or expire obs outage counter
+
+        # Reset phase-ambiguity if instantaneous AR or expire obs outage counter
+        #
         for i in range(gn.uGNSS.MAXSAT):
             sat_ = i+1
             nav.outc[i, f] += 1
             reset = (nav.outc[i, f] > nav.maxout)
             sys_i, _ = gn.sat2prn(sat_)
-            if sys_i not in nav.gnss_t:
+            if sys_i not in obs.sig.keys():
                 continue
             j = IB(sat_, f, nav.na)
             if reset and nav.x[j] != 0.0:
@@ -218,55 +201,64 @@ def udstate(nav, obs):
                 nav.outc[i, f] = 0
 
         # cycle slip check by LLI
+        #
         for i in range(ns):
-            if sys[i] not in nav.gnss_t:
+            if sys[i] not in obs.sig.keys():
                 continue
-            j = nav.obs_idx[f][sys[i]]
-            if obs.lli[i, j] & 1 == 0:
+            if obs.lli[i, f] & 1 == 0:
                 continue
             initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
 
         # Reset ambiguity if satellite is not available
+        #
         for i in range(ns):
             if sat[i] in nav.satIdx:
                 continue
             initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
 
-        # bias
+        # Ambiguity
+        #
         bias = np.zeros(ns)
         offset = 0
         na = 0
         for i in range(ns):
-            if sys[i] not in nav.gnss_t:
+
+            if sys[i] not in obs.sig.keys():
                 continue
-            j = nav.obs_idx[f][sys[i]]
-            freq = nav.obs_freq[f][sys[i]]
-            cp = obs.L[i, j]
-            pr = obs.P[i, j]
-            if cp == 0.0 or pr == 0.0 or freq == 0.0:
+
+            sig = obs.sig[sys[i]][uTYP.L][f]
+            lam = sig.wavelength()
+
+            cp = obs.L[i, f]
+            pr = obs.P[i, f]
+            if cp == 0.0 or pr == 0.0 or lam is None:
                 continue
-            bias[i] = cp-pr*freq/gn.rCST.CLIGHT
+            bias[i] = cp - pr/lam
             amb = nav.x[IB(sat[i], f, nav.na)]
             if amb != 0.0:
-                offset += bias[i]-amb
+                offset += bias[i] - amb
                 na += 1
+
         # adjust phase-code coherency
         if na > 0:
             db = offset/na
             for i in range(gn.uGNSS.MAXSAT):
                 if nav.x[IB(i+1, f, nav.na)] != 0.0:
                     nav.x[IB(i+1, f, nav.na)] += db
+
         # initialize ambiguity
         for i in range(ns):
             j = IB(sat[i], f, nav.na)
             if bias[i] == 0.0 or nav.x[j] != 0.0:
                 continue
             initx(nav, bias[i], nav.sig_n0**2, j)
+
     return 0
 
 
 def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
     """ non-differential residual """
+
     _c = gn.rCST.CLIGHT
     nf = nav.nf
     n = len(obs.P)
@@ -275,12 +267,14 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
     e = np.zeros((n, 3))
     rr_ = rr.copy()
 
-    # Tide corrections
+    # Solid Earth tide corrections
     #
     if nav.tidecorr:
         pos = gn.ecef2pos(rr_)
         disp = tidedisp(gn.gpst2utc(obs.t), pos)
         rr_ += disp
+    else:
+        disp = np.zeros(3)
 
     # Geodetic position
     #
@@ -298,53 +292,54 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         sat = obs.sat[i]
         sys, _ = gn.sat2prn(sat)
 
-        if svh[i] > 0 or sys not in nav.gnss_t or sat in nav.excl_sat:
+        if svh[i] > 0 or sys not in obs.sig.keys() or sat in nav.excl_sat:
             continue
 
-        # check for measurement consistency
+        # Check for measurement consistency
         #
         flg_m = True
         for f in range(nav.nf):
-            k = nav.obs_idx[f][sys]
+
+            k = f  # nav.obs_idx[f][sys]
             if obs.P[i, k] == 0.0 or obs.L[i, k] == 0.0 or obs.lli[i, k] == 1:
                 flg_m = False
+
+        # Check C/N0 at first frequency
+        #
         if obs.S[i, 0] < nav.cnr_min:
             flg_m = False
         if flg_m is False:
             continue
 
+        # Geometric distance corrected for Earth rotation during flight time
+        #
         r, e[i, :] = gn.geodist(rs[i, :], rr_)
         _, el[i] = gn.satazel(pos, e[i, :])
         if el[i] < nav.elmin:
             continue
 
-        freq = np.zeros(nav.nf)
+        # Wavelength
+        #
         lam = np.zeros(nav.nf)
         for f in range(nav.nf):
-            freq[f] = nav.obs_freq[f][sys]
-            lam[f] = gn.rCST.CLIGHT/freq[f]
+            sig = obs.sig[sys][uTYP.L][f]
+            lam[f] = sig.wavelength()
 
         # Code and phase signal bias [ns]
         #
         cbias = np.zeros(nav.nf)
         pbias = np.zeros(nav.nf)
+        for f in range(nav.nf):
+            sig = obs.sig[sys][uTYP.C][f]
+            cbias[f], _ = bsx.getosb(sat, obs.t, sig)
+            sig = obs.sig[sys][uTYP.L][f]
+            pbias[f], _ = bsx.getosb(sat, obs.t, sig)
 
-        if sys == uGNSS.GPS:
-            cbias[0], _ = bsx.getosb(sat, obs.t, "C1C")
-            cbias[1], _ = bsx.getosb(sat, obs.t, "C2W")
-            pbias[0], _ = bsx.getosb(sat, obs.t, "L1C")
-            pbias[1], _ = bsx.getosb(sat, obs.t, "L2W")
-        elif sys == uGNSS.GAL:
-            cbias[0], _ = bsx.getosb(sat, obs.t, "C1X")
-            cbias[1], _ = bsx.getosb(sat, obs.t, "C5X")
-            pbias[0], _ = bsx.getosb(sat, obs.t, "L1X")
-            pbias[1], _ = bsx.getosb(sat, obs.t, "L5X")
-
-        # relativity effect
+        # Shapipo relativistic effect
         #
         relatv = shapiro(rs[i, :], rr_)
 
-        # tropospheric delay mapping functions
+        # Tropospheric delay mapping functions
         #
         mapfh, mapfw = gn.tropmapf(obs.t, pos, el[i])
 
@@ -360,71 +355,84 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
 
         # Receiver antenna offset
         #
-        antr = antmodel(nav, el[i], nav.nf)
+        # TODO: find a solution for the antenna modeling
+        #
+        #antr = antModelRx(nav, rr, e, sigs)
+        antr = 0.0
 
         # range correction
         #
-        prc_c = trop + relatv + antr
+        prc_c = trop + antr
 
-        prc[i, :] = prc_c + cbias*_c*1e-9
-        cpc[i, :] = prc_c + pbias*_c*1e-9 + phw
+        prc[i, :] = 0.0  # prc_c + cbias*_c*1e-9
+        cpc[i, :] = 0.0  # prc_c + pbias*_c*1e-9 + phw
 
-        r += -_c*dts[i]
+        r += relatv - _c*dts[i]
 
         for f in range(nf):
-            k = nav.obs_idx[f][sys]
-            y[i, f] = obs.L[i, k]*lam[f]-(r+cpc[i, f])
-            y[i, f+nf] = obs.P[i, k]-(r+prc[i, f])
+            y[i, f] = obs.L[i, f]*lam[f]-(r+cpc[i, f])
+            y[i, f+nf] = obs.P[i, f]-(r+prc[i, f])
 
     return y, e, el
 
 
-def ddcov(nb, n, Ri, Rj, nv):
-    """ DD measurement error covariance """
-    R = np.zeros((nv, nv))
-    k = 0
-    for b in range(n):
-        for i in range(nb[b]):
-            for j in range(nb[b]):
-                R[k+i, k+j] = Ri[k+i]
-                if i == j:
-                    R[k+i, k+j] += Rj[k+i]
-        k += nb[b]
-    return R
-
-
-def ddres(nav, t, x, y, e, sat, el, log=False):
+def sdres(nav, obs, x, y, e, sat, el):
     """
-    SD/DD phase/code residuals
+    SD phase/code residuals
 
-        nav :
-        t   :
-        x   :
-        y   :
-        e   :
-        sat :
-        el  :
+    Parameters
+    ----------
+
+    nav : Nav()
+        Auxiliary data structure
+    obs : Obs()
+        Data structure with observations
+    x   :
+        State vector elements
+    y   :
+        Un-differenced observations
+    e   :
+        Line-of-sight vectors
+    sat : np.array of int
+        List of satellites
+    el  : np.array of float values
+        Elevation angles
+
+    Returns
+    -------
+    v   : np.array of float values
+        Residuals of single-difference measurements
+    H   : np.array of float values
+        Jacobian matrix with partial derivatives of state variables
+    R   : np.array of float values
+        Covariance matrix of single-difference measurements
     """
-    _c = gn.rCST.CLIGHT
+
+    # Reference frequency of slant ionospheric scaling factor
+    #
+    _freq0 = gn.rCST.FREQ_G1
+
     nf = nav.nf
     ns = len(el)
-    mode = 1 if len(y) == ns else 0  # 0:DD,1:SD
-    nb = np.zeros(2*len(nav.gnss_t)*nf, dtype=int)
+
+    nb = np.zeros(2*len(obs.sig.keys())*nf, dtype=int)
+
     Ri = np.zeros(ns*nf*2)
     Rj = np.zeros(ns*nf*2)
+
     nv = 0
     b = 0
+
     H = np.zeros((ns*nf*2, nav.nx))
     v = np.zeros(ns*nf*2)
 
     # Geodetic position
+    #
     pos = gn.ecef2pos(x[0:3])
 
-    idx_f = [0, 1]
-    for sys in nav.gnss_t:
-
-        for f in range(nf):
-            idx_f[f] = nav.obs_idx[f][sys]
+    # Loop over constellations
+    #
+    for sys in obs.sig.keys():
 
         # Loop over twice the number of frequencies
         #   first for all carrier-phase observations
@@ -432,76 +440,105 @@ def ddres(nav, t, x, y, e, sat, el, log=False):
         for f in range(0, nf*2):
 
             # Select carrier-phase frequency and iono frequency ratio
-            freq = nav.freq[idx_f[f % 2]]
+            #
             if f < nf:  # carrier
-                mu = -(nav.freq[idx_f[0]]/freq)**2
+                sig = obs.sig[sys][uTYP.L][f]
+                mu = -(_freq0/sig.frequency())**2
             else:  # code
-                mu = +(nav.freq[idx_f[0]]/freq)**2
+                sig = obs.sig[sys][uTYP.C][f % 2]
+                mu = +(_freq0/sig.frequency())**2
 
-            # Select reference satellite
+            # Select satellites from one constellation only
+            #
             idx = sysidx(sat, sys)
 
-            if log and 1 == 0:
-                for i in idx:
-                    print(sys, sat[i])
-
+            # Select reference satellite with highest elevation
+            #
             if len(idx) > 0:
                 i = idx[np.argmax(el[idx])]
 
-            # Loop over satellite
+            # Loop over satellites
+            #
             for j in idx:
 
                 # Skip reference satellite
+                #
                 if i == j:
                     continue
 
+                # Skip invalid signals
+                #
                 if y[i, f] == 0.0 or y[j, f] == 0.0:
                     continue
 
-                #  DD residual
-                if mode == 0:
-                    if y[i+ns, f] == 0.0 or y[j+ns, f] == 0.0:
-                        continue
-                    v[nv] = (y[i, f]-y[i+ns, f])-(y[j, f]-y[j+ns, f])
-                else:
-                    v[nv] = y[i, f]-y[j, f]
+                #  SD residual
+                #
+                v[nv] = y[i, f] - y[j, f]
 
                 # SD line-of-sight vectors
-                H[nv, 0:3] = -e[i, :]+e[j, :]
+                #
+                H[nv, 0:3] = -e[i, :] + e[j, :]
 
+                """
                 # SD troposphere
-                _, mapfwi = gn.tropmapf(t, pos, el[i])
-                _, mapfwj = gn.tropmapf(t, pos, el[j])
+                #
+                _, mapfwi = gn.tropmapf(obs.t, pos, el[i])
+                _, mapfwj = gn.tropmapf(obs.t, pos, el[j])
                 H[nv, nav.idx_ztd] = (mapfwi-mapfwj)
                 v[nv] -= (mapfwi-mapfwj)*x[nav.idx_ztd]
+                """
+                """
+                print("{} {:10.3f} {:10.3f} {:10.3f} "
+                      .format(time2str(obs.t),
+                              (mapfwi-mapfwj),
+                              x[nav.idx_ztd],
+                              np.sqrt(nav.P[nav.idx_ztd, nav.idx_ztd])))
+                """
 
                 # SD ionosphere
+                #
                 idx_i = nav.satIdx[sat[i]] + nav.idx_ion
                 idx_j = nav.satIdx[sat[j]] + nav.idx_ion
                 H[nv, idx_i] = mu
                 H[nv, idx_j] = mu
                 v[nv] -= mu*(x[idx_i]-x[idx_j])
 
-                if log:
-                    print("{:%D %T} {:10.3f} {:10.3f} {:10.3f} "
-                          .format(datetime.utcfromtimestamp(t.time),
-                                  (mapfwi-mapfwj),
-                                  nav.x[nav.idx_ztd],
-                                  np.sqrt(nav.P[nav.idx_ztd, nav.idx_ztd])))
+                """
+                print("{} {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}"
+                      .format(time2str(obs.t),
+                              mu,
+                              x[idx_i], x[idx_j],
+                              np.sqrt(nav.P[idx_i, idx_i]),
+                              np.sqrt(nav.P[idx_j, idx_j])))
+                """
+
+                """
+                print(sig, sat2id(sat[i]),
+                      np.sqrt(varerr(nav, el[i], f)),
+                      sat2id(sat[j]),
+                      np.sqrt(varerr(nav, el[j], f)))
+                """
 
                 # SD ambiguity
+                #
                 if f < nf:  # carrier-phase
+
                     idx_i = IB(sat[i], f, nav.na)
                     idx_j = IB(sat[j], f, nav.na)
-                    lami = _c/freq
+                    lami = sig.wavelength()
+
                     v[nv] -= lami*(x[idx_i]-x[idx_j])
                     H[nv, idx_i] = lami
                     H[nv, idx_j] = -lami
+
                     Ri[nv] = varerr(nav, el[i], f)  # measurement variance
                     Rj[nv] = varerr(nav, el[j], f)  # measurement variance
+
                     nav.vsat[sat[i]-1, f] = 1
                     nav.vsat[sat[j]-1, f] = 1
+
                 else:  # pseudorange
+
                     Ri[nv] = varerr(nav, el[i], f)  # measurement variance
                     Rj[nv] = varerr(nav, el[j], f)  # measurement variance
 
@@ -529,7 +566,37 @@ def kfupdate(x, P, H, v, R):
 
 
 def satpreposs(obs, nav, orb):
-    """ calculate pos/vel/clk for observed satellites  """
+    """
+    Calculate pos/vel/clk for observed satellites
+
+    The satellite position, velocity and clock offset are computed at
+    transmission epoch. The signal time-of-flight is computed from a pseudorange
+    measurement corrected by the satellite clock offset, hence the observations
+    are required at this stage. The satellite clock is already corrected for the
+    relativistic effects. The satellite health indicator is extracted from the
+    broadcast navigation message.
+
+    Parameters
+    ----------
+    obs : Obs()
+        contains GNSS measurments
+    nav : Nav()
+        contains coarse satellite orbit and clock offset information
+    obs : peph()
+        contains precise satellite orbit and clock offset information
+
+    Returns
+    -------
+    rs  : np.array() of float
+        satellite position in ECEF [m]
+    vs  : np.array() of float
+        satellite velocities in ECEF [m/s]
+    dts : np.array() of float
+        satellite clock offsets [s]
+    svh : np.array() of int
+        satellite health code [-]
+    """
+
     n = obs.sat.shape[0]
     rs = np.zeros((n, 6))
     dts = np.zeros((n, 2))
@@ -540,12 +607,10 @@ def satpreposs(obs, nav, orb):
         sat = obs.sat[i]
         sys, _ = sat2prn(sat)
 
-        if sat < 1:
-            continue
-        if sys not in nav.gnss_t:
+        pr = obs.P[i, 0]
+        if pr == 0.0:
             continue
 
-        pr = obs.P[i, 0]
         t = timeadd(obs.t, -pr/rCST.CLIGHT)
 
         rs[i, :], dts[i, :], _ = orb.peph2pos(t, sat, nav)
@@ -553,15 +618,30 @@ def satpreposs(obs, nav, orb):
         t = timeadd(t, -dts[i, 0])
         rs[i, :], dts[i, :], _ = orb.peph2pos(t, sat, nav)
 
+        eph = findeph(nav.eph, t, sat)
+        if eph is None:
+            svh[i] = 1
+            continue
+        svh[i] = eph.svh
+
     return rs[:, 0:3], rs[:, 3:6], dts[:, 0], svh
 
 
 def pppigspos(nav, obs, orb, bsx):
-    """ PPP positioning with IGS files and conventions"""
+    """ PPP positioning with IGS files and conventions """
 
     # GNSS satellite positions, velocities and clock offsets
     #
     rs, vs, dts, svh = satpreposs(obs, nav, orb)
+
+    if nav.monlevel > 5:
+        for i, sat in enumerate(obs.sat):
+            print("{} {} {} {} {:14.4f} {:3d}"
+                  .format(time2str(obs.t), sat2id(sat),
+                          " ".join("{:14.4f}".format(v) for v in rs[i, :]),
+                          " ".join("{:14.4f}".format(v) for v in vs[i, :]),
+                          dts[i]*rCST.CLIGHT, svh[i]))
+        print()
 
     # Kalman filter time propagation
     #
@@ -581,6 +661,9 @@ def pppigspos(nav, obs, orb, bsx):
     y = yu[iu, :]
     e = eu[iu, :]
     el = elu[iu]
+
+    # Store reduced satellite list
+    #
     nav.sat = sat
     nav.el[sat-1] = el
     nav.y = y
@@ -599,7 +682,8 @@ def pppigspos(nav, obs, orb, bsx):
         if s not in sat and s is not None:
             idx = nav.satIdx.pop(s)
             nav.satIdx[None].append(idx)
-            print("Removing {} at {}".format(sat2id(s), idx))
+            print("{} removing {} at idx {:2d}"
+                  .format(time2str(obs.t), sat2id(s), idx))
 
     # Add new satellites
     #
@@ -609,7 +693,8 @@ def pppigspos(nav, obs, orb, bsx):
             if len(idx) > 0:
                 nav.satIdx[s] = idx[0]
                 nav.satIdx[None] = idx[1:]
-                print("Adding   {} at {}".format(sat2id(s), idx[0]))
+                print("{} adding   {} at idx {:2d}"
+                      .format(time2str(obs.t), sat2id(s), idx[0]))
             else:
                 print("ERROR: satellite index full!")
                 sys.exit(1)
@@ -622,35 +707,51 @@ def pppigspos(nav, obs, orb, bsx):
     print()
     """
 
-    # ???
+    # Check if observations of at least 6 satellites are left over after editing
+    #
     ny = y.shape[0]
     if ny < 6:
         nav.P[np.diag_indices(3)] = 1.0
         nav.smode = 5
         return -1
 
-    # DD residual
+    # SD residuals
     #
-    v, H, R = ddres(nav, obs.t, xp, y, e, sat, el)
+    # NOTE: where are working on a reduced list of observations from here on
+    #
+    v, H, R = sdres(nav, obs, xp, y, e, sat, el)
     Pp = nav.P.copy()
 
     # Kalman filter measurement update
     #
     xp, Pp, _ = kfupdate(xp, Pp, H, v, R)
 
-    # non-differential residuals after measurement update
+    if nav.monlevel > 0:
+        print("epo "+time2str(nav.t))
+        txt = ' '.join(["{:13.3f} ".format(v) for v in xp[0:3]])
+        print("pos {}".format(txt))
+        print("ztd {:12.3f}".format(xp[nav.idx_ztd]))
+        txt = ' '.join(["{:7.3f} ".format(v)
+                       for v in xp[nav.idx_ion: nav.idx_ion+20]])
+        print("ion {}".format(txt))
+        txt = ' '.join(["{:7.3f} ".format(v)
+                       for v in xp[nav.na:]])
+        print("amb {}".format(txt))
+
+        print()
+
+    # Non-differential residuals after measurement update
     #
     yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, svh, xp[0:3])
     y = yu[iu, :]
     e = eu[iu, :]
     ny = y.shape[0]
-    nav.y2 = y
     if ny < 6:
         return -1
 
     # Residuals for float solution
     #
-    v, H, R = ddres(nav, obs.t, xp, y, e, sat, el)
+    v, H, R = sdres(nav, obs, xp, y, e, sat, el)
     if valpos(nav, v, R):
         nav.x = xp
         nav.P = Pp
@@ -676,12 +777,14 @@ def pppigspos(nav, obs, orb, bsx):
         yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, svh, xa[0:3])
         y = yu[iu, :]
         e = eu[iu, :]
-        v, H, R = ddres(nav, obs.t, xa, y, e, sat, el)
+        v, H, R = sdres(nav, obs, xa, y, e, sat, el)
         if valpos(nav, v, R):       # R <= Q=H'PH+R  chisq<max_inno[3] (0.5)
             if nav.armode == 3:     # fix and hold
                 holdamb(nav, xa)    # hold fixed ambiguity
             nav.smode = 4           # fix
 
+    # Store epoch for solution
+    #
     nav.t = obs.t
 
     return 0

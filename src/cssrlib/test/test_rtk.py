@@ -4,27 +4,77 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+from os.path import expanduser
+import sys
+
 import cssrlib.rinex as rn
 import cssrlib.gnss as gn
 from cssrlib.rtk import rtkinit, relpos
+from cssrlib.gnss import rSigRnx
+from cssrlib.peph import atxdec, searchpcv
 
 bdir = '../data/'
 navfile = bdir+'SEPT078M.21P'
 obsfile = bdir+'SEPT078M1.21O'
 basefile = bdir+'3034078M1.21O'
 
+bdir = expanduser('~/GNSS_DAT/')
+atxfile = bdir+"IGS/ANTEX/igs14.atx"
+
 xyz_ref = [-3962108.673,   3381309.574,   3668678.638]
 pos_ref = gn.ecef2pos(xyz_ref)
 
+# Define signals to be processed
+#
+sigs = [rSigRnx("GC1C"), rSigRnx("GC2W"),
+        rSigRnx("EC1C"), rSigRnx("EC5Q"),
+        rSigRnx("GL1C"), rSigRnx("GL2W"),
+        rSigRnx("EL1C"), rSigRnx("EL5Q")]
+
+sigsb = [rSigRnx("GC1C"), rSigRnx("GC2W"),
+         rSigRnx("EC1X"), rSigRnx("EC5X"),
+         rSigRnx("GL1C"), rSigRnx("GL2W"),
+         rSigRnx("EL1X"), rSigRnx("EL5X")]
+
 # rover
+#
 dec = rn.rnxdec()
+dec.setSignals(sigs)
+
 nav = gn.Nav()
 dec.decode_nav(navfile, nav)
 
 # base
+#
 decb = rn.rnxdec()
+decb.setSignals(sigsb)
+
 decb.decode_obsh(basefile)
 dec.decode_obsh(obsfile)
+
+#
+# Set rover and base antenna
+
+dec.ant = "{:16s}{:4s}".format("JAVRINGANT_DM", "SCIS")
+decb.ant = "{:16s}{:4s}".format("TRM59800.80", "NONE")
+
+atx = atxdec()
+atx.readpcv(atxfile)
+
+# Set antenna PCO/PCV data
+#
+nav.sat_pcv = atx.pcvs
+
+nav.rcv_ant = searchpcv(atx.pcvr, dec.ant,  dec.ts)
+nav.rcv_ant_b = searchpcv(atx.pcvr, decb.ant, decb.ts)
+
+if nav.rcv_ant is None:
+    print("ERROR: no rover antenna found!")
+    sys.exit(1)
+
+if nav.rcv_ant_b is None:
+    print("ERROR: no base antenna found!")
+    sys.exit(1)
 
 nep = 60
 
