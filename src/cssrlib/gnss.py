@@ -1082,3 +1082,37 @@ def tropmodel(t, pos, el=np.pi/2, humi=0.7):
     trop_hs = 0.0022768*pres/(1.0-0.00266*np.cos(2*pos[0])-0.00028e-3*hgt)
     trop_wet = 0.002277*(1255.0/temp+0.05)*e
     return trop_hs, trop_wet, z
+
+
+def meteoHpf():
+    """
+    Hopfield atmosphere model
+    """
+    pres = 1010.0
+    temp = 291.1
+    e = 10.4
+    return pres, temp, e
+
+
+def tropmapfHpf(el):
+    """
+    Tropospheric mapping functions for Hopfield model
+    """
+
+    mapfh = 1.0/(np.sin(np.sqrt(el**2+(np.pi/72.0)**2)))
+    mapfw = 1.0/(np.sin(np.sqrt(el**2+(np.pi/120.0)**2)))
+
+    return mapfh, mapfw
+
+
+def tropmodelHpf():
+    """
+    Hopfield tropospheric delay model
+    """
+    # standard atmosphere for Hopfield model
+    pres, temp, e = meteoHpf()
+    # Hopfield
+    trop_dry = (77.6e-6 * (-613.3768/temp+148.98)*pres)/5.0
+    trop_wet = (77.6e-6 * 11000.0 * 4810.0 * e/temp**2)/5.0
+
+    return trop_dry, trop_wet
