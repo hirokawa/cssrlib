@@ -85,7 +85,6 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.tidecorr = True
     nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20)  # elevation mask for AR
-    nav.gnss_t = [uGNSS.GPS, uGNSS.GAL, uGNSS.QZS]
     nav.x[0:3] = pos0
 
     dP = np.diag(nav.P)
@@ -145,7 +144,7 @@ def udstate(nav, obs, cs):
             nav.outc[i, f] += 1
             reset = (nav.outc[i, f] > nav.maxout)
             sys_i, _ = gn.sat2prn(sat_)
-            if sys_i not in nav.gnss_t:
+            if sys_i not in obs.sig.keys():
                 continue
             j = IB(sat_, f, nav.na)
             if reset and nav.x[j] != 0.0:
@@ -230,7 +229,7 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
     for i in range(n):
         sat = obs.sat[i]
         sys, _ = gn.sat2prn(sat)
-        if svh[i] > 0 or sys not in nav.gnss_t or sat in nav.excl_sat:
+        if svh[i] > 0 or sys not in obs.sig.keys() or sat in nav.excl_sat:
             continue
         if sat not in cs.lc[inet].sat_n:
             continue
@@ -331,7 +330,7 @@ def ppprtkpos(nav, obs, cs):
     rs, vs, dts, svh = satposs(obs, nav, cs)
     # Kalman filter time propagation
     udstate(nav, obs, cs)
-    xa = np.zeros(nav.nx)
+    #xa = np.zeros(nav.nx)
     xp = nav.x.copy()
 
     # non-differential residuals for rover
