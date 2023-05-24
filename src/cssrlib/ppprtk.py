@@ -4,9 +4,10 @@ module for PPP-RTK positioing
 
 import numpy as np
 import cssrlib.gnss as gn
-from cssrlib.gnss import tropmodel, antmodel, uGNSS
+from cssrlib.gnss import tropmodel, uGNSS, uTYP
 from cssrlib.ephemeris import satposs
 from cssrlib.cssrlib import sSigGPS, sSigGAL, sSigQZS
+from cssrlib.peph import antModelRx
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.rtk import IB, ddres, resamb_lambda, valpos, holdamb, initx
 
@@ -98,25 +99,19 @@ def rtkinit(nav, pos0=np.zeros(3)):
         nav.q[3:6] = nav.sig_qv**2
     else:
         nav.q[0:3] = nav.sig_qp**2
-    # obs index
-    i0 = {gn.uGNSS.GPS: 0, gn.uGNSS.GAL: 0, gn.uGNSS.QZS: 0}
-    i1 = {gn.uGNSS.GPS: 1, gn.uGNSS.GAL: 2, gn.uGNSS.QZS: 1}
-    freq0 = {gn.uGNSS.GPS: nav.freq[0], gn.uGNSS.GAL: nav.freq[0],
-             gn.uGNSS.QZS: nav.freq[0]}
-    freq1 = {gn.uGNSS.GPS: nav.freq[1], gn.uGNSS.GAL: nav.freq[2],
-             gn.uGNSS.QZS: nav.freq[1]}
-    nav.obs_idx = [i0, i1]
-    nav.obs_freq = [freq0, freq1]
+
     nav.cs_sig_idx = {gn.uGNSS.GPS: [sSigGPS.L1C, sSigGPS.L2W],
                       gn.uGNSS.GAL: [sSigGAL.L1X, sSigGAL.L5X],
                       gn.uGNSS.QZS: [sSigQZS.L1C, sSigQZS.L2X]}
 
     nav.fout = None
     nav.logfile = 'log.txt'
-    if nav.loglevel >= 2:
+    if nav.monlevel >= 2:
         nav.fout = open(nav.logfile, 'w')
-        nav.fout.write("# tow\tsys\tprn\tpb1\tpb2\tcb1\tcb2\ttrop\tiono\tantr1\tantr2")
-        nav.fout.write("# \trelatv\twup1\twup2\tCPC1\tCPC2\tPRC1\tPRC2\tdorb\tdclk\n")
+        nav.fout.write(
+            "# tow\tsys\tprn\tpb1\tpb2\tcb1\tcb2\ttrop\tiono\tantr1\tantr2")
+        nav.fout.write(
+            "# \trelatv\twup1\twup2\tCPC1\tCPC2\tPRC1\tPRC2\tdorb\tdclk\n")
 
 
 def udstate(nav, obs, cs):
@@ -158,10 +153,9 @@ def udstate(nav, obs, cs):
                 nav.outc[i, f] = 0
         # cycle slip check by LLI
         for i in range(ns):
-            if sys[i] not in nav.gnss_t:
+            if sys[i] not in obs.sig.keys():
                 continue
-            j = nav.obs_idx[f][sys[i]]
-            if obs.lli[i, j] & 1 == 0:
+            if obs.lli[i, f] & 1 == 0:
                 continue
             initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
         # reset bias if correction is not available
@@ -174,12 +168,13 @@ def udstate(nav, obs, cs):
         offset = 0
         na = 0
         for i in range(ns):
-            if sys[i] not in nav.gnss_t:
+            if sys[i] not in obs.sig.keys():
                 continue
-            j = nav.obs_idx[f][sys[i]]
-            freq = nav.obs_freq[f][sys[i]]
-            cp = obs.L[i, j]
-            pr = obs.P[i, j]
+            sig = obs.sig[sys[i]][uTYP.L][f]
+            freq = sig.frequency()
+
+            cp = obs.L[i, f]
+            pr = obs.P[i, f]
             if cp == 0.0 or pr == 0.0 or freq == 0.0:
                 continue
             bias[i] = cp-pr*freq/gn.rCST.CLIGHT
@@ -253,9 +248,8 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
         # check for measurement consistency
         flg_m = True
         for f in range(nav.nf):
-            k = nav.obs_idx[f][sys]
-            if obs.P[i, k] == 0.0 or obs.L[i, k] == 0.0 \
-                    or obs.lli[i, k] == 1:
+            if obs.P[i, f] == 0.0 or obs.L[i, f] == 0.0 \
+                    or obs.lli[i, f] == 1:
                 flg_m = False
         if obs.S[i, 0] < nav.cnr_min:
             flg_m = False
@@ -271,7 +265,7 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
         lam = np.zeros(nav.nf)
         iono = np.zeros(nav.nf)
         for f in range(nav.nf):
-            freq[f] = nav.obs_freq[f][sys]
+            freq[f] = obs.sig[sys][uTYP.L][f].frequency()
             lam[f] = gn.rCST.CLIGHT/freq[f]
             iono[f] = 40.3e16/(freq[f]*freq[f])*stec[idx_l]
         iono_ = 40.3e16/(freq[0]*freq[1])*stec[idx_l]
@@ -303,7 +297,7 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
         nav.phw[sat-1] = windupcorr(obs.t, rs[i, :], vs[i, :], rr_,
                                     nav.phw[sat-1])
         phw = lam*nav.phw[sat-1]
-        antr = antmodel(nav, el[i], nav.nf)
+        antr = antModelRx(nav, pos, e[i, :], obs.sig[sys][uTYP.L])
         # range correction
         prc_c = trop+relatv+antr
         # prc_c += nav.dorb[sat]-nav.dclk[sat]
@@ -315,9 +309,8 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
         r += -_c*dts[i]
 
         for f in range(nf):
-            k = nav.obs_idx[f][sys]
-            y[i, f] = obs.L[i, k]*lam[f]-(r+cs.cpc[i, f])
-            y[i, f+nf] = obs.P[i, k]-(r+cs.prc[i, f])
+            y[i, f] = obs.L[i, f]*lam[f]-(r+cs.cpc[i, f])
+            y[i, f+nf] = obs.P[i, f]-(r+cs.prc[i, f])
 
     return y, e, el
 
@@ -354,7 +347,7 @@ def ppprtkpos(nav, obs, cs):
     nav.y = y
     ns = len(sat)
 
-    if nav.loglevel > 1:
+    if nav.monlevel > 1:
         logmon(nav, obs.t, sat, cs, iu)
 
     ny = y.shape[0]
@@ -364,7 +357,7 @@ def ppprtkpos(nav, obs, cs):
         return -1
 
     # DD residual
-    v, H, R = ddres(nav, xp, y, e, sat, el)
+    v, H, R = ddres(nav, obs, xp, y, e, sat, el)
     Pp = nav.P.copy()
     # Kalman filter measurement update
     xp, Pp, _ = kfupdate(xp, Pp, H, v, R)
@@ -379,7 +372,7 @@ def ppprtkpos(nav, obs, cs):
         return -1
 
     # residual for float solution
-    v, H, R = ddres(nav, xp, y, e, sat, el)
+    v, H, R = ddres(nav, obs, xp, y, e, sat, el)
     if valpos(nav, v, R):
         nav.x = xp
         nav.P = Pp
@@ -402,7 +395,7 @@ def ppprtkpos(nav, obs, cs):
         yu, eu, elu = zdres(nav, obs, rs, vs, dts, svh, xa[0:3], cs)
         y = yu[iu, :]
         e = eu[iu, :]
-        v, H, R = ddres(nav, xa, y, e, sat, el)
+        v, H, R = ddres(nav, obs, xa, y, e, sat, el)
         if valpos(nav, v, R):  # R <= Q=H'PH+R  chisq<max_inno[3] (0.5)
             if nav.armode == 3:  # fix and hold
                 holdamb(nav, xa)  # hold fixed ambiguity

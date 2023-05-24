@@ -6,6 +6,7 @@ module for RTK positioning
 import numpy as np
 import cssrlib.gnss as gn
 from cssrlib.ephemeris import satposs
+from cssrlib.peph import antModelRx
 from cssrlib.ppp import tidedisp
 from cssrlib.mlambda import mlambda
 
@@ -30,7 +31,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.el = np.zeros(gn.uGNSS.MAXSAT)
     nav.nfix = nav.neb = 0
 
-    # parameter for RTK    
+    # parameter for RTK
     nav.eratio = [50, 50]
     nav.err = [0, 0.01, 0.005]/np.sqrt(2)
     nav.sig_p0 = 30.0
@@ -38,7 +39,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.sig_n0 = 30.0
     nav.sig_qp = 0.01
     nav.sig_qv = 1.0
-    
+
     nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20)  # elevation mask for AR
     nav.gnss_t = [gn.uGNSS.GPS, gn.uGNSS.GAL, gn.uGNSS.QZS]
@@ -93,8 +94,9 @@ def zdres(nav, obs, rs, dts, svh, rr, rtype=1):
         zhd, _, _ = gn.tropmodel(obs.t, pos, np.deg2rad(90.0), 0.0)
         mapfh, _ = gn.tropmapf(obs.t, pos, el[i])
         r += mapfh*zhd
-
-        dant = gn.antmodel(nav, el[i], nav.nf, rtype)
+        
+        sig = obs.sig[sys][gn.uTYP.L]
+        dant = antModelRx(nav, pos, e[i, :], sig, rtype)
 
         for f in range(nf):
             j = nav.obs_idx[f][sys]
@@ -150,7 +152,7 @@ def varerr(nav, el, f):
     return 2.0*(a**2+(b/s_el)**2)
 
 
-def ddres(nav, x, y, e, sat, el):
+def ddres(nav, obs, x, y, e, sat, el):
     """ DD phase/code residual """
     _c = gn.rCST.CLIGHT
     nf = nav.nf
@@ -164,13 +166,12 @@ def ddres(nav, x, y, e, sat, el):
     b = 0
     H = np.zeros((ns*nf*2, nav.nx))
     v = np.zeros(ns*nf*2)
-    idx_f = [0, 1]
-    for sys in nav.gnss_t:
-        for f in range(nf):
-            idx_f[f] = nav.obs_idx[f][sys]
+
+    for sys in obs.sig.keys():
         for f in range(0, nf*2):
             if f < nf:
-                freq = nav.freq[idx_f[f]]
+                sig = obs.sig[sys][gn.uTYP.L][f]
+                freq = sig.frequency()
             # reference satellite
             idx = sysidx(sat, sys)
             if len(idx) > 0:
