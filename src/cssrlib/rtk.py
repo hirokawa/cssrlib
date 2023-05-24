@@ -4,8 +4,10 @@ module for RTK positioning
 """
 
 import numpy as np
+
 import cssrlib.gnss as gn
 from cssrlib.ephemeris import satposs
+from cssrlib.gnss import uTYP
 from cssrlib.peph import antModelRx
 from cssrlib.ppp import tidedisp
 from cssrlib.mlambda import mlambda
@@ -57,16 +59,6 @@ def rtkinit(nav, pos0=np.zeros(3)):
     else:
         nav.q[0:3] = nav.sig_qp**2
 
-    # obs index
-    i0 = {gn.uGNSS.GPS: 0, gn.uGNSS.GAL: 0, gn.uGNSS.QZS: 0}
-    i1 = {gn.uGNSS.GPS: 1, gn.uGNSS.GAL: 2, gn.uGNSS.QZS: 1}
-    freq0 = {gn.uGNSS.GPS: nav.freq[0], gn.uGNSS.GAL: nav.freq[0],
-             gn.uGNSS.QZS: nav.freq[0]}
-    freq1 = {gn.uGNSS.GPS: nav.freq[1], gn.uGNSS.GAL: nav.freq[2],
-             gn.uGNSS.QZS: nav.freq[1]}
-    nav.obs_idx = [i0, i1]
-    nav.obs_freq = [freq0, freq1]
-
 
 def zdres(nav, obs, rs, dts, svh, rr, rtype=1):
     """ non-differencial residual """
@@ -84,7 +76,7 @@ def zdres(nav, obs, rs, dts, svh, rr, rtype=1):
     pos = gn.ecef2pos(rr_)
     for i in range(n):
         sys, _ = gn.sat2prn(obs.sat[i])
-        if svh[i] > 0 or sys not in nav.gnss_t or obs.sat[i] in nav.excl_sat:
+        if svh[i] > 0 or sys not in obs.sig.keys() or obs.sat[i] in nav.excl_sat:
             continue
         r, e[i, :] = gn.geodist(rs[i, :], rr_)
         _, el[i] = gn.satazel(pos, e[i, :])
@@ -94,20 +86,19 @@ def zdres(nav, obs, rs, dts, svh, rr, rtype=1):
         zhd, _, _ = gn.tropmodel(obs.t, pos, np.deg2rad(90.0), 0.0)
         mapfh, _ = gn.tropmapf(obs.t, pos, el[i])
         r += mapfh*zhd
-        
+
         sig = obs.sig[sys][gn.uTYP.L]
         dant = antModelRx(nav, pos, e[i, :], sig, rtype)
-
+        freq = [s.frequency() for s in obs.sig[sys][uTYP.L]]
         for f in range(nf):
-            j = nav.obs_idx[f][sys]
-            if obs.L[i, j] == 0.0:
+            if obs.L[i, f] == 0.0:
                 y[i, f] = 0.0
             else:
-                y[i, f] = obs.L[i, j]*_c/nav.freq[j]-r-dant[f]
-            if obs.P[i, j] == 0.0:
+                y[i, f] = obs.L[i, f]*_c/freq[f]-r-dant[f]
+            if obs.P[i, f] == 0.0:
                 y[i, f+nf] = 0.0
             else:
-                y[i, f+nf] = obs.P[i, j]-r-dant[f]
+                y[i, f+nf] = obs.P[i, f]-r-dant[f]
     return y, e, el
 
 
@@ -373,7 +364,7 @@ def udstate(nav, obs, obsb, iu, ir):
             nav.outc[i, f] += 1
             reset = (nav.outc[i, f] > nav.maxout)
             sys_i, _ = gn.sat2prn(i+1)
-            if sys_i not in nav.gnss_t:
+            if sys_i not in obs.sig.keys():
                 continue
             j = IB(i+1, f, nav.na)
             if reset and nav.x[j] != 0.0:
@@ -381,10 +372,9 @@ def udstate(nav, obs, obsb, iu, ir):
                 nav.outc[i, f] = 0
         # cycle slip check by LLI
         for i in range(ns):
-            if sys[i] not in nav.gnss_t:
+            if sys[i] not in obs.sig.keys():
                 continue
-            j = nav.obs_idx[f][sys[i]]
-            if obsb.lli[ir[i], j] & 1 == 0 and obs.lli[iu[i], j] & 1 == 0:
+            if obsb.lli[ir[i], f] & 1 == 0 and obs.lli[iu[i], f] & 1 == 0:
                 continue
             initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
         # bias
@@ -392,13 +382,12 @@ def udstate(nav, obs, obsb, iu, ir):
         offset = 0
         na = 0
         for i in range(ns):
-            if sys[i] not in nav.gnss_t:
+            if sys[i] not in obs.sig.keys():
                 continue
-            j = nav.obs_idx[f][sys[i]]
-            freq = nav.obs_freq[f][sys[i]]
-            cp = obs.L[iu[i], j]-obsb.L[ir[i], j]
-            pr = obs.P[iu[i], j]-obsb.P[ir[i], j]
-            bias[i] = cp-pr*freq/gn.rCST.CLIGHT
+            lam = obs.sig[sys[i]][uTYP.C][f].wavelength()
+            cp = obs.L[iu[i], f]-obsb.L[ir[i], f]
+            pr = obs.P[iu[i], f]-obsb.P[ir[i], f]
+            bias[i] = cp-pr/lam
             amb = nav.x[IB(sat[i], f, nav.na)]
             if amb != 0.0:
                 offset += bias[i]-amb
@@ -424,11 +413,9 @@ def selsat(nav, obs, obsb, elb):
     idx_u = []
     for k, sat in enumerate(obs.sat):
         sys, _ = gn.sat2prn(sat)
-        j0 = nav.obs_idx[0][sys]
-        j1 = nav.obs_idx[1][sys]
-        if obs.P[k, j0] == 0.0 or obs.P[k, j1] == 0.0 or \
-           obs.L[k, j0] == 0.0 or obs.L[k, j1] == 0.0 or \
-           obs.lli[k, j0] > 0 or obs.lli[k, j1] > 0:
+        if obs.P[k, 0] == 0.0 or obs.P[k, 1] == 0.0 or \
+           obs.L[k, 0] == 0.0 or obs.L[k, 1] == 0.0 or \
+           obs.lli[k, 0] > 0 or obs.lli[k, 1] > 0:
             continue
         idx_u.append(k)
 
@@ -436,11 +423,9 @@ def selsat(nav, obs, obsb, elb):
     idx_r = []
     for k, sat in enumerate(obsb.sat):
         sys, _ = gn.sat2prn(sat)
-        j0 = nav.obs_idx[0][sys]
-        j1 = nav.obs_idx[1][sys]
-        if obsb.P[k, j0] == 0.0 or obsb.P[k, j1] == 0.0 or \
-           obsb.L[k, j0] == 0.0 or obsb.L[k, j1] == 0.0 or \
-           obsb.lli[k, j0] > 0 or obsb.lli[k, j1] > 0 or \
+        if obsb.P[k, 0] == 0.0 or obsb.P[k, 1] == 0.0 or \
+           obsb.L[k, 0] == 0.0 or obsb.L[k, 1] == 0.0 or \
+           obsb.lli[k, 0] > 0 or obsb.lli[k, 1] > 0 or \
            elb[k] < nav.elmin:
             continue
         idx_r.append(k)
@@ -519,7 +504,7 @@ def relpos(nav, obs, obsb):
     sat = obs.sat[iu]
     nav.el[sat-1] = el
     # DD residual
-    v, H, R = ddres(nav, xp, y, e, sat, el)
+    v, H, R = ddres(nav, obs, xp, y, e, sat, el)
     Pp = nav.P
 
     # Kalman filter measurement update
@@ -530,7 +515,7 @@ def relpos(nav, obs, obsb):
     y[:ns, :] = yu[iu, :]
     e[:ns, :] = eu[iu, :]
     # residual for float solution
-    v, H, R = ddres(nav, xp, y, e, sat, el)
+    v, H, R = ddres(nav, obs, xp, y, e, sat, el)
     if valpos(nav, v, R):
         nav.x = xp
         nav.P = Pp
@@ -543,7 +528,7 @@ def relpos(nav, obs, obsb):
         yu, eu, _ = zdres(nav, obs, rs, dts, svh, xa[0:3])
         y[:ns, :] = yu[iu, :]
         e[:ns, :] = eu[iu, :]
-        v, H, R = ddres(nav, xa, y, e, sat, el)
+        v, H, R = ddres(nav, obs, xa, y, e, sat, el)
         if valpos(nav, v, R):
             if nav.armode == 3:
                 holdamb(nav, xa)
