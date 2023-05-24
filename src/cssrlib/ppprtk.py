@@ -4,7 +4,7 @@ module for PPP-RTK positioing
 
 import numpy as np
 import cssrlib.gnss as gn
-from cssrlib.gnss import tropmodel, uGNSS, uTYP
+from cssrlib.gnss import tropmodel
 from cssrlib.ephemeris import satposs
 from cssrlib.cssrlib import sSigGPS, sSigGAL, sSigQZS
 from cssrlib.peph import antModelRx
@@ -169,14 +169,14 @@ def udstate(nav, obs, cs):
         for i in range(ns):
             if sys[i] not in obs.sig.keys():
                 continue
-            sig = obs.sig[sys[i]][uTYP.L][f]
-            freq = sig.frequency()
+
+            lam = obs.sig[sys[i]][gn.uTYP.L][f].wavelength()
 
             cp = obs.L[i, f]
             pr = obs.P[i, f]
-            if cp == 0.0 or pr == 0.0 or freq == 0.0:
+            if cp == 0.0 or pr == 0.0 or lam is None:
                 continue
-            bias[i] = cp-pr*freq/gn.rCST.CLIGHT
+            bias[i] = cp-pr/lam
             amb = nav.x[IB(sat[i], f, nav.na)]
             if amb != 0.0:
                 offset += bias[i]-amb
@@ -260,14 +260,17 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
         if el[i] < nav.elmin:
             continue
 
-        freq = np.zeros(nav.nf)
-        lam = np.zeros(nav.nf)
-        iono = np.zeros(nav.nf)
-        for f in range(nav.nf):
-            freq[f] = obs.sig[sys][uTYP.L][f].frequency()
-            lam[f] = gn.rCST.CLIGHT/freq[f]
-            iono[f] = 40.3e16/(freq[f]*freq[f])*stec[idx_l]
-        iono_ = 40.3e16/(freq[0]*freq[1])*stec[idx_l]
+        sigsPR = obs.sig[sys][gn.uTYP.C]
+        sigsCP = obs.sig[sys][gn.uTYP.L]
+
+        frq = [s.frequency() for s in sigsPR]
+        ionoPR = np.array([40.3e16/(f*f)*stec[idx_l] for f in frq])
+
+        frq = np.array([s.frequency() for s in sigsCP])
+        lam = np.array([s.wavelength() for s in sigsCP])
+        ionoCP = np.array([40.3e16/(f*f)*stec[idx_l] for f in frq])
+
+        iono_ = 40.3e16/(frq[0]*frq[1])*stec[idx_l]
 
         # global/local signal bias
         cbias = np.zeros(nav.nf)
@@ -292,18 +295,23 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
         # tropospheric delay
         mapfh, mapfw = gn.tropmapf(obs.t, pos, el[i])
         trop = mapfh*trph*r_hs+mapfw*trpw*r_wet
+
         # phase wind-up effect
         nav.phw[sat-1] = windupcorr(obs.t, rs[i, :], vs[i, :], rr_,
                                     nav.phw[sat-1])
         phw = lam*nav.phw[sat-1]
-        antr = antModelRx(nav, pos, e[i, :], obs.sig[sys][uTYP.L])
+
+        antrPR = antModelRx(nav, pos, e[i, :], sigsPR)
+        antrCP = antModelRx(nav, pos, e[i, :], sigsCP)
+
         # range correction
-        prc_c = trop+relatv+antr
+        prc_c = trop+relatv
+
         # prc_c += nav.dorb[sat]-nav.dclk[sat]
-        cs.prc[i, :] = prc_c+iono+cbias
-        cs.cpc[i, :] = prc_c-iono+pbias+phw
+        cs.prc[i, :] = prc_c+antrPR+ionoPR+cbias
+        cs.cpc[i, :] = prc_c+antrCP-ionoCP+pbias+phw
         cs.osr[i, :] = [pbias[0], pbias[1], cbias[0], cbias[1],
-                        antr[0], antr[1], phw[0], phw[1],
+                        antrPR[0], antrPR[1], phw[0], phw[1],
                         trop, iono_, relatv, nav.dorb[sat], nav.dclk[sat]]
         r += -_c*dts[i]
 
