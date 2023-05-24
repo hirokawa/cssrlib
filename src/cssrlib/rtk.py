@@ -88,8 +88,8 @@ def zdres(nav, obs, rs, dts, svh, rr, rtype=1):
 
         sigPR = obs.sig[sys][gn.uTYP.C]
         sigCP = obs.sig[sys][gn.uTYP.L]
-        
-        dantPR = antModelRx(nav, pos, e[i, :], sigCP, rtype)
+
+        dantPR = antModelRx(nav, pos, e[i, :], sigPR, rtype)
         dantCP = antModelRx(nav, pos, e[i, :], sigCP, rtype)
 
         lam = [s.wavelength() for s in sigCP]
