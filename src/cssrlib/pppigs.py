@@ -255,7 +255,7 @@ def udstate(nav, obs):
             if sys[i] not in obs.sig.keys():
                 continue
 
-            # Get iono delay on frequency of sig1
+            # Get dual-frequency pseudoranges for this constellation
             #
             sig1 = obs.sig[sys[i]][uTYP.C][0]
             sig2 = obs.sig[sys[i]][uTYP.C][1]
@@ -263,8 +263,17 @@ def udstate(nav, obs):
             pr1 = obs.P[i, 0]
             pr2 = obs.P[i, 1]
 
+            # Skip zero observations
+            #
+            if pr1 == 0.0 or pr2 == 0.0:
+                continue
+
+            # Get iono delay at frequency of first signal
+            #
             ion[i] = ionoDelay(sig1, sig2, pr1, pr2)
 
+            # Get pseudorange and carrier-phase observation of signal f
+            #
             sig = obs.sig[sys[i]][uTYP.L][f]
             lam = sig.wavelength()
 
