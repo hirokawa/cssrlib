@@ -54,6 +54,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
 
     # Positioning mode
     # 0:static, 1:kinematic
+    #
     nav.pmode = 0
 
     # Position (+ optional velocity), zenith tropo delay and slant ionospheric delay states
@@ -82,6 +83,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     # parameter for PPP
 
     # observation noise parameters
+    #
     nav.eratio = [50, 50]
     nav.err = [0, 0.01, 0.005]/np.sqrt(2)
 
@@ -103,6 +105,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.tidecorr = True
     nav.armode = 3  # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20)  # elevation mask for AR
+    nav.elmin = np.deg2rad(10.0)
 
     # Initial state vector
     #
@@ -207,7 +210,6 @@ def udstate(nav, obs):
             sat_ = i+1
             nav.outc[i, f] += 1
             reset = (nav.outc[i, f] > nav.maxout)
-            #print(sat_, nav.outc[i, f])
             sys_i, _ = gn.sat2prn(sat_)
             if sys_i not in obs.sig.keys():
                 continue
@@ -218,14 +220,19 @@ def udstate(nav, obs):
             if reset and nav.x[j] != 0.0:
                 initx(nav, 0.0, 0.0, j)
                 nav.outc[i, f] = 0
-                print("{} reset ambiguity".format(sat_))
+
+                print("{}  {} - reset ambiguity  {}"
+                      .format(time2str(obs.t), sat2id(sat_),
+                              obs.sig[sys_i][uTYP.L][f]))
 
             # Reset slant ionospheric delay estimate
             #
             j = II(sat_, nav.na)
             if reset and nav.x[j] != 0.0:
                 initx(nav, 0.0, 0.0, j)
-                print("{} reset ionosphere".format(sat_))
+
+                print("{}  {} - reset ionosphere"
+                      .format(time2str(obs.t), sat2id(sat_)))
 
         # Cycle  slip check by LLI
         #
@@ -286,20 +293,23 @@ def udstate(nav, obs):
         #
         for i in range(ns):
 
+            sys_i, _ = sat2prn(sat[i])
+
             j = IB(sat[i], f, nav.na)
             if bias[i] != 0.0 and nav.x[j] == 0.0:
 
                 initx(nav, bias[i], nav.sig_n0**2, j)
 
-                print("init ambiguity  {}  {} {:12.3f}"
-                      .format(time2str(obs.t), sat2id(sat[i]), bias[i]))
+                sig = obs.sig[sys_i][uTYP.L][f]
+                print("{}  {} - init  ambiguity  {} {:12.3f}"
+                      .format(time2str(obs.t), sat2id(sat[i]), sig, bias[i]))
 
             j = II(sat[i], nav.na)
             if ion[i] != 0 and nav.x[j] == 0.0:
 
                 initx(nav, ion[i], nav.sig_ion0**2, j)
 
-                print("init ionosphere {}  {} {:12.3f}"
+                print("{}  {} - init  ionosphere      {:12.3f}"
                       .format(time2str(obs.t), sat2id(sat[i]), ion[i]))
 
     return 0
@@ -413,7 +423,7 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         # range correction
         #
         prc[i, :] = trop + antsPR + antrPR + cbias*_c*1e-9
-        cpc[i, :] = trop + antsCP + antrCP + pbias*_c*1e-9  # + phw
+        cpc[i, :] = trop + antsCP + antrCP + pbias*_c*1e-9 + phw
 
         r += relatv - _c*dts[i]
 
@@ -778,10 +788,6 @@ def pppigspos(nav, obs, orb, bsx):
         for i in range(ns):
             j = sat[i]-1
             for f in range(nav.nf):
-                print("{:3d} {} {} {}".format(sat[i],
-                                              nav.vsat[j, f],
-                                              nav.lock[j, f],
-                                              nav.outc[j, f]))
                 if nav.vsat[j, f] == 0:
                     continue
                 nav.lock[j, f] += 1

@@ -206,7 +206,7 @@ def ddres(nav, obs, x, y, e, sat, el):
 
 
 def valpos(nav, v, R, thres=4.0):
-    """ post-file residual test """
+    """ post-fit residual test """
     nv = len(v)
     fact = thres**2
     for i in range(nv):
