@@ -17,18 +17,18 @@ from cssrlib.rtk import ddcov, resamb_lambda, valpos, holdamb, initx
 
 def IT(na):
     """ return index of zenith tropospheric delay estimate """
-    return na-1
+    return na-gn.uGNSS.MAXSAT-1
 
 
 def II(s, na):
     """ return index of slant ionospheric delay estimate """
-    idx = na+s-1
+    idx = na-gn.uGNSS.MAXSAT+s-1
     return idx
 
 
 def IB(s, f, na):
     """ return index of carrier-phase ambguity """
-    idx = na+gn.uGNSS.MAXSAT*(1+f)+s-1
+    idx = na+gn.uGNSS.MAXSAT*f+s-1
     return idx
 
 
@@ -52,14 +52,9 @@ def rtkinit(nav, pos0=np.zeros(3)):
     #
     nav.nf = 2  # TODO: make obsolete if possible
 
-    # Positioning mode
-    # 0:static, 1:kinematic
-    #
-    nav.pmode = 0
-
     # Position (+ optional velocity), zenith tropo delay and slant ionospheric delay states
     #
-    nav.na = (4 if nav.pmode == 0 else 7)
+    nav.na = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
     nav.nq = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
 
     nav.ratio = 0
@@ -67,7 +62,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
 
     # State vector dimensions (inlcuding slat iono delay and ambiguities)
     #
-    nav.nx = nav.na+gn.uGNSS.MAXSAT*(1+nav.nf)
+    nav.nx = nav.na+gn.uGNSS.MAXSAT*nav.nf
 
     nav.x = np.zeros(nav.nx)
     nav.P = np.zeros((nav.nx, nav.nx))
@@ -89,7 +84,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
 
     # Initial sigma for state covariance
     #
-    nav.sig_p0 = 30.0
+    nav.sig_p0 = 100.0
     nav.sig_v0 = 1.0
     nav.sig_ztd0 = 0.010
     nav.sig_ion0 = 1.0
@@ -97,8 +92,12 @@ def rtkinit(nav, pos0=np.zeros(3)):
 
     # Process noise sigma
     #
-    nav.sig_qp = 0.01  # [m]
-    nav.sig_qv = 1.0  # [m/s]
+    if nav.pmode == 0:
+        nav.sig_qp = 100.0/np.sqrt(1)  # [m/sqrt(s)]
+        nav.sig_qv = None
+    else:
+        nav.sig_qp = 0.01/np.sqrt(1)  # [m/sqrt(s)]
+        nav.sig_qv = 1.0/np.sqrt(1)  # [m/s/sqrt(s)]
     nav.sig_qion = 1.5/np.sqrt(3600)  # [m/sqrt(s)]
     nav.sig_qztd = 0.5e-3/np.sqrt(3600)  # [m/sqrt(s)]
 
@@ -328,6 +327,7 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
     """ non-differential residual """
 
     _c = gn.rCST.CLIGHT
+    ns2m = _c*1e-9
 
     nf = nav.nf
     n = len(obs.P)
@@ -395,8 +395,8 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
 
         # Code and phase signal bias [ns]
         #
-        cbias = np.array([bsx.getosb(sat, obs.t, s)[0] for s in sigsPR])
-        pbias = np.array([bsx.getosb(sat, obs.t, s)[0] for s in sigsCP])
+        cbias = np.array([bsx.getosb(sat, obs.t, s)[0]*ns2m for s in sigsPR])
+        pbias = np.array([bsx.getosb(sat, obs.t, s)[0]*ns2m for s in sigsCP])
 
         # Shapipo relativistic effect
         #
@@ -431,8 +431,8 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
 
         # range correction
         #
-        prc[i, :] = trop + antsPR + antrPR + cbias*_c*1e-9
-        cpc[i, :] = trop + antsCP + antrCP + pbias*_c*1e-9 + phw
+        prc[i, :] = trop + antsPR + antrPR + cbias
+        cpc[i, :] = trop + antsCP + antrCP + pbias + phw
 
         r += relatv - _c*dts[i]
 
@@ -581,13 +581,6 @@ def sdres(nav, obs, x, y, e, sat, el):
                                   np.sqrt(nav.P[idx_i, idx_i]),
                                   np.sqrt(nav.P[idx_j, idx_j])))
 
-                """
-                print(sig, sat2id(sat[i]),
-                      np.sqrt(varerr(nav, el[i], f)),
-                      sat2id(sat[j]),
-                      np.sqrt(varerr(nav, el[j], f)))
-                """
-
                 # SD ambiguity
                 #
                 if f < nf:  # carrier-phase
@@ -717,15 +710,6 @@ def pppigspos(nav, obs, orb, bsx):
     #
     rs, vs, dts, svh = satpreposs(obs, nav, orb)
 
-    if nav.monlevel > 5:
-        for i, sat in enumerate(obs.sat):
-            print("{} {} {} {} {:14.4f} {:3d}"
-                  .format(time2str(obs.t), sat2id(sat),
-                          " ".join("{:14.4f}".format(v) for v in rs[i, :]),
-                          " ".join("{:14.4f}".format(v) for v in vs[i, :]),
-                          dts[i]*rCST.CLIGHT, svh[i]))
-        print()
-
     # Kalman filter time propagation, initialization of ambiguities and iono
     #
     udstate(nav, obs)
@@ -770,13 +754,6 @@ def pppigspos(nav, obs, orb, bsx):
     # Kalman filter measurement update
     #
     xp, Pp, _ = kfupdate(xp, Pp, H, v, R)
-
-    if nav.monlevel > 2:
-        print("epo "+time2str(nav.t))
-        txt = ' '.join(["{:13.3f} ".format(v) for v in xp[0:3]])
-        print("pos {}".format(txt))
-        print("ztd {:12.3f}".format(xp[IT(nav.na)]))
-        print()
 
     # Non-differential residuals after measurement update
     #
