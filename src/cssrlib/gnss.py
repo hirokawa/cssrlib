@@ -571,6 +571,7 @@ class Nav():
         self.excl_sat = []
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
+        self.pmode = 1  # 0: static, 1: kinematic
 
         self.monlevel = 1
         self.cnr_min = 35
