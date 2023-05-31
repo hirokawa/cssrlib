@@ -327,7 +327,7 @@ class rnxdec:
                     val = 0.0 if not sval else float(sval)
                     lli = 1 if slli == '1' else 0
 
-                    # Singal index in data structure
+                    # Signal index in data structure
                     #
                     j = self.sig_tab[sys][sig.typ].index(sig)
 
