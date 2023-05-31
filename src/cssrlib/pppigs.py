@@ -183,14 +183,21 @@ def udstate(nav, obs):
         sys_i, _ = gn.sat2prn(sat_i)
         sys.append(sys_i)
 
-    # pos,vel,ztd,ion
+    # pos,vel,ztd,ion,amb
     #
-    na = nav.na
-    Phi = np.eye(nav.na)
+    na = nav.nx
+    Phi = np.eye(na)
     if nav.pmode > 0:
         nav.x[0:3] += nav.x[3:6]*tt
         Phi[0:3, 3:6] = np.eye(3)*tt
     nav.P[0:na, 0:na] = Phi@nav.P[0:na, 0:na]@Phi.T
+    """
+    if nav.pmode > 0:
+        nav.x[0:3] += nav.x[3:6]*tt
+        Phi = np.eye(6)
+        Phi[0:3, 3:6] = np.eye(3)*tt
+        nav.P[0:6, 0:6] = Phi@nav.P[0:6, 0:6]@Phi.T
+    """
 
     # Process noise
     #
@@ -343,15 +350,15 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
     if nav.tidecorr:
         pos = gn.ecef2pos(rr_)
         disp = tidedisp(gn.gpst2utc(obs.t), pos)
-        rr_ += disp
     else:
         disp = np.zeros(3)
+    rr_ += disp
 
     # Geodetic position
     #
     pos = gn.ecef2pos(rr_)
 
-    # Tropospheric dry and wet delays at user position
+    # Zenith tropospheric dry and wet delays at user position
     #
     trop_hs, trop_wet = gn.tropmodelHpf()
 
