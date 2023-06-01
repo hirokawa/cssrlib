@@ -344,7 +344,7 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
 
     # Zenith tropospheric dry and wet delays at user position
     #
-    trop_hs, trop_wet = gn.tropmodelHpf()
+    trop_hs, trop_wet, _ = gn.tropmodel(obs.t, pos)
 
     cpc = np.zeros((n, nf))
     prc = np.zeros((n, nf))
@@ -395,7 +395,7 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
 
         # Tropospheric delay mapping functions
         #
-        mapfh, mapfw = gn.tropmapfHpf(el[i])
+        mapfh, mapfw = gn.tropmapf(obs.t, pos, el[i])
 
         # Tropospheric delay
         #
@@ -538,8 +538,8 @@ def sdres(nav, obs, x, y, e, sat, el):
 
                 # SD troposphere
                 #
-                _, mapfwi = gn.tropmapfHpf(el[i])
-                _, mapfwj = gn.tropmapfHpf(el[j])
+                _, mapfwi = gn.tropmapf(obs.t, pos, el[i])
+                _, mapfwj = gn.tropmapf(obs.t, pos, el[j])
 
                 idx_i = IT(nav.na)
                 H[nv, idx_i] = mapfwi - mapfwj
