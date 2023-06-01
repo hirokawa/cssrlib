@@ -12,7 +12,7 @@ from cssrlib.gnss import timeadd, time2str
 from cssrlib.gnss import uTYP
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.peph import antModelRx, antModelTx
-from cssrlib.rtk import ddcov, resamb_lambda, valpos, holdamb, initx
+from cssrlib.rtk import IB, ddcov, resamb_lambda, valpos, holdamb, initx
 
 
 def IT(na):
@@ -23,12 +23,6 @@ def IT(na):
 def II(s, na):
     """ return index of slant ionospheric delay estimate """
     idx = na-gn.uGNSS.MAXSAT+s-1
-    return idx
-
-
-def IB(s, f, na):
-    """ return index of carrier-phase ambguity """
-    idx = na+gn.uGNSS.MAXSAT*f+s-1
     return idx
 
 
