@@ -403,10 +403,8 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
 
         # Phase wind-up effect
         #
-        # TODO: implement full attitude model for phase wind-up
-        #
         nav.phw[sat-1] = windupcorr(obs.t, rs[i, :], vs[i, :], rr_,
-                                    nav.phw[sat-1])
+                                    nav.phw[sat-1], full=True)
 
         # Wavelength
         #
