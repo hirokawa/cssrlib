@@ -13,6 +13,7 @@ from cssrlib.gnss import uTYP
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.peph import antModelRx, antModelTx
 from cssrlib.rtk import IB, ddcov, resamb_lambda, valpos, holdamb, initx
+from cssrlib.rtk import varerr
 
 
 def IT(na):
@@ -152,17 +153,6 @@ def sysidx(satlist, sys_ref):
         if sys == sys_ref:
             idx.append(k)
     return idx
-
-
-def varerr(nav, el, f):
-    """ variation of measurement """
-    s_el = np.sin(el)
-    if s_el <= 0.0:
-        return 0.0
-    fact = nav.eratio[f-nav.nf] if f >= nav.nf else 1
-    a = fact*nav.err[1]
-    b = fact*nav.err[2]
-    return 2.0*(a**2+(b/s_el)**2)
 
 
 def udstate(nav, obs):
@@ -411,7 +401,7 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         #
         trop = mapfh*trop_hs + mapfw*trop_wet
 
-        # phase wind-up effect
+        # Phase wind-up effect
         #
         # TODO: implement full attitude model for phase wind-up
         #
@@ -430,7 +420,7 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         antsPR = antModelTx(nav, e[i, :], sigsPR, sat, obs.t, rs[i, :])
         antsCP = antModelTx(nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
 
-        # range correction
+        # Range correction
         #
         prc[i, :] = trop + antsPR + antrPR + cbias
         cpc[i, :] = trop + antsCP + antrCP + pbias + phw
