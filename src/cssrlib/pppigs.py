@@ -37,13 +37,9 @@ def ionoDelay(sig1, sig2, pr1, pr2):
 
 
 def rtkinit(nav, pos0=np.zeros(3)):
-    """ initialize variables for RTK """
+    """ initialize variables for PPP """
 
-    # Logging level
-    #
-    nav.monlevel = 2
-
-    # Number of frequencies
+    # Number of frequencies (actually signals!)
     #
     nav.nf = 2  # TODO: make obsolete if possible
 
@@ -67,9 +63,9 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.phw = np.zeros(gn.uGNSS.MAXSAT)
     nav.el = np.zeros(gn.uGNSS.MAXSAT)
 
-    # parameter for PPP
-
-    # observation noise parameters
+    # Parameters for PPP
+    #
+    # Observation noise parameters
     #
     nav.eratio = [100, 100]
     nav.err = [0, 0.001, 0.001]/np.sqrt(2)
@@ -97,7 +93,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
 
     nav.tidecorr = True
     nav.armode = 3  # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
-    nav.elmaskar = np.deg2rad(20)  # elevation mask for AR
+    nav.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
     nav.elmin = np.deg2rad(10.0)
 
     # Initial state vector
@@ -124,12 +120,10 @@ def rtkinit(nav, pos0=np.zeros(3)):
     # Process noise
     #
     nav.q = np.zeros(nav.nq)
+    nav.q[0:3] = nav.sig_qp**2
     # Velocity
     if nav.pmode >= 1:  # kinematic
-        nav.q[0:3] = nav.sig_qp**2
         nav.q[3:6] = nav.sig_qv**2
-    else:
-        nav.q[0:3] = nav.sig_qp**2
     # Tropo delay
     if nav.pmode >= 1:  # kinematic
         nav.q[6] = nav.sig_qztd**2
@@ -141,7 +135,17 @@ def rtkinit(nav, pos0=np.zeros(3)):
     else:
         nav.q[4:4+gn.uGNSS.MAXSAT] = nav.sig_qion**2
 
+    # Logging level
+    #
+    nav.monlevel = 2
+
+    """
     nav.fout = None
+    nav.logfile = 'log_pppigs.txt'
+    if nav.monlevel >= 2:
+        nav.fout = open(nav.logfile, 'w')
+        nav.fout.write("# ")
+    """
 
 
 def sysidx(satlist, sys_ref):
@@ -368,6 +372,7 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         #
         if obs.S[i, 0] < nav.cnr_min:
             flg_m = False
+
         if flg_m is False:
             continue
 
