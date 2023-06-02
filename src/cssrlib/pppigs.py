@@ -64,7 +64,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.xa = np.zeros(nav.na)
     nav.Pa = np.zeros((nav.na, nav.na))
 
-    nav.nfix = nav.neb = 0
+    nav.nfix = 0
 
     nav.phw = np.zeros(gn.uGNSS.MAXSAT)
     nav.el = np.zeros(gn.uGNSS.MAXSAT)
