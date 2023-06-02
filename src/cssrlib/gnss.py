@@ -71,14 +71,14 @@ class uGNSS(IntEnum):
     NONE = -1
 
     GPS = 0
-    SBS = 1
-    GAL = 2
+    GAL = 1
+    QZS = 2
     BDS = 3
-    QZS = 5
-    GLO = 6
-    IRN = 7
+    GLO = 4
+    SBS = 5
+    IRN = 6
 
-    GNSSMAX = 8
+    GNSSMAX = 7
 
     GPSMAX = 32
     GALMAX = 36
@@ -88,7 +88,15 @@ class uGNSS(IntEnum):
     SBSMAX = 24
     IRNMAX = 10
 
-    MAXSAT = GPSMAX+GLOMAX+GALMAX+BDSMAX+QZSMAX+SBSMAX+IRNMAX
+    GPSMIN = 0
+    GALMIN = GPSMIN+GPSMAX
+    QZSMIN = GALMIN+GALMAX
+    BDSMIN = QZSMIN+QZSMAX
+    GLOMIN = BDSMIN+BDSMAX
+    SBSMIN = GLOMIN+GLOMAX
+    IRNMIN = SBSMIN+SBSMAX
+
+    MAXSAT = GPSMAX+GALMAX+QZSMAX+BDSMAX+GLOMAX+SBSMAX+IRNMAX
 
 
 class uTYP(IntEnum):
@@ -721,19 +729,18 @@ def prn2sat(sys, prn):
     """ convert sys+prn to sat """
     if sys == uGNSS.GPS:
         sat = prn
-    elif sys == uGNSS.GLO:
-        sat = prn+uGNSS.GPSMAX
     elif sys == uGNSS.GAL:
-        sat = prn+uGNSS.GPSMAX+uGNSS.GLOMAX
-    elif sys == uGNSS.BDS:
-        sat = prn+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX
+        sat = prn+uGNSS.GALMIN
     elif sys == uGNSS.QZS:
-        sat = prn-192+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX
+        sat = prn-192+uGNSS.QZSMIN
+    elif sys == uGNSS.GLO:
+        sat = prn+uGNSS.GLOMIN
+    elif sys == uGNSS.BDS:
+        sat = prn+uGNSS.BDSMIN
     elif sys == uGNSS.SBS:
-        sat = prn-100+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX
+        sat = prn-100+uGNSS.SBSMIN
     elif sys == uGNSS.IRN:
-        sat = prn+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX + \
-            uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX
+        sat = prn+uGNSS.IRNMIN
     else:
         sat = 0
     return sat
@@ -741,26 +748,27 @@ def prn2sat(sys, prn):
 
 def sat2prn(sat):
     """ convert sat to sys+prn """
-    if sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX:
-        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX +
-                   uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX)
+    if sat > uGNSS.MAXSAT:
+        prn = 0
+        sys = uGNSS.NONE
+    elif sat > uGNSS.IRNMIN:
+        prn = sat-uGNSS.IRNMIN
         sys = uGNSS.IRN
-    elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX:
-        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX +
-                   uGNSS.BDSMAX+uGNSS.QZSMAX)+100
+    elif sat > uGNSS.SBSMIN:
+        prn = sat+100-uGNSS.SBSMIN
         sys = uGNSS.SBS
-    elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX:
-        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX)+192
-        sys = uGNSS.QZS
-    elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX:
-        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX)
+    elif sat > uGNSS.BDSMIN:
+        prn = sat-uGNSS.BDSMIN
         sys = uGNSS.BDS
-    elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX:
-        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX)
-        sys = uGNSS.GAL
-    elif sat > uGNSS.GPSMAX:
-        prn = sat-uGNSS.GPSMAX
+    elif sat > uGNSS.GLOMIN:
+        prn = sat-uGNSS.GLOMIN
         sys = uGNSS.GLO
+    elif sat > uGNSS.QZSMIN:
+        prn = sat+192+uGNSS.QZSMIN
+        sys = uGNSS.QZS
+    elif sat > uGNSS.GALMIN:
+        prn = sat-uGNSS.GALMIN
+        sys = uGNSS.GAL
     else:
         prn = sat
         sys = uGNSS.GPS
