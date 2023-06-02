@@ -31,7 +31,6 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.xa = np.zeros(nav.na)
     nav.Pa = np.zeros((nav.na, nav.na))
     nav.el = np.zeros(gn.uGNSS.MAXSAT)
-    nav.nfix = 0
 
     # parameter for RTK
     nav.eratio = [50, 50]
