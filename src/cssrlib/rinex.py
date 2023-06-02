@@ -21,7 +21,6 @@ class pclk_t:
 
 class rnxdec:
     """ class for RINEX decoder """
-    MAXSAT = uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX
 
     def __init__(self):
 
