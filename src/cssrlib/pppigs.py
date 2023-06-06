@@ -139,14 +139,6 @@ def rtkinit(nav, pos0=np.zeros(3)):
     #
     nav.monlevel = 2
 
-    """
-    nav.fout = None
-    nav.logfile = 'log_pppigs.txt'
-    if nav.monlevel >= 2:
-        nav.fout = open(nav.logfile, 'w')
-        nav.fout.write("# ")
-    """
-
 
 def sysidx(satlist, sys_ref):
     """ return index of satellites with sys=sys_ref """
