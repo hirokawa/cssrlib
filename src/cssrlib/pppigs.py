@@ -688,6 +688,11 @@ def pppigspos(nav, obs, orb, bsx):
     PPP positioning with IGS files and conventions
     """
 
+    # Skip empty epochs
+    #
+    if len(obs.sat) == 0:
+        return
+
     # GNSS satellite positions, velocities and clock offsets
     #
     rs, vs, dts, svh = satpreposs(obs, nav, orb)
@@ -696,7 +701,7 @@ def pppigspos(nav, obs, orb, bsx):
     #
     udstate(nav, obs)
 
-    xa = np.zeros(nav.nx)
+    #xa = np.zeros(nav.nx)
     xp = nav.x.copy()
 
     # Non-differential residuals
