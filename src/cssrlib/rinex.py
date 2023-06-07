@@ -271,7 +271,7 @@ class rnxdec:
             obs.P = np.empty((0, self.nsig[uTYP.C]), dtype=np.float64)
             obs.L = np.empty((0, self.nsig[uTYP.L]), dtype=np.float64)
             obs.S = np.empty((0, self.nsig[uTYP.S]), dtype=np.float64)
-            obs.lli = np.empty((0, self.nsig[uTYP.L]), dtype=np.int)
+            obs.lli = np.empty((0, self.nsig[uTYP.L]), dtype=np.int32)
             obs.sat = np.empty(0, dtype=np.int32)
             obs.sig = self.sig_tab
 
@@ -304,7 +304,7 @@ class rnxdec:
                 cp = np.zeros(len(self.getSignals(sys, uTYP.L)),
                               dtype=np.float64)
                 ll = np.zeros(len(self.getSignals(sys, uTYP.L)),
-                              dtype=np.int)
+                              dtype=np.int32)
                 cn = np.zeros(len(self.getSignals(sys, uTYP.S)),
                               dtype=np.float64)
 
