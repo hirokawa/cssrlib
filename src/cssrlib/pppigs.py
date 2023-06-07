@@ -170,13 +170,6 @@ def udstate(nav, obs):
         nav.x[0:3] += nav.x[3:6]*tt
         Phi[0:3, 3:6] = np.eye(3)*tt
     nav.P[0:na, 0:na] = Phi@nav.P[0:na, 0:na]@Phi.T
-    """
-    if nav.pmode > 0:
-        nav.x[0:3] += nav.x[3:6]*tt
-        Phi = np.eye(6)
-        Phi[0:3, 3:6] = np.eye(3)*tt
-        nav.P[0:6, 0:6] = Phi@nav.P[0:6, 0:6]@Phi.T
-    """
 
     # Process noise
     #
@@ -206,9 +199,10 @@ def udstate(nav, obs):
                 initx(nav, 0.0, 0.0, j)
                 nav.outc[i, f] = 0
 
-                print("{}  {} - reset ambiguity  {}"
-                      .format(time2str(obs.t), sat2id(sat_),
-                              obs.sig[sys_i][uTYP.L][f]))
+                if nav.monlevel > 0:
+                    print("{}  {} - reset ambiguity  {}"
+                          .format(time2str(obs.t), sat2id(sat_),
+                                  obs.sig[sys_i][uTYP.L][f]))
 
             # Reset slant ionospheric delay estimate
             #
@@ -216,8 +210,9 @@ def udstate(nav, obs):
             if reset and nav.x[j] != 0.0:
                 initx(nav, 0.0, 0.0, j)
 
-                print("{}  {} - reset ionosphere"
-                      .format(time2str(obs.t), sat2id(sat_)))
+                if nav.monlevel > 0:
+                    print("{}  {} - reset ionosphere"
+                          .format(time2str(obs.t), sat2id(sat_)))
 
         # Cycle  slip check by LLI
         #
@@ -294,17 +289,19 @@ def udstate(nav, obs):
 
                 initx(nav, bias[i], nav.sig_n0**2, j)
 
-                sig = obs.sig[sys_i][uTYP.L][f]
-                print("{}  {} - init  ambiguity  {} {:12.3f}"
-                      .format(time2str(obs.t), sat2id(sat[i]), sig, bias[i]))
+                if nav.monlevel > 0:
+                    sig = obs.sig[sys_i][uTYP.L][f]
+                    print("{}  {} - init  ambiguity  {} {:12.3f}"
+                          .format(time2str(obs.t), sat2id(sat[i]), sig, bias[i]))
 
             j = II(sat[i], nav.na)
             if ion[i] != 0 and nav.x[j] == 0.0:
 
                 initx(nav, ion[i], nav.sig_ion0**2, j)
 
-                print("{}  {} - init  ionosphere      {:12.3f}"
-                      .format(time2str(obs.t), sat2id(sat[i]), ion[i]))
+                if nav.monlevel > 0:
+                    print("{}  {} - init  ionosphere      {:12.3f}"
+                          .format(time2str(obs.t), sat2id(sat[i]), ion[i]))
 
     return 0
 
