@@ -89,7 +89,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
         nav.sig_qp = 0.01/np.sqrt(1)  # [m/sqrt(s)]
         nav.sig_qv = 1.0/np.sqrt(1)  # [m/s/sqrt(s)]
     nav.sig_qztd = 0.1/np.sqrt(3600)  # [m/sqrt(s)] -> 1 cm**2/h
-    nav.sig_qion = 0.1/np.sqrt(3600)  # [m/sqrt(s)]
+    nav.sig_qion = 1.0  # [m]
 
     nav.tidecorr = True
     nav.armode = 3  # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
@@ -164,12 +164,14 @@ def udstate(nav, obs):
 
     # pos,vel,ztd,ion,amb
     #
-    na = nav.nx
-    Phi = np.eye(na)
+    nx = nav.nx
+    ni = nav.na-gn.uGNSS.MAXSAT
+    Phi = np.eye(nx)
+    Phi[ni:nav.na, ni:nav.na] = np.zeros((gn.uGNSS.MAXSAT, gn.uGNSS.MAXSAT))
     if nav.pmode > 0:
         nav.x[0:3] += nav.x[3:6]*tt
         Phi[0:3, 3:6] = np.eye(3)*tt
-    nav.P[0:na, 0:na] = Phi@nav.P[0:na, 0:na]@Phi.T
+    nav.P[0:nx, 0:nx] = Phi@nav.P[0:nx, 0:nx]@Phi.T
 
     # Process noise
     #
