@@ -4,7 +4,6 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
-from os.path import expanduser
 import sys
 
 import cssrlib.rinex as rn
@@ -17,9 +16,7 @@ bdir = '../data/'
 navfile = bdir+'SEPT078M.21P'
 obsfile = bdir+'SEPT078M1.21O'
 basefile = bdir+'3034078M1.21O'
-
-bdir = expanduser('~/GNSS_DAT/')
-atxfile = bdir+"IGS/ANTEX/igs14.atx"
+atxfile = bdir+"test.atx"
 
 xyz_ref = [-3962108.673,   3381309.574,   3668678.638]
 pos_ref = gn.ecef2pos(xyz_ref)
@@ -52,9 +49,9 @@ decb.setSignals(sigsb)
 decb.decode_obsh(basefile)
 dec.decode_obsh(obsfile)
 
-#
-# Set rover and base antenna
 
+# Set rover and base antenna
+#
 dec.ant = "{:16s}{:4s}".format("JAVRINGANT_DM", "SCIS")
 decb.ant = "{:16s}{:4s}".format("TRM59800.80", "NONE")
 
@@ -63,8 +60,6 @@ atx.readpcv(atxfile)
 
 # Set antenna PCO/PCV data
 #
-nav.sat_pcv = atx.pcvs
-
 nav.rcv_ant = searchpcv(atx.pcvr, dec.ant,  dec.ts)
 nav.rcv_ant_b = searchpcv(atx.pcvr, decb.ant, decb.ts)
 
