@@ -67,17 +67,18 @@ class rCST():
 
 class uGNSS(IntEnum):
     """ class for GNS systems """
+
     NONE = -1
 
     GPS = 0
-    SBS = 1
-    GAL = 2
+    GAL = 1
+    QZS = 2
     BDS = 3
-    QZS = 5
-    GLO = 6
-    IRN = 7
+    GLO = 4
+    SBS = 5
+    IRN = 6
 
-    GNSSMAX = 8
+    GNSSMAX = 7
 
     GPSMAX = 32
     GALMAX = 36
@@ -87,7 +88,15 @@ class uGNSS(IntEnum):
     SBSMAX = 24
     IRNMAX = 10
 
-    MAXSAT = GPSMAX+GLOMAX+GALMAX+BDSMAX+QZSMAX+SBSMAX+IRNMAX
+    GPSMIN = 0
+    GALMIN = GPSMIN+GPSMAX
+    QZSMIN = GALMIN+GALMAX
+    BDSMIN = QZSMIN+QZSMAX
+    GLOMIN = BDSMIN+BDSMAX
+    SBSMIN = GLOMIN+GLOMAX
+    IRNMIN = SBSMIN+SBSMAX
+
+    MAXSAT = GPSMAX+GALMAX+QZSMAX+BDSMAX+GLOMAX+SBSMAX+IRNMAX
 
 
 class uTYP(IntEnum):
@@ -100,8 +109,10 @@ class uTYP(IntEnum):
     D = 3
     S = 4
 
+
 class uSIG(IntEnum):
     """ class for signal band and attribute """
+
     NONE = -1
 
     # GPS   L1  1575.42 MHz
@@ -502,14 +513,13 @@ class Obs():
     """ class to define the observation """
 
     def __init__(self):
-        self.nm = 0
         self.t = gtime_t()
         self.P = []
         self.L = []
         self.S = []
         self.lli = []
-        self.data = []
         self.sat = []
+        self.sig = {}
 
 
 class Eph():
@@ -561,24 +571,23 @@ class Nav():
             [0.1167E+06, -0.2294E+06, -0.1311E+06, 0.1049E+07]])
         self.elmin = np.deg2rad(15.0)
         self.tidecorr = False
-        self.nf = 2
+        ######## START OBSOLETE ################################################
+        self.nf = 2  # TODO: make this obsolte if possible
+        ######## END   OBSOLETE ################################################
         self.ne = 0
         self.nc = 0
-        self.excl_sat = []
-        self.freq = [1.57542e9, 1.22760e9,  # L1,L2
-                     1.17645e9, 1.20714e9]  # L5/E5a/B2a,E5b/B2b
+        self.excl_sat = []  # Excluded satellites
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
-        self.gnss_t = [uGNSS.GPS, uGNSS.GAL, uGNSS.QZS]
-        self.loglevel = 1
+        self.pmode = 1  # 0: static, 1: kinematic
+
+        self.monlevel = 1
         self.cnr_min = 35
         self.maxout = 5  # maximum outage [epoch]
 
         self.sat_ant = None
         self.rcv_ant = None
         self.rcv_ant_b = None
-        self.sig_tab = None
-        self.sig_tab_b = None
 
         # SSR correction placeholder
         self.dorb = np.zeros(uGNSS.MAXSAT)
@@ -588,9 +597,13 @@ class Nav():
 
         # satellite observation status
         self.fix = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
+        # Measurement outage indicator
         self.outc = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
+        # Carrier-phase processed indicator
         self.vsat = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
+        # ??? set but not used
         self.lock = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
+        # ??? not used
         self.slip = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
 
         self.tt = 0
@@ -711,23 +724,23 @@ def time2str(t):
     return "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}"\
         .format(e[0], e[1], e[2], e[3], e[4], int(e[5]))
 
+
 def prn2sat(sys, prn):
     """ convert sys+prn to sat """
     if sys == uGNSS.GPS:
         sat = prn
-    elif sys == uGNSS.GLO:
-        sat = prn+uGNSS.GPSMAX
     elif sys == uGNSS.GAL:
-        sat = prn+uGNSS.GPSMAX+uGNSS.GLOMAX
-    elif sys == uGNSS.BDS:
-        sat = prn+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX
+        sat = prn+uGNSS.GALMIN
     elif sys == uGNSS.QZS:
-        sat = prn-192+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX
+        sat = prn-192+uGNSS.QZSMIN
+    elif sys == uGNSS.GLO:
+        sat = prn+uGNSS.GLOMIN
+    elif sys == uGNSS.BDS:
+        sat = prn+uGNSS.BDSMIN
     elif sys == uGNSS.SBS:
-        sat = prn-100+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX
+        sat = prn-100+uGNSS.SBSMIN
     elif sys == uGNSS.IRN:
-        sat = prn+uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX + \
-            uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX
+        sat = prn+uGNSS.IRNMIN
     else:
         sat = 0
     return sat
@@ -735,26 +748,27 @@ def prn2sat(sys, prn):
 
 def sat2prn(sat):
     """ convert sat to sys+prn """
-    if sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX:
-        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX +
-                   uGNSS.BDSMAX+uGNSS.QZSMAX+uGNSS.SBSMAX)
+    if sat > uGNSS.MAXSAT:
+        prn = 0
+        sys = uGNSS.NONE
+    elif sat > uGNSS.IRNMIN:
+        prn = sat-uGNSS.IRNMIN
         sys = uGNSS.IRN
-    elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX:
-        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX +
-                   uGNSS.BDSMAX+uGNSS.QZSMAX)+100
+    elif sat > uGNSS.SBSMIN:
+        prn = sat+100-uGNSS.SBSMIN
         sys = uGNSS.SBS
-    elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX:
-        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX)+192
-        sys = uGNSS.QZS
-    elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX:
-        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX)
+    elif sat > uGNSS.BDSMIN:
+        prn = sat-uGNSS.BDSMIN
         sys = uGNSS.BDS
-    elif sat > uGNSS.GPSMAX+uGNSS.GLOMAX:
-        prn = sat-(uGNSS.GPSMAX+uGNSS.GLOMAX)
-        sys = uGNSS.GAL
-    elif sat > uGNSS.GPSMAX:
-        prn = sat-uGNSS.GPSMAX
+    elif sat > uGNSS.GLOMIN:
+        prn = sat-uGNSS.GLOMIN
         sys = uGNSS.GLO
+    elif sat > uGNSS.QZSMIN:
+        prn = sat+192+uGNSS.QZSMIN
+        sys = uGNSS.QZS
+    elif sat > uGNSS.GALMIN:
+        prn = sat-uGNSS.GALMIN
+        sys = uGNSS.GAL
     else:
         prn = sat
         sys = uGNSS.GPS
@@ -789,6 +803,7 @@ def id2sat(id_):
     sat = prn2sat(sys, prn)
     return sat
 
+
 def char2sys(c):
     """ convert character to GNSS """
     gnss_tbl = {'G': uGNSS.GPS, 'R': uGNSS.GLO, 'E': uGNSS.GAL, 'C': uGNSS.BDS,
@@ -801,12 +816,24 @@ def char2sys(c):
 
 
 def sys2char(sys):
-    """ convert character to GNSS """
+    """ convert GNSS to character """
     gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GLO: 'R', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
                 uGNSS.QZS: 'J', uGNSS.SBS: 'S', uGNSS.IRN: 'I'}
 
     if sys not in gnss_tbl:
         return "?"
+    else:
+        return gnss_tbl[sys]
+
+
+def sys2str(sys):
+    """ convert GNSS to string """
+    gnss_tbl = {uGNSS.GPS: 'GPS', uGNSS.GLO: 'GLONASS',
+                uGNSS.GAL: 'GALILEO', uGNSS.BDS: 'BEIDOU',
+                uGNSS.QZS: 'QZSS', uGNSS.SBS: 'SBAS', uGNSS.IRN: 'IRNSS'}
+
+    if sys not in gnss_tbl:
+        return "???"
     else:
         return gnss_tbl[sys]
 
@@ -903,6 +930,8 @@ def xyz2enu(pos):
 def enu2xyz(pos):
     """ return ENU to ECEF conversion matrix from LLH """
     return np.array(np.matrix(xyz2enu(pos)).I)
+
+
 def ecef2pos(r):
     """  ECEF to LLH position conversion """
     e2 = rCST.FE_WGS84*(2-rCST.FE_WGS84)
@@ -1066,3 +1095,37 @@ def tropmodel(t, pos, el=np.pi/2, humi=0.7):
     trop_hs = 0.0022768*pres/(1.0-0.00266*np.cos(2*pos[0])-0.00028e-3*hgt)
     trop_wet = 0.002277*(1255.0/temp+0.05)*e
     return trop_hs, trop_wet, z
+
+
+def meteoHpf():
+    """
+    Hopfield atmosphere model
+    """
+    pres = 1010.0
+    temp = 291.1
+    e = 10.4
+    return pres, temp, e
+
+
+def tropmapfHpf(el):
+    """
+    Tropospheric mapping functions for Hopfield model
+    """
+
+    mapfh = 1.0/(np.sin(np.sqrt(el**2+(np.pi/72.0)**2)))
+    mapfw = 1.0/(np.sin(np.sqrt(el**2+(np.pi/120.0)**2)))
+
+    return mapfh, mapfw
+
+
+def tropmodelHpf():
+    """
+    Hopfield tropospheric delay model
+    """
+    # standard atmosphere for Hopfield model
+    pres, temp, e = meteoHpf()
+    # Hopfield
+    trop_dry = (77.6e-6 * (-613.3768/temp+148.98)*pres)/5.0
+    trop_wet = (77.6e-6 * 11000.0 * 4810.0 * e/temp**2)/5.0
+
+    return trop_dry, trop_wet

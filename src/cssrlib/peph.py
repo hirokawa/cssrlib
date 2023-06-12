@@ -14,7 +14,7 @@ from cssrlib.gnss import rCST, rSigRnx, uGNSS, uTYP, uSIG
 from cssrlib.rinex import rnxdec
 import numpy as np
 from math import pow, sin, cos
-import gzip
+
 
 NMAX = 10
 MAXDTE = 900.0
@@ -460,16 +460,8 @@ class atxdec():
 def searchpcv(pcvs, name, time):
     """ get satellite or receiver antenna pcv """
 
-    if isinstance(name, int):
-        for pcv in pcvs:
-            if pcv.sat != name:
-                continue
-            if pcv.ts.time != 0 and timediff(pcv.ts, time) > 0.0:
-                continue
-            if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
-                continue
-            return pcv
-    else:
+    if isinstance(name, str):
+
         for pcv in pcvs:
             if pcv.type != name:
                 continue
@@ -478,7 +470,17 @@ def searchpcv(pcvs, name, time):
             if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
                 continue
             return pcv
-        return None
+
+    else:
+
+        for pcv in pcvs:
+            if pcv.sat != name:
+                continue
+            if pcv.ts.time != 0 and timediff(pcv.ts, time) > 0.0:
+                continue
+            if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
+                continue
+            return pcv
 
     return None
 
@@ -644,10 +646,12 @@ def antModelTx(nav, e, sigs, sat, time, rs):
     # Select satellite antenna
     #
     ant = searchpcv(nav.sat_ant, sat, time)
+    if ant is None:
+        return None
 
     # Zenit angle and zenit angle grid
     #
-    za = np.rad2deg(np.arccos(np.dot(ez,-e)))
+    za = np.rad2deg(np.arccos(np.dot(ez, -e)))
     za_t = np.arange(ant.zen[0], ant.zen[1]+ant.zen[2], ant.zen[2])
 
     # Interpolate PCV and map PCO on line-of-sight vector

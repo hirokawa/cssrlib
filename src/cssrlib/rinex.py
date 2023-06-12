@@ -8,8 +8,9 @@ from cssrlib.gnss import gpst2time, epoch2time, timediff, gtime_t
 from cssrlib.gnss import prn2sat, char2sys
 from cssrlib.gnss import Eph, Obs
 
+
 class pclk_t:
-    def __init__(self, time = None):
+    def __init__(self, time=None):
         if time is not None:
             self.time = time
         else:
@@ -17,16 +18,19 @@ class pclk_t:
         self.clk = np.zeros(uGNSS.MAXSAT)
         self.std = np.zeros(uGNSS.MAXSAT)
 
+
 class rnxdec:
     """ class for RINEX decoder """
-    MAXSAT = uGNSS.GPSMAX+uGNSS.GLOMAX+uGNSS.GALMAX+uGNSS.BDSMAX+uGNSS.QZSMAX
 
     def __init__(self):
+
         self.ver = -1.0
         self.fobs = None
-        
-        self.sig_map = {}  # signal code mapping to columns in data section
-        self.sig_tab = {}  # signal selection for internal data structure
+
+        # signal code mapping from RINEX header to columns in data section
+        self.sig_map = {}
+        # signal selection for internal data structure
+        self.sig_tab = {}
         self.nsig = {uTYP.C: 0, uTYP.L: 0, uTYP.D: 0, uTYP.S: 0}
 
         self.pos = np.array([0, 0, 0])
@@ -93,13 +97,14 @@ class rnxdec:
                             nav.ion[1, k] = self.flt(line[5+k*12:5+(k+1)*12])
 
             for line in fnav:
+
                 sys = char2sys(line[0])
-                
+
                 # Skip undesired constellations
-                #                
+                #
                 if sys not in (uGNSS.GPS, uGNSS.GAL, uGNSS.QZS):
                     continue
-                
+
                 prn = int(line[1:3])
                 if sys == uGNSS.QZS:
                     prn += 192
@@ -164,19 +169,20 @@ class rnxdec:
         return nav
 
     def decode_clk(self, clkfile, nav):
-        """decode RINEX Navigation message from file """
+        """decode Clock-RINEX data from file """
         nav.pclk = []
         with open(clkfile, 'rt') as fnav:
             for line in fnav:
+
                 if line[0:2] != 'AS':
                     continue
-                if line[3] not in self.gnss_tbl:
-                    continue
-                sys = self.gnss_tbl[line[3]]
+
+                sys = char2sys(line[3])
                 prn = int(line[4:7])
                 if sys == uGNSS.QZS:
                     prn += 192
                 sat = prn2sat(sys, prn)
+
                 t = self.decode_time(line, 8, 9)
                 if nav.nc <= 0 or abs(timediff(nav.pclk[-1].time, t)) > 1e-9:
                     nav.nc += 1
@@ -215,6 +221,7 @@ class rnxdec:
                                      float(line[28:42]),  # North
                                      float(line[0:14])])  # Up
             elif line[60:79] == 'SYS / # / OBS TYPES':
+
                 gns = char2sys(line[0])
                 nsig = int(line[3:6])
 
@@ -236,16 +243,21 @@ class rnxdec:
                 self.ts = epoch2time([float(v) for v in line[0:44].split()])
             elif 'TIME OF LAST OBS' in line[60:]:
                 self.te = epoch2time([float(v) for v in line[0:44].split()])
+
         return 0
 
     def decode_obs(self):
-        """decode RINEX Observation message from file """
+        """ decode RINEX Observation message from file """
+
         obs = Obs()
 
         for line in self.fobs:
+
             if line[0] != '>':
                 continue
+
             nsat = int(line[32:35])
+
             year = int(line[2:6])
             month = int(line[7:9])
             day = int(line[10:12])
@@ -253,13 +265,18 @@ class rnxdec:
             minute = int(line[16:18])
             sec = float(line[19:29])
             obs.t = epoch2time([year, month, day, hour, minute, sec])
+
+            # Initialize data structures
+            #
             obs.P = np.empty((0, self.nsig[uTYP.C]), dtype=np.float64)
             obs.L = np.empty((0, self.nsig[uTYP.L]), dtype=np.float64)
             obs.S = np.empty((0, self.nsig[uTYP.S]), dtype=np.float64)
             obs.lli = np.empty((0, self.nsig[uTYP.L]), dtype=np.int32)
             obs.sat = np.empty(0, dtype=np.int32)
+            obs.sig = self.sig_tab
 
             for _ in range(nsat):
+
                 line = self.fobs.readline()
                 sys = char2sys(line[0])
 
@@ -278,6 +295,8 @@ class rnxdec:
                 prn = int(line[1:3])
                 if sys == uGNSS.QZS:
                     prn += 192
+                elif sys == uGNSS.SBS:
+                    prn += 100
                 sat = prn2sat(sys, prn)
 
                 pr = np.zeros(len(self.getSignals(sys, uTYP.C)),
@@ -297,23 +316,27 @@ class rnxdec:
                             sig not in self.sig_tab[sys][sig.typ]:
                         continue
 
-                    j = self.sig_tab[sys][sig.typ].index(sig)
-                    obs_ = line[16*i+4:16*i+17].strip()
-                    
-                    # Replace empty string with zero
-                    # TBD: consider using None-type instead?
+                    # Get string representation of measurement value
                     #
-                    if not obs_:
-                        obs_ = '0.0'
+                    sval = line[16*i+3:16*i+17].strip()
+                    slli = line[16*i+17] if len(line) > 16*i+17 else ''
+
+                    # Convert from string to numerical value
+                    #
+                    val = 0.0 if not sval else float(sval)
+                    lli = 1 if slli == '1' else 0
+
+                    # Signal index in data structure
+                    #
+                    j = self.sig_tab[sys][sig.typ].index(sig)
 
                     if sig.typ == uTYP.C:
-                        pr[j] = float(obs_)
+                        pr[j] = val
                     elif sig.typ == uTYP.L:
-                        cp[j] = float(obs_)
-                        if line[16*i+17] == '1':
-                            ll[j] = 1
+                        cp[j] = val
+                        ll[j] = lli
                     elif sig.typ == uTYP.S:
-                        cn[j] = float(obs_)
+                        cn[j] = val
                     else:
                         continue
 
@@ -329,7 +352,9 @@ class rnxdec:
             obs.L = obs.L.reshape(len(obs.sat), self.nsig[uTYP.L])
             obs.S = obs.S.reshape(len(obs.sat), self.nsig[uTYP.S])
             obs.lli = obs.lli.reshape(len(obs.sat), self.nsig[uTYP.L])
+
             break
+
         return obs
 
 
