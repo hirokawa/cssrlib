@@ -4,8 +4,11 @@ module for RTK positioning
 """
 
 import numpy as np
+
 import cssrlib.gnss as gn
 from cssrlib.ephemeris import satposs
+from cssrlib.gnss import uTYP
+from cssrlib.peph import antModelRx
 from cssrlib.ppp import tidedisp
 from cssrlib.mlambda import mlambda
 
@@ -22,7 +25,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
 
     nav.na = 3 if nav.pmode == 0 else 6
     nav.nq = 3 if nav.pmode == 0 else 6
-    nav.ratio = 0
+
     nav.thresar = [2]
     nav.nx = nav.na+gn.uGNSS.MAXSAT*nav.nf
     nav.x = np.zeros(nav.nx)
@@ -30,9 +33,8 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.xa = np.zeros(nav.na)
     nav.Pa = np.zeros((nav.na, nav.na))
     nav.el = np.zeros(gn.uGNSS.MAXSAT)
-    nav.nfix = nav.neb = 0
 
-    # parameter for RTK    
+    # parameter for RTK
     nav.eratio = [50, 50]
     nav.err = [0, 0.01, 0.005]/np.sqrt(2)
     nav.sig_p0 = 30.0
@@ -40,10 +42,9 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.sig_n0 = 30.0
     nav.sig_qp = 0.01
     nav.sig_qv = 1.0
-    
+
     nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20)  # elevation mask for AR
-    nav.gnss_t = [gn.uGNSS.GPS, gn.uGNSS.GAL, gn.uGNSS.QZS]
     nav.x[0:3] = pos0
     nav.x[3:6] = 0.0
 
@@ -57,16 +58,6 @@ def rtkinit(nav, pos0=np.zeros(3)):
         nav.q[3:6] = nav.sig_qv**2
     else:
         nav.q[0:3] = nav.sig_qp**2
-
-    # obs index
-    i0 = {gn.uGNSS.GPS: 0, gn.uGNSS.GAL: 0, gn.uGNSS.QZS: 0}
-    i1 = {gn.uGNSS.GPS: 1, gn.uGNSS.GAL: 2, gn.uGNSS.QZS: 1}
-    freq0 = {gn.uGNSS.GPS: nav.freq[0], gn.uGNSS.GAL: nav.freq[0],
-             gn.uGNSS.QZS: nav.freq[0]}
-    freq1 = {gn.uGNSS.GPS: nav.freq[1], gn.uGNSS.GAL: nav.freq[2],
-             gn.uGNSS.QZS: nav.freq[1]}
-    nav.obs_idx = [i0, i1]
-    nav.obs_freq = [freq0, freq1]
 
 
 def zdres(nav, obs, rs, dts, svh, rr, rtype=1):
@@ -85,7 +76,7 @@ def zdres(nav, obs, rs, dts, svh, rr, rtype=1):
     pos = gn.ecef2pos(rr_)
     for i in range(n):
         sys, _ = gn.sat2prn(obs.sat[i])
-        if svh[i] > 0 or sys not in nav.gnss_t or obs.sat[i] in nav.excl_sat:
+        if svh[i] > 0 or sys not in obs.sig.keys() or obs.sat[i] in nav.excl_sat:
             continue
         r, e[i, :] = gn.geodist(rs[i, :], rr_)
         _, el[i] = gn.satazel(pos, e[i, :])
@@ -96,24 +87,23 @@ def zdres(nav, obs, rs, dts, svh, rr, rtype=1):
         mapfh, _ = gn.tropmapf(obs.t, pos, el[i])
         r += mapfh*zhd
 
-        #dant = gn.antmodel(nav, el[i], nav.nf, rtype)
-        if rtype == 1:
-            sigs = nav.sig_tab[sys][gn.uTYP.C]
-        else:
-            sigs = nav.sig_tab_b[sys][gn.uTYP.C]
-        
-        dant = antModelRx(nav, rr_, e[i, :], sigs, rtype)
-        
+        sigPR = obs.sig[sys][gn.uTYP.C]
+        sigCP = obs.sig[sys][gn.uTYP.L]
+
+        dantPR = antModelRx(nav, pos, e[i, :], sigPR, rtype)
+        dantCP = antModelRx(nav, pos, e[i, :], sigCP, rtype)
+
+        lam = [s.wavelength() for s in sigCP]
+
         for f in range(nf):
-            j = nav.obs_idx[f][sys]
             if obs.L[i, f] == 0.0:
                 y[i, f] = 0.0
             else:
-                y[i, f] = obs.L[i, f]*_c/nav.freq[j]-r-dant[f]
+                y[i, f] = obs.L[i, f]*lam[f]-r-dantCP[f]
             if obs.P[i, f] == 0.0:
                 y[i, f+nf] = 0.0
             else:
-                y[i, f+nf] = obs.P[i, f]-r-dant[f]
+                y[i, f+nf] = obs.P[i, f]-r-dantPR[f]
     return y, e, el
 
 
@@ -158,13 +148,13 @@ def varerr(nav, el, f):
     return 2.0*(a**2+(b/s_el)**2)
 
 
-def ddres(nav, x, y, e, sat, el):
+def ddres(nav, obs, x, y, e, sat, el):
     """ DD phase/code residual """
     _c = gn.rCST.CLIGHT
     nf = nav.nf
     ns = len(el)
     mode = 1 if len(y) == ns else 0  # 0:DD,1:SD
-    nb = np.zeros(2*len(nav.gnss_t)*nf, dtype=int)
+    nb = np.zeros(2*len(obs.sig.keys())*nf, dtype=int)
     Ri = np.zeros(ns*nf*2)
     Rj = np.zeros(ns*nf*2)
 
@@ -172,13 +162,9 @@ def ddres(nav, x, y, e, sat, el):
     b = 0
     H = np.zeros((ns*nf*2, nav.nx))
     v = np.zeros(ns*nf*2)
-    idx_f = [0, 1]
-    for sys in nav.gnss_t:
-        for f in range(nf):
-            idx_f[f] = nav.obs_idx[f][sys]
+
+    for sys in obs.sig.keys():
         for f in range(0, nf*2):
-            if f < nf:
-                freq = nav.freq[idx_f[f]]
             # reference satellite
             idx = sysidx(sat, sys)
             if len(idx) > 0:
@@ -199,7 +185,7 @@ def ddres(nav, x, y, e, sat, el):
                 if f < nf:  # carrier
                     idx_i = IB(sat[i], f, nav.na)
                     idx_j = IB(sat[j], f, nav.na)
-                    lami = _c/freq
+                    lami = obs.sig[sys][gn.uTYP.L][f].wavelength()
                     v[nv] -= lami*(x[idx_i]-x[idx_j])
                     H[nv, idx_i] = lami
                     H[nv, idx_j] = -lami
@@ -221,7 +207,7 @@ def ddres(nav, x, y, e, sat, el):
 
 
 def valpos(nav, v, R, thres=4.0):
-    """ post-file residual test """
+    """ post-fit residual test """
     nv = len(v)
     fact = thres**2
     for i in range(nv):
@@ -245,7 +231,7 @@ def ddidx(nav, sat):
             for i in range(k, k+n):
                 sat_i = i-k+1
                 sys, _ = gn.sat2prn(sat_i)
-                if (sys != m) or sys not in nav.gnss_t:
+                if (sys != m):  # or sys not in nav.gnss_t:
                     continue
                 if sat_i not in sat or nav.x[i] == 0.0 \
                    or nav.vsat[sat_i-1, f] == 0:
@@ -258,7 +244,7 @@ def ddidx(nav, sat):
             for j in range(k, k+n):
                 sat_j = j-k+1
                 sys, _ = gn.sat2prn(sat_j)
-                if (sys != m) or sys not in nav.gnss_t:
+                if (sys != m):  # or sys not in nav.gnss_t:
                     continue
                 if i == j or sat_j not in sat or nav.x[j] == 0.0 \
                    or nav.vsat[sat_j-1, f] == 0:
@@ -284,7 +270,7 @@ def restamb(nav, bias, nb):
             index = []
             for i in range(gn.uGNSS.MAXSAT):
                 sys, _ = gn.sat2prn(i+1)
-                if sys != m or (sys not in nav.gnss_t) or nav.fix[i, f] != 2:
+                if sys != m or nav.fix[i, f] != 2:
                     continue
                 index.append(IB(i+1, f, nav.na))
                 n += 1
@@ -380,7 +366,7 @@ def udstate(nav, obs, obsb, iu, ir):
             nav.outc[i, f] += 1
             reset = (nav.outc[i, f] > nav.maxout)
             sys_i, _ = gn.sat2prn(i+1)
-            if sys_i not in nav.gnss_t:
+            if sys_i not in obs.sig.keys():
                 continue
             j = IB(i+1, f, nav.na)
             if reset and nav.x[j] != 0.0:
@@ -388,9 +374,8 @@ def udstate(nav, obs, obsb, iu, ir):
                 nav.outc[i, f] = 0
         # cycle slip check by LLI
         for i in range(ns):
-            if sys[i] not in nav.gnss_t:
+            if sys[i] not in obs.sig.keys():
                 continue
-            j = nav.obs_idx[f][sys[i]]
             if obsb.lli[ir[i], f] & 1 == 0 and obs.lli[iu[i], f] & 1 == 0:
                 continue
             initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
@@ -399,13 +384,12 @@ def udstate(nav, obs, obsb, iu, ir):
         offset = 0
         na = 0
         for i in range(ns):
-            if sys[i] not in nav.gnss_t:
+            if sys[i] not in obs.sig.keys():
                 continue
-            j = nav.obs_idx[f][sys[i]]
-            freq = nav.obs_freq[f][sys[i]]
+            lam = obs.sig[sys[i]][uTYP.C][f].wavelength()
             cp = obs.L[iu[i], f]-obsb.L[ir[i], f]
             pr = obs.P[iu[i], f]-obsb.P[ir[i], f]
-            bias[i] = cp-pr*freq/gn.rCST.CLIGHT
+            bias[i] = cp-pr/lam
             amb = nav.x[IB(sat[i], f, nav.na)]
             if amb != 0.0:
                 offset += bias[i]-amb
@@ -429,10 +413,7 @@ def selsat(nav, obs, obsb, elb):
     """ select common satellite between rover and base station """
     # exclude satellite with missing observation and cycle slip for rover
     idx_u = []
-    for k, sat in enumerate(obs.sat):
-        sys, _ = gn.sat2prn(sat)
-        j0 = nav.obs_idx[0][sys]
-        j1 = nav.obs_idx[1][sys]
+    for k, _ in enumerate(obs.sat):
         if obs.P[k, 0] == 0.0 or obs.P[k, 1] == 0.0 or \
            obs.L[k, 0] == 0.0 or obs.L[k, 1] == 0.0 or \
            obs.lli[k, 0] > 0 or obs.lli[k, 1] > 0:
@@ -441,10 +422,7 @@ def selsat(nav, obs, obsb, elb):
 
     # exclude satellite with missing observation and cycle slip for base
     idx_r = []
-    for k, sat in enumerate(obsb.sat):
-        sys, _ = gn.sat2prn(sat)
-        j0 = nav.obs_idx[0][sys]
-        j1 = nav.obs_idx[1][sys]
+    for k, _ in enumerate(obsb.sat):
         if obsb.P[k, 0] == 0.0 or obsb.P[k, 1] == 0.0 or \
            obsb.L[k, 0] == 0.0 or obsb.L[k, 1] == 0.0 or \
            obsb.lli[k, 0] > 0 or obsb.lli[k, 1] > 0 or \
@@ -514,7 +492,7 @@ def relpos(nav, obs, obsb):
     # Kalman filter time propagation
     udstate(nav, obs, obsb, iu, ir)
 
-    xa = np.zeros(nav.nx)
+    #xa = np.zeros(nav.nx)
     xp = nav.x
 
     # non-differencial residual for rover
@@ -526,7 +504,7 @@ def relpos(nav, obs, obsb):
     sat = obs.sat[iu]
     nav.el[sat-1] = el
     # DD residual
-    v, H, R = ddres(nav, xp, y, e, sat, el)
+    v, H, R = ddres(nav, obs, xp, y, e, sat, el)
     Pp = nav.P
 
     # Kalman filter measurement update
@@ -537,7 +515,7 @@ def relpos(nav, obs, obsb):
     y[:ns, :] = yu[iu, :]
     e[:ns, :] = eu[iu, :]
     # residual for float solution
-    v, H, R = ddres(nav, xp, y, e, sat, el)
+    v, H, R = ddres(nav, obs, xp, y, e, sat, el)
     if valpos(nav, v, R):
         nav.x = xp
         nav.P = Pp
@@ -550,7 +528,7 @@ def relpos(nav, obs, obsb):
         yu, eu, _ = zdres(nav, obs, rs, dts, svh, xa[0:3])
         y[:ns, :] = yu[iu, :]
         e[:ns, :] = eu[iu, :]
-        v, H, R = ddres(nav, xa, y, e, sat, el)
+        v, H, R = ddres(nav, obs, xa, y, e, sat, el)
         if valpos(nav, v, R):
             if nav.armode == 3:
                 holdamb(nav, xa)

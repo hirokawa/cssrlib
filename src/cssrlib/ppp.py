@@ -1,9 +1,9 @@
 """
 module for PPP processing
 """
-
-import numpy as np
 import cssrlib.gnss as gn
+from cssrlib.peph import gpst2utc
+import numpy as np
 from math import sin, cos, atan2, asin
 
 
@@ -116,7 +116,7 @@ def nut_iau1980(t_, f):
         [-1,   0,   0,   1,   1,  -388.3,       1,    0.0,     0,   0.0],
         [-1,  -1,   0,   2,   1,    35.0,       1,    0.0,     0,   0.0],
         [0,   1,   0,   1,   0,    27.3,       1,    0.0,     0,   0.0]
-        ])
+    ])
     dpsi = 0
     deps = 0
     for i in range(106):
@@ -269,15 +269,27 @@ def shapiro(rsat, rrcv):
     return corr
 
 
-def windupcorr(time, rs, vs, rr, phw):
+def windupcorr(time, rs, vs, rr, phw, full=False):
     """ calculate windup correction """
-    we = np.array([0, 0, gn.rCST.OMGE])
-    # rsun, rmoon, gmst = sunmoonpos(gn.gpst2utc(time))
     ek = gn.vnorm(rr-rs)
-    ezs = gn.vnorm(-rs)
-    ess = gn.vnorm(vs+np.cross(we, rs))
-    eys = gn.vnorm(np.cross(ezs, ess))
-    exs = np.cross(eys, ezs)
+    if full:
+        # Satellite antenna frame unit vectors assuming standard yaw attitude law
+        #
+        rsun, _, _ = sunmoonpos(gpst2utc(time))
+        r = -rs
+        ezs = r/np.linalg.norm(r)
+        r = rsun-rs
+        ess = r/np.linalg.norm(r)
+        r = np.cross(ezs, ess)
+        eys = r/np.linalg.norm(r)
+        exs = np.cross(eys, ezs)
+    else:
+        we = np.array([0, 0, gn.rCST.OMGE])
+        ek = gn.vnorm(rr-rs)
+        ezs = gn.vnorm(-rs)
+        ess = gn.vnorm(vs+np.cross(we, rs))
+        eys = gn.vnorm(np.cross(ezs, ess))
+        exs = np.cross(eys, ezs)
     pos = gn.ecef2pos(rr)
     E = gn.xyz2enu(pos)
     exr = E[0, :]

@@ -41,34 +41,17 @@ print()
 print("Test constructors")
 print()
 
-try:
-    sig = rSigRnx()
-    print(sys2char(sig.sys), sig.str())
-except ValueError:
-    print('Value Error')
-    
-try:
-    sig = rSigRnx("EC5Q")
-    print(sys2char(sig.sys), sig.str())
-except ValueError:
-    print('Value Error')
-    
-try:
-    sig = rSigRnx(uGNSS.GPS, "D1X")
-    print(sys2char(sig.sys), sig.str())
-except ValueError:
-    print('Value Error')
-    
-try:
-    sig = rSigRnx(uGNSS.IRN, uTYP.S, uSIG.L1X)
-    print(sys2char(sig.sys), sig.str())
-except ValueError:
-    print('Value Error')
-    
-try:
-     sig = rSigRnx(uGNSS.GPS, "D1X", "what??")
-     print(sys2char(sig.sys), sig.str())
-except ValueError:
-    print('Value Error')
+sig = rSigRnx()
+print(sys2char(sig.sys), sig.str())
 
+sig = rSigRnx("EC5Q")
+print(sys2char(sig.sys), sig.str())
 
+sig = rSigRnx(uGNSS.GPS, "D1X")
+print(sys2char(sig.sys), sig.str())
+
+sig = rSigRnx(uGNSS.IRN, uTYP.S, uSIG.L1X)
+print(sys2char(sig.sys), sig.str())
+
+sig = rSigRnx(uGNSS.GPS, "D1X", "what??")
+print(sys2char(sig.sys), sig.str())

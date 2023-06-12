@@ -46,7 +46,8 @@ def plot_elv(t, elv, elmask=0, satlist=None):
 
     tmax = t[-1]//60+1
     plt.ylabel('Elevation Angle [deg]')
-    plt.xlabel('Time [min]')    plt.grid()
+    plt.xlabel('Time [min]')
+    plt.grid()
     plt.axis([0, tmax, 0, 90])
     plt.show()
     return nsat
