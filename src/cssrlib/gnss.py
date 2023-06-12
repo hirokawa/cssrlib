@@ -816,7 +816,7 @@ def char2sys(c):
 
 
 def sys2char(sys):
-    """ convert character to GNSS """
+    """ convert GNSS to character """
     gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GLO: 'R', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
                 uGNSS.QZS: 'J', uGNSS.SBS: 'S', uGNSS.IRN: 'I'}
 
