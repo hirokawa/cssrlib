@@ -651,7 +651,7 @@ def antModelTx(nav, e, sigs, sat, time, rs):
 
     # Zenit angle and zenit angle grid
     #
-    za = np.rad2deg(np.arccos(np.dot(ez,-e)))
+    za = np.rad2deg(np.arccos(np.dot(ez, -e)))
     za_t = np.arange(ant.zen[0], ant.zen[1]+ant.zen[2], ant.zen[2])
 
     # Interpolate PCV and map PCO on line-of-sight vector
