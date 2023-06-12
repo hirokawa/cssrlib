@@ -12,8 +12,6 @@ from cssrlib.peph import antModelRx
 from cssrlib.ppp import tidedisp
 from cssrlib.mlambda import mlambda
 
-from cssrlib.peph import searchpcv, antModelRx, antModelTx
-
 VAR_HOLDAMB = 0.001
 
 
