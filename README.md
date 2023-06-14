@@ -17,9 +17,14 @@ Prerequisites
 Additional python packages are required as prerequisites and can be installed via the following commands
 
 ```
-pip install bitstruct, cbitstruct
-pip install galois, cartopy
-pip install notebook, numpy, matplotlib
+pip install bitstruct cbitstruct galois
+pip install notebook numpy matplotlib
+```
+
+Optionally, on linux, users can install the `cartopy` package
+
+```
+pip install cartopy
 ```
 
 If the installation of `cartopy` fails, try installing `libgeos++-dev` first.
