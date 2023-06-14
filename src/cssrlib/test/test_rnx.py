@@ -10,12 +10,12 @@ from cssrlib.gnss import sat2id, sat2prn
 
 obsfile = '../data/SEPT078M1.21O'
 
-sigs = [rSigRnx("GC1C"), rSigRnx("EC1X"),
-        rSigRnx("GC2W"), rSigRnx("EC5X"),
-        rSigRnx("GL1C"), rSigRnx("EL1X"),
-        rSigRnx("GL2W"), rSigRnx("EL5X"),
-        rSigRnx("GS1C"), rSigRnx("ES1X"),
-        rSigRnx("GS2W"), rSigRnx("ES5X")]
+sigs = [rSigRnx("GC1C"), rSigRnx("EC1C"),
+        rSigRnx("GC2W"), rSigRnx("EC5Q"),
+        rSigRnx("GL1C"), rSigRnx("EL1C"),
+        rSigRnx("GL2W"), rSigRnx("EL5Q"),
+        rSigRnx("GS1C"), rSigRnx("ES1C"),
+        rSigRnx("GS2W"), rSigRnx("ES5Q")]
 
 dec = rnxdec()
 dec.setSignals(sigs)
