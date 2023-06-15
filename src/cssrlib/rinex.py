@@ -170,31 +170,53 @@ class rnxdec:
 
     def decode_clk(self, clkfile, nav):
         """decode Clock-RINEX data from file """
+
+        # Offset for Clock-RINEX v3.x data section
+        #
+        offs = None
+
         nav.pclk = []
-        with open(clkfile, 'rt') as fnav:
-            for line in fnav:
 
-                if line[0:2] != 'AS':
-                    continue
+        fnav = open(clkfile, 'rt')
 
-                sys = char2sys(line[3])
-                prn = int(line[4:7])
-                if sys == uGNSS.QZS:
-                    prn += 192
-                sat = prn2sat(sys, prn)
+        # Read header section
+        #
+        for line in fnav:
 
-                t = self.decode_time(line, 8, 9)
-                if nav.nc <= 0 or abs(timediff(nav.pclk[-1].time, t)) > 1e-9:
-                    nav.nc += 1
-                    pclk = pclk_t()
-                    pclk.time = t
-                    nav.pclk.append(pclk)
+            if 'RINEX VERSION / TYPE' in line:
+                ver = float(line[0:20])
+                offs = 0 if ver < 3 else 6
 
-                nrec = int(line[35:37])
-                clk = float(line[40:59])
-                std = float(line[61:80]) if nrec >= 2 else 0.0
-                nav.pclk[nav.nc-1].clk[sat-1] = clk
-                nav.pclk[nav.nc-1].std[sat-1] = std
+            if 'END OF HEADER' in line:
+                break
+
+        # Read data section
+        #
+        for line in fnav:
+
+            if line[0:2] != 'AS':
+                continue
+
+            sys = char2sys(line[3])
+            prn = int(line[4:7])
+            if sys == uGNSS.QZS:
+                prn += 192
+            sat = prn2sat(sys, prn)
+
+            t = self.decode_time(line, offs+8, 9)
+
+            if nav.nc <= 0 or abs(timediff(nav.pclk[-1].time, t)) > 1e-9:
+                nav.nc += 1
+                pclk = pclk_t()
+                pclk.time = t
+                nav.pclk.append(pclk)
+
+            nrec = int(line[offs+35:offs+37])
+            clk = float(line[offs+40:offs+59])
+            std = float(line[offs+61:offs+80]) if nrec >= 2 else 0.0
+
+            nav.pclk[nav.nc-1].clk[sat-1] = clk
+            nav.pclk[nav.nc-1].std[sat-1] = std
 
         return nav
 
