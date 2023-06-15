@@ -10,18 +10,24 @@ from cssrlib.gnss import sat2id, sat2prn
 
 obsfile = '../data/SEPT078M1.21O'
 
-sigs = [rSigRnx("GC1C"), rSigRnx("EC1C"),
-        rSigRnx("GC2W"), rSigRnx("EC5Q"),
-        rSigRnx("GL1C"), rSigRnx("EL1C"),
-        rSigRnx("GL2W"), rSigRnx("EL5Q"),
-        rSigRnx("GS1C"), rSigRnx("ES1C"),
-        rSigRnx("GS2W"), rSigRnx("ES5Q")]
+sigs = [rSigRnx("GC1C"), rSigRnx("GC2W"),
+        rSigRnx("GL1C"), rSigRnx("GL2W"),
+        rSigRnx("GS1C"), rSigRnx("GS2W"),
+        rSigRnx("EC1X"), rSigRnx("EC5X"),
+        rSigRnx("EL1X"), rSigRnx("EL5X"),
+        rSigRnx("ES1X"), rSigRnx("ES5X"),
+        rSigRnx("JC1C"), rSigRnx("JC2S"),
+        rSigRnx("JL1C"), rSigRnx("JL2S"),
+        rSigRnx("JS1C"), rSigRnx("JS2S")]
+
 
 dec = rnxdec()
 dec.setSignals(sigs)
 
 nep = 2
 if dec.decode_obsh(obsfile) >= 0:
+
+    dec.autoSubstituteSignals()
 
     for ne in range(nep):
 
