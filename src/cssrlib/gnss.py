@@ -764,7 +764,7 @@ def sat2prn(sat):
         prn = sat-uGNSS.GLOMIN
         sys = uGNSS.GLO
     elif sat > uGNSS.QZSMIN:
-        prn = sat+192+uGNSS.QZSMIN
+        prn = sat+192-uGNSS.QZSMIN
         sys = uGNSS.QZS
     elif sat > uGNSS.GALMIN:
         prn = sat-uGNSS.GALMIN

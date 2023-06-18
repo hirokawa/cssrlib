@@ -14,11 +14,11 @@ from cssrlib.gnss import rSigRnx
 from cssrlib.gnss import pos2ecef, enu2xyz
 
 
-bdir = expanduser('~/GNSS_DAT/')
-atxfile = bdir+"IGS/ANTEX/igs14.atx"
-orbfile = bdir+"COD0IGSRAP/2021/COD0IGSRAP_20210780000_01D_15M_ORB.SP3"
-clkfile = bdir+"COD0IGSRAP/2021/COD0IGSRAP_20210780000_01D_30S_CLK.CLK"
-dcbfile = bdir+"COD0IGSRAP/2021/COD0IGSRAP_20210780000_01D_01D_OSB.BIA"
+bdir = expanduser('../../../../cssrlib-data/data/')
+atxfile = bdir+"igs14.atx"
+orbfile = bdir+"COD0IGSRAP_20210780000_01D_15M_ORB.SP3"
+clkfile = bdir+"COD0IGSRAP_20210780000_01D_30S_CLK.CLK"
+dcbfile = bdir+"COD0IGSRAP_20210780000_01D_01D_OSB.BIA"
 
 time = epoch2time([2021, 3, 19, 12, 0, 0])
 sat = id2sat("G01")
