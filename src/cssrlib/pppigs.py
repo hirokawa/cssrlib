@@ -36,7 +36,7 @@ def ionoDelay(sig1, sig2, pr1, pr2):
     return (pr1-pr2)/(1-f1_2/f2_2)
 
 
-def rtkinit(nav, pos0=np.zeros(3)):
+def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     """ initialize variables for PPP """
 
     # Number of frequencies (actually signals!)
@@ -137,7 +137,11 @@ def rtkinit(nav, pos0=np.zeros(3)):
 
     # Logging level
     #
-    nav.monlevel = 2
+    nav.fout = None
+    if logfile is None:
+        nav.monlevel = 0
+    else:
+        nav.fout = open(logfile, 'w')
 
 
 def sysidx(satlist, sys_ref):
@@ -202,9 +206,9 @@ def udstate(nav, obs):
                 nav.outc[i, f] = 0
 
                 if nav.monlevel > 0:
-                    print("{}  {} - reset ambiguity  {}"
-                          .format(time2str(obs.t), sat2id(sat_),
-                                  obs.sig[sys_i][uTYP.L][f]))
+                    nav.fout.write("{}  {} - reset ambiguity  {}\n"
+                                   .format(time2str(obs.t), sat2id(sat_),
+                                           obs.sig[sys_i][uTYP.L][f]))
 
             # Reset slant ionospheric delay estimate
             #
@@ -213,8 +217,8 @@ def udstate(nav, obs):
                 initx(nav, 0.0, 0.0, j)
 
                 if nav.monlevel > 0:
-                    print("{}  {} - reset ionosphere"
-                          .format(time2str(obs.t), sat2id(sat_)))
+                    nav.fout.write("{}  {} - reset ionosphere\n"
+                                   .format(time2str(obs.t), sat2id(sat_)))
 
         # Cycle  slip check by LLI
         #
@@ -293,8 +297,8 @@ def udstate(nav, obs):
 
                 if nav.monlevel > 0:
                     sig = obs.sig[sys_i][uTYP.L][f]
-                    print("{}  {} - init  ambiguity  {} {:12.3f}"
-                          .format(time2str(obs.t), sat2id(sat[i]), sig, bias[i]))
+                    nav.fout.write("{}  {} - init  ambiguity  {} {:12.3f}\n"
+                                   .format(time2str(obs.t), sat2id(sat[i]), sig, bias[i]))
 
             j = II(sat[i], nav.na)
             if ion[i] != 0 and nav.x[j] == 0.0:
@@ -302,8 +306,8 @@ def udstate(nav, obs):
                 initx(nav, ion[i], nav.sig_ion0**2, j)
 
                 if nav.monlevel > 0:
-                    print("{}  {} - init  ionosphere      {:12.3f}"
-                          .format(time2str(obs.t), sat2id(sat[i]), ion[i]))
+                    nav.fout.write("{}  {} - init  ionosphere      {:12.3f}\n"
+                                   .format(time2str(obs.t), sat2id(sat[i]), ion[i]))
 
     return 0
 
@@ -509,6 +513,10 @@ def sdres(nav, obs, x, y, e, sat, el):
             if len(idx) > 0:
                 i = idx[np.argmax(el[idx])]
 
+                if nav.monlevel > 1:
+                    nav.fout.write("{} prn0 {:3s}\n"
+                                   .format(time2str(obs.t), sat2id(sat[i])))
+
             # Loop over satellites
             #
             for j in idx:
@@ -540,12 +548,13 @@ def sdres(nav, obs, x, y, e, sat, el):
                 H[nv, idx_i] = mapfwi - mapfwj
                 v[nv] -= (mapfwi - mapfwj)*x[idx_i]
 
-                if nav.monlevel > 1:
-                    print("{} ztd ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} "
-                          .format(time2str(obs.t), idx_i, idx_i,
-                                  (mapfwi-mapfwj),
-                                  x[IT(nav.na)],
-                                  np.sqrt(nav.P[IT(nav.na), IT(nav.na)])))
+                if nav.monlevel > 2:
+                    nav.fout.write("{}         ztd ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f}\n"
+                                   .format(time2str(obs.t),
+                                           idx_i, idx_i,
+                                           (mapfwi-mapfwj),
+                                           x[IT(nav.na)],
+                                           np.sqrt(nav.P[IT(nav.na), IT(nav.na)])))
 
                 # SD ionosphere
                 #
@@ -555,15 +564,15 @@ def sdres(nav, obs, x, y, e, sat, el):
                 H[nv, idx_j] = -mu
                 v[nv] -= mu*(x[idx_i] - x[idx_j])
 
-                if nav.monlevel > 1:
-                    print("{} {}-{} ion ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}"
-                          .format(time2str(obs.t),
-                                  sat2id(sat[i]), sat2id(sat[j]),
-                                  idx_i, idx_j,
-                                  mu,
-                                  x[idx_i], x[idx_j],
-                                  np.sqrt(nav.P[idx_i, idx_i]),
-                                  np.sqrt(nav.P[idx_j, idx_j])))
+                if nav.monlevel > 2:
+                    nav.fout.write("{} {}-{} ion ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
+                                   .format(time2str(obs.t),
+                                           sat2id(sat[i]), sat2id(sat[j]),
+                                           idx_i, idx_j,
+                                           mu,
+                                           x[idx_i], x[idx_j],
+                                           np.sqrt(nav.P[idx_i, idx_i]),
+                                           np.sqrt(nav.P[idx_j, idx_j])))
 
                 # SD ambiguity
                 #
@@ -585,15 +594,15 @@ def sdres(nav, obs, x, y, e, sat, el):
                     nav.vsat[sat[i]-1, f] = 1
                     nav.vsat[sat[j]-1, f] = 1
 
-                    if nav.monlevel > 1:
-                        print("{} {}-{} amb ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}"
-                              .format(time2str(obs.t),
-                                      sat2id(sat[i]), sat2id(sat[j]),
-                                      idx_i, idx_j,
-                                      lami,
-                                      x[idx_i], x[idx_j],
-                                      np.sqrt(nav.P[idx_i, idx_i]),
-                                      np.sqrt(nav.P[idx_j, idx_j])))
+                    if nav.monlevel > 2:
+                        nav.fout.write("{} {}-{} amb ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
+                                       .format(time2str(obs.t),
+                                               sat2id(sat[i]), sat2id(sat[j]),
+                                               idx_i, idx_j,
+                                               lami,
+                                               x[idx_i], x[idx_j],
+                                               np.sqrt(nav.P[idx_i, idx_i]),
+                                               np.sqrt(nav.P[idx_j, idx_j])))
 
                 else:  # pseudorange
 
@@ -779,8 +788,7 @@ def pppigspos(nav, obs, orb, bsx):
         y = yu[iu, :]
         e = eu[iu, :]
         v, H, R = sdres(nav, obs, xa, y, e, sat, el)
-        # R <= Q=H'PH+R  chisq<max_inno[3] (0.5)
-        if valpos(nav, v, R):
+        if valpos(nav, v, R):  # R <= Q=H'PH+R  chisq<max_inno[3] (0.5)
             if nav.armode == 3:     # fix and hold
                 holdamb(nav, xa)    # hold fixed ambiguity
             nav.smode = 4           # fix

@@ -212,7 +212,11 @@ def valpos(nav, v, R, thres=4.0):
         if v[i]**2 <= fact*R[i, i]:
             continue
         if nav.monlevel > 1:
-            print("%i is large : %f" % (i, v[i]))
+            txt = "{:3d} is large: {:8.4f} ({:8.4f})".format(i, v[i], R[i, i])
+            if nav.fout is None:
+                print(txt)
+            else:
+                nav.fout.write(txt+"\n")
     return True
 
 
