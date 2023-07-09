@@ -391,7 +391,7 @@ class cssr:
 
     def sval(self, u, n, scl):
         """ calculate signed value based on n-bit int, lsb """
-        invalid = -2**(n-1)
+        invalid = -(2**(n-1)-1)
         y = np.nan if u == invalid else u*scl
         return y
 
@@ -527,7 +527,7 @@ class cssr:
         self.lc[0].t0[sCType.MASK] = self.time
         return i
 
-    def decode_orb_sat(self, msg, i, k, sys, inet=0):
+    def decode_orb_sat(self, msg, i, k, sys = uGNSS.NONE, inet=0):
         """ decoder orbit correction of cssr """
         n = 10 if sys == uGNSS.GAL else 8
         fmt = 'u{:d}s{:d}s{:d}s{:d}'.format(n,
@@ -545,8 +545,8 @@ class cssr:
         """ decoder clock correction of cssr """
         v = bs.unpack_from_dict('s'+str(self.dclk_blen), ['dclk'], msg, i)
         self.lc[inet].dclk[k] = self.sval(v['dclk'], self.dclk_blen, self.dclk_scl)
-        
-        self.lc[inet].dclk[k] *= self.dcm[self.gnss_n[k]]
+        if self.cssrmode == 1: # HAS only
+            self.lc[inet].dclk[k] *= self.dcm[self.gnss_n[k]]
         
         i += self.dclk_blen
         return i

@@ -7,8 +7,9 @@ from enum import IntEnum
 from math import floor, sin, cos, sqrt, asin, atan2, fabs
 import numpy as np
 
-gpst0 = [1980, 1, 6, 0, 0, 0]
-
+gpst0 = [1980, 1, 6, 0, 0, 0] # GPS system time reference
+gst0  = [1999, 8,22, 0, 0, 0] # Galileo system time reference
+bdt0  = [2006, 1, 1, 0, 0, 0] # BeiDou system time reference
 
 class rCST():
     """ class for constants """
@@ -679,6 +680,39 @@ def time2gpst(t: gtime_t):
     tow = sec-week*86400*7+t.sec
     return week, tow
 
+def gst2time(week, tow):
+    """ convert to time from galileo system time """
+    t = epoch2time(gst0)
+    if tow < -1e9 or tow > 1e9:
+        tow = 0.0
+    t.time += 86400*7*week+int(tow)
+    t.sec = tow-int(tow)
+    return t    
+
+def time2gst(t: gtime_t):
+    """ convert to galileo system time from time """
+    t0 = epoch2time(gst0)
+    sec = t.time-t0.time
+    week = int(sec/(86400*7))
+    tow = sec-week*86400*7+t.sec
+    return week, tow
+
+def bdt2time(week, tow):
+    """ convert to time from BeiDou system time """
+    t = epoch2time(bdt0)
+    if tow < -1e9 or tow > 1e9:
+        tow = 0.0
+    t.time += 86400*7*week+int(tow)
+    t.sec = tow-int(tow)
+    return t    
+
+def time2bdt(t: gtime_t):
+    """ convert to BeiDou system time from time """
+    t0 = epoch2time(bdt0)
+    sec = t.time-t0.time
+    week = int(sec/(86400*7))
+    tow = sec-week*86400*7+t.sec
+    return week, tow
 
 def time2epoch(t):
     """ convert time to epoch """

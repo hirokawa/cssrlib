@@ -67,6 +67,7 @@ class cssr_has(cssr):
 
     def decode_cssr(self, msg, i=0):
         if self.msgtype != 1: # only MT=1 defined
+            print(f"invalid MT={self.msgtype}")
             return False
         # time of hour
         # flags: mask, orbit, clock, clock subset, cbias, pbias, mask_id, iodset_id
@@ -75,7 +76,14 @@ class cssr_has(cssr):
         
         if self.mon_level>0:
             print("TOH={:6d} flags={:12s} mask_id={:2d} iod_s={:1d}".format(self.toh,bin(flags),self.mask_id,self.iodssr))
+
+        if self.toh>=3600:
+            print(f"invalid TOH={self.toh}")
+            return False
         
+        if self.toh >= 250:
+            self.toh
+                
         if (flags>>5)&1: # mask block
             i = self.decode_cssr_mask(msg, i)
         if (flags>>4)&1: # orbit block
