@@ -14,6 +14,7 @@ from cssrlib.rtk import IB, ddcov, resamb_lambda, valpos, holdamb, initx
 from cssrlib.rtk import varerr
 from cssrlib.cssrlib import ssig2rsig, sCType, sSigGPS
 
+
 def IT(na):
     """ return index of zenith tropospheric delay estimate """
     return na-gn.uGNSS.MAXSAT-1
@@ -34,14 +35,14 @@ def ionoDelay(sig1, sig2, pr1, pr2):
     return (pr1-pr2)/(1-f1_2/f2_2)
 
 
-def rtkinit(nav, pos0=np.zeros(3)):
+def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     """ initialize variables for PPP """
 
     # Number of frequencies (actually signals!)
     #
     nav.nf = 2  # TODO: make obsolete if possible
-    nav.ephopt = 2 # SSR-APC
-    
+    nav.ephopt = 2  # SSR-APC
+
     # Position (+ optional velocity), zenith tropo delay and slant ionospheric delay states
     #
     nav.na = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
@@ -136,7 +137,11 @@ def rtkinit(nav, pos0=np.zeros(3)):
 
     # Logging level
     #
-    nav.monlevel = 2
+    nav.fout = None
+    if logfile is None:
+        nav.monlevel = 0
+    else:
+        nav.fout = open(logfile, 'w')
 
 
 def sysidx(satlist, sys_ref):
@@ -201,9 +206,9 @@ def udstate(nav, obs):
                 nav.outc[i, f] = 0
 
                 if nav.monlevel > 0:
-                    print("{}  {} - reset ambiguity  {}"
-                          .format(time2str(obs.t), sat2id(sat_),
-                                  obs.sig[sys_i][uTYP.L][f]))
+                    nav.fout.write("{}  {} - reset ambiguity  {}\n"
+                                   .format(time2str(obs.t), sat2id(sat_),
+                                           obs.sig[sys_i][uTYP.L][f]))
 
             # Reset slant ionospheric delay estimate
             #
@@ -212,8 +217,8 @@ def udstate(nav, obs):
                 initx(nav, 0.0, 0.0, j)
 
                 if nav.monlevel > 0:
-                    print("{}  {} - reset ionosphere"
-                          .format(time2str(obs.t), sat2id(sat_)))
+                    nav.fout.write("{}  {} - reset ionosphere\n"
+                                   .format(time2str(obs.t), sat2id(sat_)))
 
         # Cycle  slip check by LLI
         #
@@ -292,8 +297,8 @@ def udstate(nav, obs):
 
                 if nav.monlevel > 0:
                     sig = obs.sig[sys_i][uTYP.L][f]
-                    print("{}  {} - init  ambiguity  {} {:12.3f}"
-                          .format(time2str(obs.t), sat2id(sat[i]), sig, bias[i]))
+                    nav.fout.write("{}  {} - init  ambiguity  {} {:12.3f}\n"
+                                   .format(time2str(obs.t), sat2id(sat[i]), sig, bias[i]))
 
             j = II(sat[i], nav.na)
             if ion[i] != 0 and nav.x[j] == 0.0:
@@ -301,8 +306,8 @@ def udstate(nav, obs):
                 initx(nav, ion[i], nav.sig_ion0**2, j)
 
                 if nav.monlevel > 0:
-                    print("{}  {} - init  ionosphere      {:12.3f}"
-                          .format(time2str(obs.t), sat2id(sat[i]), ion[i]))
+                    nav.fout.write("{}  {} - init  ionosphere      {:12.3f}\n"
+                                   .format(time2str(obs.t), sat2id(sat[i]), ion[i]))
 
     return 0
 
@@ -384,31 +389,33 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
         if nav.ephopt == 4:
             # Code and phase signal bias [ns]
             #
-            cbias = np.array([bsx.getosb(sat, obs.t, s)[0]*ns2m for s in sigsPR])
-            pbias = np.array([bsx.getosb(sat, obs.t, s)[0]*ns2m for s in sigsCP])
-        else: # from CSSR
+            cbias = np.array(
+                [bsx.getosb(sat, obs.t, s)[0]*ns2m for s in sigsPR])
+            pbias = np.array(
+                [bsx.getosb(sat, obs.t, s)[0]*ns2m for s in sigsCP])
+        else:  # from CSSR
             idx_n = np.where(cs.sat_n == sat)[0][0]
             kidx = [-1]*nav.nf
             nsig = 0
             for k, sig in enumerate(cs.sig_n[idx_n]):
                 for f in range(nav.nf):
                     if cs.cssrmode == 1 and sys == uGNSS.GPS and sig == sSigGPS.L2P:
-                        sig = sSigGPS.L2W # work-around
+                        sig = sSigGPS.L2W  # work-around
                     if ssig2rsig(sys, uTYP.C, sig) == sigsPR[f]:
                         kidx[f] = k
                         nsig += 1
             if nsig < nav.nf:
                 continue
-            
+
             cbias = np.zeros(nav.nf)
             pbias = np.zeros(nav.nf)
-            if cs.lc[0].cstat & (1<<sCType.CBIAS) == (1<<sCType.CBIAS):
+            if cs.lc[0].cstat & (1 << sCType.CBIAS) == (1 << sCType.CBIAS):
                 cbias = cs.lc[0].cbias[idx_n][kidx]
-            if cs.lc[0].cstat & (1<<sCType.PBIAS) == (1<<sCType.PBIAS):
+            if cs.lc[0].cstat & (1 << sCType.PBIAS) == (1 << sCType.PBIAS):
                 pbias = cs.lc[0].pbias[idx_n][kidx]
-                if cs.cssrmode == 1: # for Gal HAS (cycle -> m)
+                if cs.cssrmode == 1:  # for Gal HAS (cycle -> m)
                     pbias *= lam
-                            
+
         # Shapipo relativistic effect
         #
         relatv = shapiro(rs[i, :], rr_)
@@ -532,6 +539,10 @@ def sdres(nav, obs, x, y, e, sat, el):
             if len(idx) > 0:
                 i = idx[np.argmax(el[idx])]
 
+                if nav.monlevel > 1:
+                    nav.fout.write("{} prn0 {:3s}\n"
+                                   .format(time2str(obs.t), sat2id(sat[i])))
+
             # Loop over satellites
             #
             for j in idx:
@@ -563,12 +574,13 @@ def sdres(nav, obs, x, y, e, sat, el):
                 H[nv, idx_i] = mapfwi - mapfwj
                 v[nv] -= (mapfwi - mapfwj)*x[idx_i]
 
-                if nav.monlevel > 1:
-                    print("{} ztd ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} "
-                          .format(time2str(obs.t), idx_i, idx_i,
-                                  (mapfwi-mapfwj),
-                                  x[IT(nav.na)],
-                                  np.sqrt(nav.P[IT(nav.na), IT(nav.na)])))
+                if nav.monlevel > 2:
+                    nav.fout.write("{}         ztd ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f}\n"
+                                   .format(time2str(obs.t),
+                                           idx_i, idx_i,
+                                           (mapfwi-mapfwj),
+                                           x[IT(nav.na)],
+                                           np.sqrt(nav.P[IT(nav.na), IT(nav.na)])))
 
                 # SD ionosphere
                 #
@@ -578,15 +590,15 @@ def sdres(nav, obs, x, y, e, sat, el):
                 H[nv, idx_j] = -mu
                 v[nv] -= mu*(x[idx_i] - x[idx_j])
 
-                if nav.monlevel > 1:
-                    print("{} {}-{} ion ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}"
-                          .format(time2str(obs.t),
-                                  sat2id(sat[i]), sat2id(sat[j]),
-                                  idx_i, idx_j,
-                                  mu,
-                                  x[idx_i], x[idx_j],
-                                  np.sqrt(nav.P[idx_i, idx_i]),
-                                  np.sqrt(nav.P[idx_j, idx_j])))
+                if nav.monlevel > 2:
+                    nav.fout.write("{} {}-{} ion ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
+                                   .format(time2str(obs.t),
+                                           sat2id(sat[i]), sat2id(sat[j]),
+                                           idx_i, idx_j,
+                                           mu,
+                                           x[idx_i], x[idx_j],
+                                           np.sqrt(nav.P[idx_i, idx_i]),
+                                           np.sqrt(nav.P[idx_j, idx_j])))
 
                 # SD ambiguity
                 #
@@ -608,15 +620,15 @@ def sdres(nav, obs, x, y, e, sat, el):
                     nav.vsat[sat[i]-1, f] = 1
                     nav.vsat[sat[j]-1, f] = 1
 
-                    if nav.monlevel > 1:
-                        print("{} {}-{} amb ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}"
-                              .format(time2str(obs.t),
-                                      sat2id(sat[i]), sat2id(sat[j]),
-                                      idx_i, idx_j,
-                                      lami,
-                                      x[idx_i], x[idx_j],
-                                      np.sqrt(nav.P[idx_i, idx_i]),
-                                      np.sqrt(nav.P[idx_j, idx_j])))
+                    if nav.monlevel > 2:
+                        nav.fout.write("{} {}-{} amb ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
+                                       .format(time2str(obs.t),
+                                               sat2id(sat[i]), sat2id(sat[j]),
+                                               idx_i, idx_j,
+                                               lami,
+                                               x[idx_i], x[idx_j],
+                                               np.sqrt(nav.P[idx_i, idx_i]),
+                                               np.sqrt(nav.P[idx_j, idx_j])))
 
                 else:  # pseudorange
 
@@ -646,7 +658,7 @@ def kfupdate(x, P, H, v, R):
     return x, P, S
 
 
-def ppppos(nav, obs, cs = None, orb = None, bsx = None):
+def ppppos(nav, obs, cs=None, orb=None, bsx=None):
     """
     PPP positioning
     """
@@ -734,8 +746,8 @@ def ppppos(nav, obs, cs = None, orb = None, bsx = None):
         nav.smode = 0
 
     nav.smode = 5  # 4: fixed ambiguities, 5: float ambiguities
-    
-    if nav.armode > 0:    
+
+    if nav.armode > 0:
         nb, xa = resamb_lambda(nav, sat)
         if nb > 0:
             yu, eu, elu = zdres(nav, obs, cs, bsx, rs, vs, dts, svh, xa[0:3])
