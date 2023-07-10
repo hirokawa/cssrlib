@@ -7,9 +7,10 @@ from enum import IntEnum
 from math import floor, sin, cos, sqrt, asin, atan2, fabs
 import numpy as np
 
-gpst0 = [1980, 1, 6, 0, 0, 0] # GPS system time reference
-gst0  = [1999, 8,22, 0, 0, 0] # Galileo system time reference
-bdt0  = [2006, 1, 1, 0, 0, 0] # BeiDou system time reference
+gpst0 = [1980, 1, 6, 0, 0, 0]  # GPS system time reference
+gst0 = [1999, 8, 22, 0, 0, 0]  # Galileo system time reference
+bdt0 = [2006, 1, 1, 0, 0, 0]  # BeiDou system time reference
+
 
 class rCST():
     """ class for constants """
@@ -583,8 +584,8 @@ class Nav():
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
         self.pmode = 1  # 0: static, 1: kinematic
-        self.ephopt = 2 # ephemeris option 0: BRDC, 1: SBAS, 2: SSR-APC, 
-                        #                  3: SSR-CG, 4: PREC
+        self.ephopt = 2  # ephemeris option 0: BRDC, 1: SBAS, 2: SSR-APC,
+        #                  3: SSR-CG, 4: PREC
 
         self.monlevel = 1
         self.cnr_min = 35
@@ -680,6 +681,7 @@ def time2gpst(t: gtime_t):
     tow = sec-week*86400*7+t.sec
     return week, tow
 
+
 def gst2time(week, tow):
     """ convert to time from galileo system time """
     t = epoch2time(gst0)
@@ -687,7 +689,8 @@ def gst2time(week, tow):
         tow = 0.0
     t.time += 86400*7*week+int(tow)
     t.sec = tow-int(tow)
-    return t    
+    return t
+
 
 def time2gst(t: gtime_t):
     """ convert to galileo system time from time """
@@ -697,6 +700,7 @@ def time2gst(t: gtime_t):
     tow = sec-week*86400*7+t.sec
     return week, tow
 
+
 def bdt2time(week, tow):
     """ convert to time from BeiDou system time """
     t = epoch2time(bdt0)
@@ -704,7 +708,8 @@ def bdt2time(week, tow):
         tow = 0.0
     t.time += 86400*7*week+int(tow)
     t.sec = tow-int(tow)
-    return t    
+    return t
+
 
 def time2bdt(t: gtime_t):
     """ convert to BeiDou system time from time """
@@ -713,6 +718,7 @@ def time2bdt(t: gtime_t):
     week = int(sec/(86400*7))
     tow = sec-week*86400*7+t.sec
     return week, tow
+
 
 def time2epoch(t):
     """ convert time to epoch """
@@ -802,7 +808,7 @@ def sat2prn(sat):
         prn = sat-uGNSS.GLOMIN
         sys = uGNSS.GLO
     elif sat > uGNSS.QZSMIN:
-        prn = sat+192+uGNSS.QZSMIN
+        prn = sat+192-uGNSS.QZSMIN
         sys = uGNSS.QZS
     elif sat > uGNSS.GALMIN:
         prn = sat-uGNSS.GALMIN
