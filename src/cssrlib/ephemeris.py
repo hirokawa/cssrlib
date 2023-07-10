@@ -121,7 +121,7 @@ def ephclk(t, eph, sat):
     return dts
 
 
-def satposs(obs, nav, cs=None):
+def satposs(obs, nav, cs=None, orb=None):
     """ calculate pos/vel/clk for observed satellites  """
     n = obs.sat.shape[0]
     rs = np.zeros((n, 3))
@@ -136,43 +136,63 @@ def satposs(obs, nav, cs=None):
             continue
         pr = obs.P[i, 0]
         t = timeadd(obs.t, -pr/rCST.CLIGHT)
-        if cs is not None:
-            if sat not in cs.sat_n:
+        
+        if nav.ephopt == 4:
+            rs_, dts_, _ = orb.peph2pos(t, sat, nav)
+            dt = dts_[0]
+        else:
+                
+            if cs is not None:
+                if sat not in cs.sat_n:
+                    continue
+                idx = cs.sat_n.index(sat)
+                iode = cs.lc[0].iode[idx]
+                dorb = cs.lc[0].dorb[idx, :]
+                
+                if cs.cssrmode == 1: # HAS only
+                    if sat not in cs.sat_n_p:
+                        continue
+                    idx = cs.sat_n_p.index(sat) 
+                
+                dclk = cs.lc[0].dclk[idx]
+
+            eph = findeph(nav.eph, t, sat, iode)
+            if eph is None:
+                svh[i] = 1
                 continue
-            idx = cs.sat_n.index(sat)
-            iode = cs.lc[0].iode[idx]
-            dorb = cs.lc[0].dorb[idx, :]
-            dclk = cs.lc[0].dclk[idx]
-
-        eph = findeph(nav.eph, t, sat, iode)
-        if eph is None:
-            svh[i] = 1
-            continue
-        svh[i] = eph.svh
-        dt = eph2clk(t, eph)
+            svh[i] = eph.svh
+            dt = eph2clk(t, eph)
+        
         t = timeadd(t, -dt)
-        rs[i, :], vs[i, :], dts[i] = eph2pos(t, eph, True)
-        if cs is not None:  # apply SSR correction
-            ea = vnorm(vs[i, :])
-            rc = np.cross(rs[i, :], vs[i, :])
-            ec = vnorm(rc)
-            er = np.cross(ea, ec)
-            dorb_e = -dorb@[er, ea, ec]
-
-            rs[i, :] += dorb_e
-            dts[i] += dclk/rCST.CLIGHT
-
-            ers = vnorm(rs[i, :]-nav.x[0:3])
-            dorb = ers@dorb_e
-            sis = dclk-dorb
-            if cs.lc[0].t0[1].time % 30 == 0 and \
-                    timediff(cs.lc[0].t0[1], nav.time_p) > 0:
-                if abs(nav.sis[sat]) > 0:
-                    nav.dsis[sat] = sis - nav.sis[sat]
-                nav.sis[sat] = sis
-
-            nav.dorb[sat] = dorb
-            nav.dclk[sat] = dclk
+        
+        if nav.ephopt == 4:
+            rs_, dts_, _ = orb.peph2pos(t, sat, nav)
+            rs[i, :] = rs_[0:3]
+            vs[i, :] = rs_[3:6]
+            dts[i] = dts_[0]
+        else:
+            rs[i, :], vs[i, :], dts[i] = eph2pos(t, eph, True)
+            if cs is not None:  # apply SSR correction
+                ea = vnorm(vs[i, :])
+                rc = np.cross(rs[i, :], vs[i, :])
+                ec = vnorm(rc)
+                er = np.cross(ea, ec)
+                dorb_e = -dorb@[er, ea, ec]
+    
+                rs[i, :] += dorb_e
+                dts[i] += dclk/rCST.CLIGHT
+    
+                ers = vnorm(rs[i, :]-nav.x[0:3])
+                dorb = ers@dorb_e
+                sis = dclk-dorb
+                if cs.lc[0].t0[1].time % 30 == 0 and \
+                        timediff(cs.lc[0].t0[1], nav.time_p) > 0:
+                    if abs(nav.sis[sat]) > 0:
+                        nav.dsis[sat] = sis - nav.sis[sat]
+                    nav.sis[sat] = sis
+    
+                nav.dorb[sat] = dorb
+                nav.dclk[sat] = dclk
     if cs is not None:
         nav.time_p = cs.lc[0].t0[1]
 

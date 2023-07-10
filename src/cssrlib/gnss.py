@@ -7,8 +7,9 @@ from enum import IntEnum
 from math import floor, sin, cos, sqrt, asin, atan2, fabs
 import numpy as np
 
-gpst0 = [1980, 1, 6, 0, 0, 0]
-
+gpst0 = [1980, 1, 6, 0, 0, 0] # GPS system time reference
+gst0  = [1999, 8,22, 0, 0, 0] # Galileo system time reference
+bdt0  = [2006, 1, 1, 0, 0, 0] # BeiDou system time reference
 
 class rCST():
     """ class for constants """
@@ -192,9 +193,11 @@ class uSIG(IntEnum):
     L6A = 601
     L6B = 602
     L6C = 603
+    L6D = 604
     L6E = 605
     L6I = 609
     L6L = 612
+    L6P = 616
     L6Q = 617
     L6S = 619
     L6X = 624
@@ -580,6 +583,8 @@ class Nav():
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
         self.pmode = 1  # 0: static, 1: kinematic
+        self.ephopt = 2 # ephemeris option 0: BRDC, 1: SBAS, 2: SSR-APC, 
+                        #                  3: SSR-CG, 4: PREC
 
         self.monlevel = 1
         self.cnr_min = 35
@@ -675,6 +680,39 @@ def time2gpst(t: gtime_t):
     tow = sec-week*86400*7+t.sec
     return week, tow
 
+def gst2time(week, tow):
+    """ convert to time from galileo system time """
+    t = epoch2time(gst0)
+    if tow < -1e9 or tow > 1e9:
+        tow = 0.0
+    t.time += 86400*7*week+int(tow)
+    t.sec = tow-int(tow)
+    return t    
+
+def time2gst(t: gtime_t):
+    """ convert to galileo system time from time """
+    t0 = epoch2time(gst0)
+    sec = t.time-t0.time
+    week = int(sec/(86400*7))
+    tow = sec-week*86400*7+t.sec
+    return week, tow
+
+def bdt2time(week, tow):
+    """ convert to time from BeiDou system time """
+    t = epoch2time(bdt0)
+    if tow < -1e9 or tow > 1e9:
+        tow = 0.0
+    t.time += 86400*7*week+int(tow)
+    t.sec = tow-int(tow)
+    return t    
+
+def time2bdt(t: gtime_t):
+    """ convert to BeiDou system time from time """
+    t0 = epoch2time(bdt0)
+    sec = t.time-t0.time
+    week = int(sec/(86400*7))
+    tow = sec-week*86400*7+t.sec
+    return week, tow
 
 def time2epoch(t):
     """ convert time to epoch """
@@ -764,7 +802,7 @@ def sat2prn(sat):
         prn = sat-uGNSS.GLOMIN
         sys = uGNSS.GLO
     elif sat > uGNSS.QZSMIN:
-        prn = sat+192-uGNSS.QZSMIN
+        prn = sat+192+uGNSS.QZSMIN
         sys = uGNSS.QZS
     elif sat > uGNSS.GALMIN:
         prn = sat-uGNSS.GALMIN
@@ -816,7 +854,7 @@ def char2sys(c):
 
 
 def sys2char(sys):
-    """ convert GNSS to character """
+    """ convert gnss to character """
     gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GLO: 'R', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
                 uGNSS.QZS: 'J', uGNSS.SBS: 'S', uGNSS.IRN: 'I'}
 
@@ -827,7 +865,7 @@ def sys2char(sys):
 
 
 def sys2str(sys):
-    """ convert GNSS to string """
+    """ convert gnss to string """
     gnss_tbl = {uGNSS.GPS: 'GPS', uGNSS.GLO: 'GLONASS',
                 uGNSS.GAL: 'GALILEO', uGNSS.BDS: 'BEIDOU',
                 uGNSS.QZS: 'QZSS', uGNSS.SBS: 'SBAS', uGNSS.IRN: 'IRNSS'}

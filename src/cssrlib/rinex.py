@@ -4,7 +4,7 @@ module for RINEX 3.0x processing
 
 import numpy as np
 from cssrlib.gnss import uGNSS, uTYP, rSigRnx
-from cssrlib.gnss import gpst2time, epoch2time, timediff, gtime_t
+from cssrlib.gnss import gpst2time, gst2time, bdt2time, epoch2time, timediff, gtime_t
 from cssrlib.gnss import prn2sat, char2sys
 from cssrlib.gnss import Eph, Obs
 
@@ -62,41 +62,6 @@ class rnxdec:
         else:
             return []
 
-    def autoSubstituteSignals(self):
-        """
-        Automatically substitute signal tracking attribute based on
-        available signals
-        """
-        for sys, tmp in self.sig_tab.items():
-            for typ, sigs in tmp.items():
-                for i,sig in enumerate(sigs):
-
-                    if sig in self.sig_map[sys].values():
-                        continue
-
-                    # Not found try to replace
-                    #
-                    if sys == uGNSS.GPS and sig.str()[1] in '12':
-                        atts = 'SLX'
-                    if sys == uGNSS.GPS and sig.str()[1] in '5':
-                        atts = 'IQX'
-                    elif sys == uGNSS.GAL and sig.str()[1] in '578':
-                        atts = 'IQX'
-                    elif sys == uGNSS.GAL and sig.str()[1] in '16':
-                        atts = 'BCX'
-                    elif sys == uGNSS.QZS and sig.str()[1] in '126':
-                        atts = 'SLX'
-                    elif sys == uGNSS.QZS and sig.str()[1] in '5':
-                        atts = 'IQX'
-                    else:
-                        atts = []
-
-                    for a in atts:
-                        if sig.toAtt(a) in self.sig_map[sys].values():
-                            self.sig_tab[sys][typ][i] = sig.toAtt(a)
-
-
-
     def flt(self, u, c=-1):
         if c >= 0:
             u = u[19*c+4:19*(c+1)+4]
@@ -137,7 +102,7 @@ class rnxdec:
 
                 # Skip undesired constellations
                 #
-                if sys not in (uGNSS.GPS, uGNSS.GAL, uGNSS.QZS):
+                if sys not in (uGNSS.GPS, uGNSS.GAL, uGNSS.QZS, uGNSS.BDS):
                     continue
 
                 prn = int(line[1:3])
@@ -197,67 +162,48 @@ class rnxdec:
                 if len(line) >= 42:
                     eph.fit = int(self.flt(line, 1))
 
-                eph.toe = gpst2time(eph.week, eph.toes)
-                eph.tot = gpst2time(eph.week, tot)
+                if sys == uGNSS.BDS:
+                    eph.toe = bdt2time(eph.week, eph.toes)
+                    eph.tot = bdt2time(eph.week, tot)
+                else:
+                    eph.toe = gpst2time(eph.week, eph.toes)
+                    eph.tot = gpst2time(eph.week, tot)                    
                 nav.eph.append(eph)
 
         return nav
 
     def decode_clk(self, clkfile, nav):
         """decode Clock-RINEX data from file """
-
-        # Offset for Clock-RINEX v3.x data section
-        #
-        offs = None
-
         nav.pclk = []
+        with open(clkfile, 'rt') as fnav:
+            for line in fnav:
 
-        fnav = open(clkfile, 'rt')
+                if line[0:2] != 'AS':
+                    continue
 
-        # Read header section
-        #
-        for line in fnav:
+                sys = char2sys(line[3])
+                prn = int(line[4:7])
+                if sys == uGNSS.QZS:
+                    prn += 192
+                sat = prn2sat(sys, prn)
 
-            if 'RINEX VERSION / TYPE' in line:
-                ver = float(line[0:20])
-                offs = 0 if ver < 3 else 6
+                t = self.decode_time(line, 8, 9)
+                if nav.nc <= 0 or abs(timediff(nav.pclk[-1].time, t)) > 1e-9:
+                    nav.nc += 1
+                    pclk = pclk_t()
+                    pclk.time = t
+                    nav.pclk.append(pclk)
 
-            if 'END OF HEADER' in line:
-                break
-
-        # Read data section
-        #
-        for line in fnav:
-
-            if line[0:2] != 'AS':
-                continue
-
-            sys = char2sys(line[3])
-            prn = int(line[4:7])
-            if sys == uGNSS.QZS:
-                prn += 192
-            sat = prn2sat(sys, prn)
-
-            t = self.decode_time(line, offs+8, 9)
-
-            if nav.nc <= 0 or abs(timediff(nav.pclk[-1].time, t)) > 1e-9:
-                nav.nc += 1
-                pclk = pclk_t()
-                pclk.time = t
-                nav.pclk.append(pclk)
-
-            nrec = int(line[offs+35:offs+37])
-            clk = float(line[offs+40:offs+59])
-            std = float(line[offs+61:offs+80]) if nrec >= 2 else 0.0
-
-            nav.pclk[nav.nc-1].clk[sat-1] = clk
-            nav.pclk[nav.nc-1].std[sat-1] = std
+                nrec = int(line[35:37])
+                clk = float(line[40:59])
+                std = float(line[61:80]) if nrec >= 2 else 0.0
+                nav.pclk[nav.nc-1].clk[sat-1] = clk
+                nav.pclk[nav.nc-1].std[sat-1] = std
 
         return nav
 
     # TODO: decode GLONASS FCN lines
     def decode_obsh(self, obsfile):
-
         self.fobs = open(obsfile, 'rt')
         for line in self.fobs:
             if line[60:73] == 'END OF HEADER':
@@ -286,7 +232,7 @@ class rnxdec:
                 # Extract string list of signal codes
                 #
                 sigs = line[7:60].split()
-                for _ in range(int(nsig/14)):
+                if nsig >= 14:
                     line2 = self.fobs.readline()
                     sigs += line2[7:60].split()
 
@@ -297,7 +243,6 @@ class rnxdec:
                     if gns not in self.sig_map:
                         self.sig_map.update({gns: {}})
                     self.sig_map[gns].update({i: rnxSig})
-
             elif 'TIME OF FIRST OBS' in line[60:]:
                 self.ts = epoch2time([float(v) for v in line[0:44].split()])
             elif 'TIME OF LAST OBS' in line[60:]:
