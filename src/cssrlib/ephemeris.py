@@ -122,7 +122,39 @@ def ephclk(t, eph, sat):
 
 
 def satposs(obs, nav, cs=None, orb=None):
-    """ calculate pos/vel/clk for observed satellites  """
+    """
+    Calculate pos/vel/clk for observed satellites
+
+    The satellite position, velocity and clock offset are computed at
+    transmission epoch. The signal time-of-flight is computed from a pseudorange
+    measurement corrected by the satellite clock offset, hence the observations
+    are required at this stage. The satellite clock is already corrected for the
+    relativistic effects. The satellite health indicator is extracted from the
+    broadcast navigation message.
+
+    Parameters
+    ----------
+    obs : Obs()
+        contains GNSS measurements
+    nav : Nav()
+        contains coarse satellite orbit and clock offset information
+    cs  : cssr_has()
+        contains precise SSR corrections for satellite orbit and clock offset
+    obs : peph()
+        contains precise satellite orbit and clock offset information
+
+    Returns
+    -------
+    rs  : np.array() of float
+        satellite position in ECEF [m]
+    vs  : np.array() of float
+        satellite velocities in ECEF [m/s]
+    dts : np.array() of float
+        satellite clock offsets [s]
+    svh : np.array() of int
+        satellite health code [-]
+    """
+
     n = obs.sat.shape[0]
     rs = np.zeros((n, 3))
     vs = np.zeros((n, 3))
@@ -134,26 +166,35 @@ def satposs(obs, nav, cs=None, orb=None):
         sys, _ = sat2prn(sat)
         if sys not in obs.sig.keys():
             continue
+
         pr = obs.P[i, 0]
         t = timeadd(obs.t, -pr/rCST.CLIGHT)
-        
+
         if nav.ephopt == 4:
+
             rs_, dts_, _ = orb.peph2pos(t, sat, nav)
             dt = dts_[0]
+
+            eph = findeph(nav.eph, t, sat)
+            if eph is None:
+                svh[i] = 1
+                continue
+            svh[i] = eph.svh
+
         else:
-                
+
             if cs is not None:
                 if sat not in cs.sat_n:
                     continue
                 idx = cs.sat_n.index(sat)
                 iode = cs.lc[0].iode[idx]
                 dorb = cs.lc[0].dorb[idx, :]
-                
-                if cs.cssrmode == 1: # HAS only
+
+                if cs.cssrmode == 1:  # HAS only
                     if sat not in cs.sat_n_p:
                         continue
-                    idx = cs.sat_n_p.index(sat) 
-                
+                    idx = cs.sat_n_p.index(sat)
+
                 dclk = cs.lc[0].dclk[idx]
 
             eph = findeph(nav.eph, t, sat, iode)
@@ -162,9 +203,9 @@ def satposs(obs, nav, cs=None, orb=None):
                 continue
             svh[i] = eph.svh
             dt = eph2clk(t, eph)
-        
+
         t = timeadd(t, -dt)
-        
+
         if nav.ephopt == 4:
             rs_, dts_, _ = orb.peph2pos(t, sat, nav)
             rs[i, :] = rs_[0:3]
@@ -178,10 +219,10 @@ def satposs(obs, nav, cs=None, orb=None):
                 ec = vnorm(rc)
                 er = np.cross(ea, ec)
                 dorb_e = -dorb@[er, ea, ec]
-    
+
                 rs[i, :] += dorb_e
                 dts[i] += dclk/rCST.CLIGHT
-    
+
                 ers = vnorm(rs[i, :]-nav.x[0:3])
                 dorb = ers@dorb_e
                 sis = dclk-dorb
@@ -190,7 +231,7 @@ def satposs(obs, nav, cs=None, orb=None):
                     if abs(nav.sis[sat]) > 0:
                         nav.dsis[sat] = sis - nav.sis[sat]
                     nav.sis[sat] = sis
-    
+
                 nav.dorb[sat] = dorb
                 nav.dclk[sat] = dclk
     if cs is not None:
