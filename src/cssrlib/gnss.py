@@ -512,6 +512,10 @@ class gtime_t():
         self.time = time
         self.sec = sec
 
+    def __gt__(self, other):
+        return self.time > other.time or \
+            (self.time == other.time and self.sec > other.sec)
+
 
 class Obs():
     """ class to define the observation """
