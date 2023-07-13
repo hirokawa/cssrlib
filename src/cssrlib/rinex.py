@@ -4,7 +4,7 @@ module for RINEX 3.0x processing
 
 import numpy as np
 from cssrlib.gnss import uGNSS, uTYP, rSigRnx
-from cssrlib.gnss import gpst2time, gst2time, bdt2time, epoch2time, timediff, gtime_t
+from cssrlib.gnss import gpst2time, bdt2time, epoch2time, timediff, gtime_t
 from cssrlib.gnss import prn2sat, char2sys
 from cssrlib.gnss import Eph, Obs
 
@@ -222,7 +222,7 @@ class rnxdec:
 
             if 'RINEX VERSION / TYPE' in line:
                 ver = float(line[0:20])
-                offs = 0 if ver < 3 else 6
+                offs = 0 if ver < 3 else 5
 
             if 'END OF HEADER' in line:
                 break
