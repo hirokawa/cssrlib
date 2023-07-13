@@ -67,8 +67,8 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     #
     # Observation noise parameters
     #
-    nav.eratio = [100, 100]
-    nav.err = [0, 0.001, 0.001]/np.sqrt(2)
+    nav.eratio = [100, 100, 100]
+    nav.err = [0, 0.003, 0.003]  # [m] sigma
     #nav.eratio = [50, 50]
     #nav.err = [0, 0.01, 0.005]/np.sqrt(2)
 
@@ -539,7 +539,7 @@ def sdres(nav, obs, x, y, e, sat, el):
             if len(idx) > 0:
                 i = idx[np.argmax(el[idx])]
 
-                if nav.monlevel > 1:
+                if nav.monlevel > 3:
                     nav.fout.write("{} prn0 {:3s}\n"
                                    .format(time2str(obs.t), sat2id(sat[i])))
 
@@ -630,10 +630,21 @@ def sdres(nav, obs, x, y, e, sat, el):
                                                np.sqrt(nav.P[idx_i, idx_i]),
                                                np.sqrt(nav.P[idx_j, idx_j])))
 
+                    txt = 'CP'
+
                 else:  # pseudorange
 
                     Ri[nv] = varerr(nav, el[i], f)  # measurement variance
                     Rj[nv] = varerr(nav, el[j], f)  # measurement variance
+
+                    txt = 'PR'
+
+                if nav.monlevel > 1:
+                    nav.fout.write("{} {}-{} ({:2d}) {} res {:10.3f} sig_i {:10.3f} sig_j {:10.3f}\n"
+                                   .format(time2str(obs.t),
+                                           sat2id(sat[i]), sat2id(sat[j]), nv,
+                                           txt,
+                                           v[nv], np.sqrt(Ri[nv]), np.sqrt(Rj[nv])))
 
                 nb[b] += 1
                 nv += 1  # counter for single-difference observations
@@ -671,6 +682,11 @@ def ppppos(nav, obs, cs=None, orb=None, bsx=None):
     # GNSS satellite positions, velocities and clock offsets
     #
     rs, vs, dts, svh = satposs(obs, nav, cs, orb)
+
+    for i in range(len(svh)):
+        nav.fout.write("{:3d} {:3s} {:13.3f} {:13.3f} {:13.3f} {:13.3f}\n"
+                       .format(i, sat2id(obs.sat[i]),
+                               rs[i, 0], rs[i, 1], rs[i, 2], dts[i]*1e6))
 
     # Kalman filter time propagation, initialization of ambiguities and iono
     #
