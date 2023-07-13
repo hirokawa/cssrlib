@@ -786,7 +786,7 @@ def prn2sat(sys, prn):
     elif sys == uGNSS.BDS:
         sat = prn+uGNSS.BDSMIN
     elif sys == uGNSS.SBS:
-        sat = prn-100+uGNSS.SBSMIN
+        sat = prn-120+uGNSS.SBSMIN
     elif sys == uGNSS.IRN:
         sat = prn+uGNSS.IRNMIN
     else:
@@ -803,7 +803,7 @@ def sat2prn(sat):
         prn = sat-uGNSS.IRNMIN
         sys = uGNSS.IRN
     elif sat > uGNSS.SBSMIN:
-        prn = sat+100-uGNSS.SBSMIN
+        prn = sat+120-uGNSS.SBSMIN
         sys = uGNSS.SBS
     elif sat > uGNSS.BDSMIN:
         prn = sat-uGNSS.BDSMIN
@@ -833,7 +833,7 @@ def sat2id(sat):
     if sys == uGNSS.QZS:
         prn -= 192
     elif sys == uGNSS.SBS:
-        prn -= 100
+        prn -= 120
     return '%s%02d' % (gnss_tbl[sys], prn)
 
 
@@ -847,7 +847,7 @@ def id2sat(id_):
     if sys == uGNSS.QZS:
         prn += 192
     elif sys == uGNSS.SBS:
-        prn += 100
+        prn += 120
     sat = prn2sat(sys, prn)
     return sat
 
