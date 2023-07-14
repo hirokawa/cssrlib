@@ -579,9 +579,7 @@ class Nav():
             [0.1167E+06, -0.2294E+06, -0.1311E+06, 0.1049E+07]])
         self.elmin = np.deg2rad(15.0)
         self.tidecorr = False
-        ######## START OBSOLETE ################################################
-        self.nf = 2  # TODO: make this obsolte if possible
-        ######## END   OBSOLETE ################################################
+        self.nf = 2  # TODO: make this obsolete if possible
         self.ne = 0
         self.nc = 0
         self.excl_sat = []  # Excluded satellites
@@ -593,7 +591,7 @@ class Nav():
 
         self.monlevel = 1
         self.cnr_min = 35
-        self.maxout = 5  # maximum outage [epoch]
+        self.maxout = 5  # maximum outage [epochs]
 
         self.sat_ant = None
         self.rcv_ant = None
