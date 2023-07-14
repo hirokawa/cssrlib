@@ -1,5 +1,5 @@
 """
-module for PPP-RTK positioing
+module for PPP-RTK positioning
 """
 
 import numpy as np
@@ -197,7 +197,7 @@ def udstate(nav, obs, cs):
 
 
 def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
-    """ non-differencial residual """
+    """ non-differential residual """
     _c = gn.rCST.CLIGHT
     nf = nav.nf
     n = len(obs.P)
