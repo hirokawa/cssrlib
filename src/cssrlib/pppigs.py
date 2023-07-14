@@ -23,8 +23,7 @@ def IT(na):
 
 def II(s, na):
     """ return index of slant ionospheric delay estimate """
-    idx = na-gn.uGNSS.MAXSAT+s-1
-    return idx
+    return na-gn.uGNSS.MAXSAT+s-1
 
 
 def ionoDelay(sig1, sig2, pr1, pr2):
@@ -610,6 +609,13 @@ def sdres(nav, obs, x, y, e, sat, el):
                     Ri[nv] = varerr(nav, el[i], f)  # measurement variance
                     Rj[nv] = varerr(nav, el[j], f)  # measurement variance
 
+                if nav.monlevel > 1:
+                    nav.fout.write("{} {}-{} ({:2d}) {} res {:10.3f} sig_i {:10.3f} sig_j {:10.3f}\n"
+                                   .format(time2str(obs.t),
+                                           sat2id(sat[i]), sat2id(sat[j]),
+                                           nv, sig.str(),
+                                           v[nv], np.sqrt(Ri[nv]), np.sqrt(Rj[nv])))
+
                 nb[b] += 1
                 nv += 1  # counter for single-difference observations
 
@@ -633,7 +639,7 @@ def kfupdate(x, P, H, v, R):
     return x, P, S
 
 
-def pppigspos(nav, obs, orb, bsx):
+def ppppos(nav, obs, orb, bsx):
     """
     PPP positioning with IGS files and conventions
     """
