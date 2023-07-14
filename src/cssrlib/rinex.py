@@ -71,7 +71,10 @@ class rnxdec:
             for typ, sigs in tmp.items():
                 for i, sig in enumerate(sigs):
 
-                    if sig in self.sig_map[sys].values():
+                    # Skip unavailable systems and signals
+                    #
+                    if sys not in self.sig_map.keys() or \
+                            sig in self.sig_map[sys].values():
                         continue
 
                     # Not found try to replace
