@@ -5,11 +5,11 @@ module for standard PPP positioning
 import numpy as np
 
 import cssrlib.gnss as gn
-from cssrlib.ephemeris import findeph, satposs
-from cssrlib.gnss import rCST, sat2id, sat2prn, uTYP, uGNSS
-from cssrlib.gnss import timeadd, time2str
+from cssrlib.ephemeris import satposs
+from cssrlib.gnss import sat2id, sat2prn, uTYP, uGNSS
+from cssrlib.gnss import time2str
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
-from cssrlib.peph import antModelRx, antModelTx
+from cssrlib.peph import antModelRx
 from cssrlib.rtk import IB, ddcov, resamb_lambda, valpos, holdamb, initx
 from cssrlib.rtk import varerr
 from cssrlib.cssrlib import ssig2rsig, sCType, sSigGPS
@@ -435,17 +435,15 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
         # cycle -> m
         phw = lam*nav.phw[sat-1]
 
-        # Receiver/satellite antenna offset
+        # Receiver antenna offset
         #
         antrPR = antModelRx(nav, pos, e[i, :], sigsPR)
         antrCP = antModelRx(nav, pos, e[i, :], sigsCP)
-        antsPR = antModelTx(nav, e[i, :], sigsPR, sat, obs.t, rs[i, :])
-        antsCP = antModelTx(nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
 
         # Range correction
         #
-        prc[i, :] = trop + antsPR + antrPR + cbias
-        cpc[i, :] = trop + antsCP + antrCP + pbias + phw
+        prc[i, :] = trop + antrPR + cbias
+        cpc[i, :] = trop + antrCP + pbias + phw
 
         r += relatv - _c*dts[i]
 
