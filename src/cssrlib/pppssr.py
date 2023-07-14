@@ -22,8 +22,7 @@ def IT(na):
 
 def II(s, na):
     """ return index of slant ionospheric delay estimate """
-    idx = na-gn.uGNSS.MAXSAT+s-1
-    return idx
+    return na-gn.uGNSS.MAXSAT+s-1
 
 
 def ionoDelay(sig1, sig2, pr1, pr2):
@@ -630,20 +629,16 @@ def sdres(nav, obs, x, y, e, sat, el):
                                                np.sqrt(nav.P[idx_i, idx_i]),
                                                np.sqrt(nav.P[idx_j, idx_j])))
 
-                    txt = 'CP'
-
                 else:  # pseudorange
 
                     Ri[nv] = varerr(nav, el[i], f)  # measurement variance
                     Rj[nv] = varerr(nav, el[j], f)  # measurement variance
 
-                    txt = 'PR'
-
                 if nav.monlevel > 1:
                     nav.fout.write("{} {}-{} ({:2d}) {} res {:10.3f} sig_i {:10.3f} sig_j {:10.3f}\n"
                                    .format(time2str(obs.t),
-                                           sat2id(sat[i]), sat2id(sat[j]), nv,
-                                           txt,
+                                           sat2id(sat[i]), sat2id(sat[j]),
+                                           nv, sig.str(),
                                            v[nv], np.sqrt(Ri[nv]), np.sqrt(Rj[nv])))
 
                 nb[b] += 1
@@ -682,11 +677,6 @@ def ppppos(nav, obs, cs=None, orb=None, bsx=None):
     # GNSS satellite positions, velocities and clock offsets
     #
     rs, vs, dts, svh = satposs(obs, nav, cs, orb)
-
-    for i in range(len(svh)):
-        nav.fout.write("{:3d} {:3s} {:13.3f} {:13.3f} {:13.3f} {:13.3f}\n"
-                       .format(i, sat2id(obs.sat[i]),
-                               rs[i, 0], rs[i, 1], rs[i, 2], dts[i]*1e6))
 
     # Kalman filter time propagation, initialization of ambiguities and iono
     #
