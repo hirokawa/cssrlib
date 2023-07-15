@@ -939,7 +939,7 @@ class cssr:
             self.lc[inet].t0[sCType.STEC] = self.time
         return i
 
-    def decode_cssr(self, msg, i):
+    def decode_cssr(self, msg, i = 0):
         """decode Compact SSR message """
         df = {'msgtype': 4073}
         while df['msgtype'] == 4073:
