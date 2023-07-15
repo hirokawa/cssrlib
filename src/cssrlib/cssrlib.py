@@ -388,6 +388,9 @@ class cssr:
         self.cb_scl = 0.02
         self.pb_blen = 15
         self.pb_scl = 0.001 # m
+        
+        # default navigation message mode: 0:LNAV/INAV, 1: CNAV/CNAV1
+        self.nav_mode = {uGNSS.GPS:0, uGNSS.QZS:0, uGNSS.GAL:0, uGNSS.BDS: 1}
 
     def sval(self, u, n, scl):
         """ calculate signed value based on n-bit int, lsb """

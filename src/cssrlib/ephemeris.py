@@ -162,7 +162,7 @@ def satposs(obs, nav, cs=None, orb=None):
                 
                 dclk = cs.lc[0].dclk[idx]
 
-            eph = findeph(nav.eph, t, sat, iode)
+            eph = findeph(nav.eph, t, sat, iode, mode=cs.nav_mode[sys])
             if eph is None:
                 svh[i] = 1
                 continue

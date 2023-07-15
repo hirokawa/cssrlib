@@ -1,5 +1,5 @@
 """
-module for RINEX 3.0x processing
+module for RINEX 3.0x/4.0x processing
 """
 
 import numpy as np
@@ -211,17 +211,23 @@ class rnxdec:
                             eph.tgd = tgd_b
                         else:
                             eph.iodc = int(self.flt(line, 3))
+                    elif sys == uGNSS.BDS:
+                        eph.tgd_b = float(self.flt(line, 3))
 
                 if self.mode_nav < 3:
                     line = fnav.readline() # line #7
                     if sys == uGNSS.BDS:
-                        if self.mode_nav == 1:
-                            eph.isc[0] = float(self.flt(line, 0))
-                        elif self.mode_nav == 2:
-                            eph.isc[1] = float(self.flt(line, 1))
-                        
-                        #eph.tgd_b = float(self.flt(line, 2))
-                        eph.tgd_b = float(self.flt(line, 3))
+                        if self.mode_nav == 0:
+                            eph.tot = self.flt(line, 0)
+                            eph.iodc = int(self.flt(line, 1))
+                        else:                             
+                            if self.mode_nav == 1:
+                                eph.isc[0] = float(self.flt(line, 0))
+                            elif self.mode_nav == 2:
+                                eph.isc[1] = float(self.flt(line, 1))
+                            
+                            #eph.tgd_b = float(self.flt(line, 2))
+                            eph.tgd_b = float(self.flt(line, 3))
                   
                     else: 
                         if self.mode_nav > 0:
