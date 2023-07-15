@@ -9,7 +9,7 @@ MAX_ITER_KEPLER = 30
 RTOL_KEPLER = 1e-13
 
 
-def findeph(nav, t, sat, iode=-1):
+def findeph(nav, t, sat, iode = -1, mode = 0):
     """ find ephemeric for sat """
     dt_p = 3600*4
     eph = None
@@ -19,11 +19,11 @@ def findeph(nav, t, sat, iode=-1):
             continue
         if sys == uGNSS.GAL and (eph_.code >> 9) & 1 == 0:   # I/NAV
             continue
-        if eph_.iode == iode:
+        if eph_.iode == iode and eph_.mode == mode:
             eph = eph_
             break
         dt = timediff(t, eph_.toe)
-        if iode < 0 and abs(dt) < dt_p:
+        if iode < 0 and abs(dt) < dt_p and eph_.mode == mode:
             dt_p = abs(dt)
             eph = eph_
     return eph
@@ -49,7 +49,13 @@ def eph2pos(t, eph, flg_v=False):
         mu = rCST.MU_GPS
         omge = rCST.OMGE
     dt = dtadjust(t, eph.toe)
-    n = np.sqrt(mu/eph.A**3)+eph.deln
+    n0 = np.sqrt(mu/eph.A**3)
+    dna = eph.deln
+    Ak = eph.A
+    if eph.mode>0:
+        dna += 0.5*dt*eph.delnd
+        Ak += dt*eph.Adot
+    n = n0+dna
     M = eph.M0+n*dt
     E = M
     for _ in range(10):
@@ -71,7 +77,7 @@ def eph2pos(t, eph, flg_v=False):
     phi = nu+eph.omg
     h2 = np.array([np.cos(2.0*phi), np.sin(2.0*phi)])
     u = phi+np.array([eph.cuc, eph.cus])@h2
-    r = eph.A*nue+np.array([eph.crc, eph.crs])@h2
+    r = Ak*nue+np.array([eph.crc, eph.crs])@h2
     h = np.array([np.cos(u), np.sin(u)])
     xo = r*h
 
@@ -91,7 +97,7 @@ def eph2pos(t, eph, flg_v=False):
         nud = np.sqrt(1.0-eph.e**2)/nue*Ed
         h2d = 2.0*nud*np.array([-h[1], h[0]])
         ud = nud+np.array([eph.cuc, eph.cus])@h2d
-        rd = eph.A*eph.e*sE*Ed+np.array([eph.crc, eph.crs])@h2d
+        rd = Ak*eph.e*sE*Ed+np.array([eph.crc, eph.crs])@h2d
 
         hd = np.array([-h[1], h[0]])
         xod = rd*h+(r*ud)*hd
