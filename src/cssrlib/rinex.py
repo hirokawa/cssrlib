@@ -1,5 +1,5 @@
 """
-module for RINEX 3.0x/4.0x processing
+module for RINEX 3.0x processing
 """
 
 import numpy as np
@@ -102,19 +102,72 @@ class rnxdec:
             for line in fnav:
                 if self.ver >= 4.0:
                     if line[0:5] == '> STO':  # system time offset (TBD)
+                        ofst_src = {'GP': uGNSS.GPS,'GL': uGNSS.GLO,'GA': uGNSS.GAL,
+                                    'BD': uGNSS.BDS,'QZ': uGNSS.QZS,'IR': uGNSS.IRN,
+                                    'SB': uGNSS.SBS,'UT': uGNSS.NONE}
                         sys = char2sys(line[6]) 
+                        itype = line[10:14]
                         line = fnav.readline()
-                        line = fnav.readline()                        
+                        ttm = self.decode_time(line, 4)
+                        mode = line[24:28]
+                        if mode[0:2] in ofst_src and mode[2:4] in ofst_src:
+                            nav.sto_prm[0] = ofst_src[mode[0:2]]
+                            nav.sto_prm[1] = ofst_src[mode[2:4]]                            
+
+                        line = fnav.readline()
+                        ttm = self.flt(line, 0)
+                        for k in range(3):
+                            nav.sto[k] = self.flt(line, k+1)
+                        
                     elif line[0:5] == '> EOP':  # earth orientation parameter (TBD)
                         sys = char2sys(line[6]) 
+                        itype = line[10:14]
                         line = fnav.readline()
+                        ttm = self.decode_time(line, 4)
+                        for k in range(3):
+                            nav.eop[k] = self.flt(line, k+1)
                         line = fnav.readline() 
-                        line = fnav.readline()                            
+                        for k in range(3):
+                            nav.eop[k+3] = self.flt(line, k+1)                        
+                        line = fnav.readline()  
+                        ttm = self.flt(line, 0)
+                        for k in range(3):
+                            nav.eop[k+6] = self.flt(line, k+1)
+                            
                     elif line[0:5] == '> ION':  # iono (TBD)
                         sys = char2sys(line[6]) 
+                        itype = line[10:14]
                         line = fnav.readline()
-                        line = fnav.readline() 
-                        line = fnav.readline()  
+                        ttm = self.decode_time(line, 4)
+                        if sys == uGNSS.GAL and itype == 'IFNV': # Nequick-G
+                            for k in range(3):
+                                nav.ion[0, k] = self.flt(line, k+1)                            
+                            line = fnav.readline()
+                            nav.ion[0, 3] = int(self.flt(line, 0))
+                        elif sys == uGNSS.BDS and itype == 'CNVX': # BDGIM
+                            ttm = self.decode_time(line, 4)
+                            self.ion_gim = np.zeros(9)
+                            for k in range(3):
+                                nav.ion_gim[k] = self.flt(line, k+1)                            
+                            line = fnav.readline()
+                            for k in range(4):
+                                nav.ion_gim[k+3] = self.flt(line, k)                           
+                            line = fnav.readline()
+                            for k in range(2):
+                                nav.ion_gim[k+7] = self.flt(line, k)                              
+                        else: # Klobucher (LNAV, D1D2, CNVX)
+                            self.ion_gim = np.zeros(9)
+                            for k in range(3):
+                                nav.ion[0, k] = self.flt(line, k+1)     
+                            line = fnav.readline()
+                            nav.ion[0, 3] = self.flt(line, 0)  
+                            for k in range(3):
+                                nav.ion[1, k] = self.flt(line, k+1)
+                            line = fnav.readline()
+                            nav.ion[1, 3] = self.flt(line, 0)
+                            if len(line)>=42:
+                                nav.ion_region = int(self.flt(line, 1))
+ 
                     elif line[0:5] == '> EPH':
                         sys = char2sys(line[6]) 
                         self.mode_nav = 0
@@ -226,8 +279,8 @@ class rnxdec:
                             elif self.mode_nav == 2:
                                 eph.isc[1] = float(self.flt(line, 1))
                             
-                            #eph.tgd_b = float(self.flt(line, 2))
-                            eph.tgd_b = float(self.flt(line, 3))
+                            eph.tgd_b = float(self.flt(line, 2)) # tgd_B1Cp
+                            eph.tgd_c = float(self.flt(line, 3)) # tgd_B2ap
                   
                     else: 
                         if self.mode_nav > 0:
