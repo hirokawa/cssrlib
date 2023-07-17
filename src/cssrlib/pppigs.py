@@ -7,9 +7,8 @@ import sys
 
 import cssrlib.gnss as gn
 from cssrlib.ephemeris import satposs
-from cssrlib.gnss import sat2id, sat2prn
+from cssrlib.gnss import sat2id, sat2prn, uTYP
 from cssrlib.gnss import time2str
-from cssrlib.gnss import uTYP
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.peph import antModelRx, antModelTx
 from cssrlib.rtk import IB, ddcov, resamb_lambda, valpos, holdamb, initx
@@ -385,10 +384,10 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         # Wavelength
         lam = np.array([s.wavelength() for s in sigsCP])
 
-        # Code and phase signal bias [ns]
+        # Code and phase signal bias, converted from [ns] to [m]
         #
-        cbias = np.array([bsx.getosb(sat, obs.t, s)[0]*ns2m for s in sigsPR])
-        pbias = np.array([bsx.getosb(sat, obs.t, s)[0]*ns2m for s in sigsCP])
+        cbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
+        pbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
 
         # Shapipo relativistic effect
         #

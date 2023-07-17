@@ -1081,8 +1081,8 @@ class biasdec():
         return bias, std, bcode
 
     def getosb(self, sat, time, sig):
-        """ retrieve OSB based on satellite, epoch and signal code """
-        bias, std = None, None
+        """ retrieve OSB value based on satellite, epoch and signal code """
+        bias = None
 
         for osb in self.osb:
 
@@ -1091,10 +1091,24 @@ class biasdec():
                     timediff(time, osb.tst) >= 0.0 and \
                     timediff(time, osb.ted) < 0.0:
                 bias = osb.bias
+                break
+
+        return bias
+
+    def getosbstd(self, sat, time, sig):
+        """ retrieve OSB sigma based on satellite, epoch and signal code """
+        std = None
+
+        for osb in self.osb:
+
+            if osb.sat == sat and \
+                    osb.sig1 == sig and \
+                    timediff(time, osb.tst) >= 0.0 and \
+                    timediff(time, osb.ted) < 0.0:
                 std = osb.std
                 break
 
-        return bias, std
+        return std
 
     def parse(self, fname):
         with open(fname, "r", encoding='latin-1') as fh:

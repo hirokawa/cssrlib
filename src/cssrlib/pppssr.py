@@ -386,12 +386,10 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
         lam = np.array([s.wavelength() for s in sigsCP])
 
         if nav.ephopt == 4:
-            # Code and phase signal bias [ns]
+            # Code and phase signal bias, converted from [ns] to [m]
             #
-            cbias = np.array(
-                [bsx.getosb(sat, obs.t, s)[0]*ns2m for s in sigsPR])
-            pbias = np.array(
-                [bsx.getosb(sat, obs.t, s)[0]*ns2m for s in sigsCP])
+            cbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
+            pbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
         else:  # from CSSR
             idx_n = np.where(cs.sat_n == sat)[0][0]
             kidx = [-1]*nav.nf
