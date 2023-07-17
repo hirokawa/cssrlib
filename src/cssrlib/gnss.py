@@ -511,6 +511,10 @@ class gtime_t():
         self.time = time
         self.sec = sec
 
+    def __gt__(self, other):
+        return self.time > other.time or \
+            (self.time == other.time and self.sec > other.sec)
+
 
 class Obs():
     """ class to define the observation """
@@ -591,9 +595,7 @@ class Nav():
         self.eop = np.zeros(9)
         self.elmin = np.deg2rad(15.0)
         self.tidecorr = False
-        ######## START OBSOLETE ################################################
-        self.nf = 2  # TODO: make this obsolte if possible
-        ######## END   OBSOLETE ################################################
+        self.nf = 2  # TODO: make this obsolete if possible
         self.ne = 0
         self.nc = 0
         self.excl_sat = []  # Excluded satellites
@@ -605,7 +607,7 @@ class Nav():
 
         self.monlevel = 1
         self.cnr_min = 35
-        self.maxout = 5  # maximum outage [epoch]
+        self.maxout = 5  # maximum outage [epochs]
 
         self.sat_ant = None
         self.rcv_ant = None
@@ -808,7 +810,7 @@ def prn2sat(sys, prn):
     elif sys == uGNSS.BDS:
         sat = prn+uGNSS.BDSMIN
     elif sys == uGNSS.SBS:
-        sat = prn-100+uGNSS.SBSMIN
+        sat = prn-120+uGNSS.SBSMIN
     elif sys == uGNSS.IRN:
         sat = prn+uGNSS.IRNMIN
     else:
@@ -825,7 +827,7 @@ def sat2prn(sat):
         prn = sat-uGNSS.IRNMIN
         sys = uGNSS.IRN
     elif sat > uGNSS.SBSMIN:
-        prn = sat+100-uGNSS.SBSMIN
+        prn = sat+120-uGNSS.SBSMIN
         sys = uGNSS.SBS
     elif sat > uGNSS.GLOMIN:
         prn = sat-uGNSS.GLOMIN
@@ -855,7 +857,7 @@ def sat2id(sat):
     if sys == uGNSS.QZS:
         prn -= 192
     elif sys == uGNSS.SBS:
-        prn -= 100
+        prn -= 120
     return '%s%02d' % (gnss_tbl[sys], prn)
 
 
@@ -869,7 +871,7 @@ def id2sat(id_):
     if sys == uGNSS.QZS:
         prn += 192
     elif sys == uGNSS.SBS:
-        prn += 100
+        prn += 120
     sat = prn2sat(sys, prn)
     return sat
 

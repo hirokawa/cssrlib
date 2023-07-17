@@ -6,9 +6,9 @@ import numpy as np
 import sys
 
 import cssrlib.gnss as gn
-from cssrlib.ephemeris import findeph
-from cssrlib.gnss import rCST, sat2id, sat2prn
-from cssrlib.gnss import timeadd, time2str
+from cssrlib.ephemeris import satposs
+from cssrlib.gnss import sat2id, sat2prn
+from cssrlib.gnss import time2str
 from cssrlib.gnss import uTYP
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.peph import antModelRx, antModelTx
@@ -23,8 +23,7 @@ def IT(na):
 
 def II(s, na):
     """ return index of slant ionospheric delay estimate """
-    idx = na-gn.uGNSS.MAXSAT+s-1
-    return idx
+    return na-gn.uGNSS.MAXSAT+s-1
 
 
 def ionoDelay(sig1, sig2, pr1, pr2):
@@ -67,8 +66,8 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     #
     # Observation noise parameters
     #
-    nav.eratio = [100, 100]
-    nav.err = [0, 0.001, 0.001]/np.sqrt(2)
+    nav.eratio = [100, 100, 100]
+    nav.err = [0, 0.003, 0.003]  # [m] sigma
     #nav.eratio = [50, 50]
     #nav.err = [0, 0.01, 0.005]/np.sqrt(2)
 
@@ -383,6 +382,9 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         sigsPR = obs.sig[sys][gn.uTYP.C]
         sigsCP = obs.sig[sys][gn.uTYP.L]
 
+        # Wavelength
+        lam = np.array([s.wavelength() for s in sigsCP])
+
         # Code and phase signal bias [ns]
         #
         cbias = np.array([bsx.getosb(sat, obs.t, s)[0]*ns2m for s in sigsPR])
@@ -405,9 +407,7 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         nav.phw[sat-1] = windupcorr(obs.t, rs[i, :], vs[i, :], rr_,
                                     nav.phw[sat-1], full=True)
 
-        # Wavelength
-        #
-        lam = np.array([s.wavelength() for s in sigsCP])
+        # cycle -> m
         phw = lam*nav.phw[sat-1]
 
         # Receiver/satellite antenna offset
@@ -513,7 +513,7 @@ def sdres(nav, obs, x, y, e, sat, el):
             if len(idx) > 0:
                 i = idx[np.argmax(el[idx])]
 
-                if nav.monlevel > 1:
+                if nav.monlevel > 3:
                     nav.fout.write("{} prn0 {:3s}\n"
                                    .format(time2str(obs.t), sat2id(sat[i])))
 
@@ -609,6 +609,13 @@ def sdres(nav, obs, x, y, e, sat, el):
                     Ri[nv] = varerr(nav, el[i], f)  # measurement variance
                     Rj[nv] = varerr(nav, el[j], f)  # measurement variance
 
+                if nav.monlevel > 1:
+                    nav.fout.write("{} {}-{} ({:2d}) {} res {:10.3f} sig_i {:10.3f} sig_j {:10.3f}\n"
+                                   .format(time2str(obs.t),
+                                           sat2id(sat[i]), sat2id(sat[j]),
+                                           nv, sig.str(),
+                                           v[nv], np.sqrt(Ri[nv]), np.sqrt(Rj[nv])))
+
                 nb[b] += 1
                 nv += 1  # counter for single-difference observations
 
@@ -632,69 +639,7 @@ def kfupdate(x, P, H, v, R):
     return x, P, S
 
 
-def satpreposs(obs, nav, orb):
-    """
-    Calculate pos/vel/clk for observed satellites
-
-    The satellite position, velocity and clock offset are computed at
-    transmission epoch. The signal time-of-flight is computed from a pseudorange
-    measurement corrected by the satellite clock offset, hence the observations
-    are required at this stage. The satellite clock is already corrected for the
-    relativistic effects. The satellite health indicator is extracted from the
-    broadcast navigation message.
-
-    Parameters
-    ----------
-    obs : Obs()
-        contains GNSS measurments
-    nav : Nav()
-        contains coarse satellite orbit and clock offset information
-    obs : peph()
-        contains precise satellite orbit and clock offset information
-
-    Returns
-    -------
-    rs  : np.array() of float
-        satellite position in ECEF [m]
-    vs  : np.array() of float
-        satellite velocities in ECEF [m/s]
-    dts : np.array() of float
-        satellite clock offsets [s]
-    svh : np.array() of int
-        satellite health code [-]
-    """
-
-    n = obs.sat.shape[0]
-    rs = np.zeros((n, 6))
-    dts = np.zeros((n, 2))
-    svh = np.zeros(n, dtype=int)
-
-    for i in range(n):
-
-        sat = obs.sat[i]
-        sys, _ = sat2prn(sat)
-
-        pr = obs.P[i, 0]
-        if pr == 0.0:
-            continue
-
-        t = timeadd(obs.t, -pr/rCST.CLIGHT)
-
-        rs[i, :], dts[i, :], _ = orb.peph2pos(t, sat, nav)
-
-        t = timeadd(t, -dts[i, 0])
-        rs[i, :], dts[i, :], _ = orb.peph2pos(t, sat, nav)
-
-        eph = findeph(nav.eph, t, sat)
-        if eph is None:
-            svh[i] = 1
-            continue
-        svh[i] = eph.svh
-
-    return rs[:, 0:3], rs[:, 3:6], dts[:, 0], svh
-
-
-def pppigspos(nav, obs, orb, bsx):
+def ppppos(nav, obs, orb, bsx):
     """
     PPP positioning with IGS files and conventions
     """
@@ -706,7 +651,7 @@ def pppigspos(nav, obs, orb, bsx):
 
     # GNSS satellite positions, velocities and clock offsets
     #
-    rs, vs, dts, svh = satpreposs(obs, nav, orb)
+    rs, vs, dts, svh = satposs(obs, nav, cs=None, orb=orb)
 
     # Kalman filter time propagation, initialization of ambiguities and iono
     #
@@ -782,16 +727,19 @@ def pppigspos(nav, obs, orb, bsx):
         nav.smode = 0
 
     nav.smode = 5  # 4: fixed ambiguities, 5: float ambiguities
-    nb, xa = resamb_lambda(nav, sat)
-    if nb > 0:
-        yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, svh, xa[0:3])
-        y = yu[iu, :]
-        e = eu[iu, :]
-        v, H, R = sdres(nav, obs, xa, y, e, sat, el)
-        if valpos(nav, v, R):  # R <= Q=H'PH+R  chisq<max_inno[3] (0.5)
-            if nav.armode == 3:     # fix and hold
-                holdamb(nav, xa)    # hold fixed ambiguity
-            nav.smode = 4           # fix
+
+    if nav.armode > 0:
+        nb, xa = resamb_lambda(nav, sat)
+        if nb > 0:
+            yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, svh, xa[0:3])
+            y = yu[iu, :]
+            e = eu[iu, :]
+            v, H, R = sdres(nav, obs, xa, y, e, sat, el)
+            # R <= Q=HPH'+R  chisq<max_inno[3] (0.5)
+            if valpos(nav, v, R):
+                if nav.armode == 3:     # fix and hold
+                    holdamb(nav, xa)    # hold fixed ambiguity
+                nav.smode = 4           # fix
 
     # Store epoch for solution
     #
