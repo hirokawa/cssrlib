@@ -234,7 +234,7 @@ def ssig2rsig(sys : sGNSS, utyp: uTYP, ssig):
     }
     
     bds_tbl = {
-        sSigBDS.L2I: uSIG.L2Q,
+        sSigBDS.L2I: uSIG.L2I,
         sSigBDS.L2Q: uSIG.L2Q,
         sSigBDS.L2X: uSIG.L2X,
         sSigBDS.L6I: uSIG.L6I,
