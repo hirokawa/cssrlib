@@ -820,14 +820,14 @@ def sat2prn(sat):
     elif sat > uGNSS.SBSMIN:
         prn = sat+100-uGNSS.SBSMIN
         sys = uGNSS.SBS
-    elif sat > uGNSS.BDSMIN:
-        prn = sat-uGNSS.BDSMIN
-        sys = uGNSS.BDS
     elif sat > uGNSS.GLOMIN:
         prn = sat-uGNSS.GLOMIN
         sys = uGNSS.GLO
+    elif sat > uGNSS.BDSMIN:
+        prn = sat-uGNSS.BDSMIN
+        sys = uGNSS.BDS
     elif sat > uGNSS.QZSMIN:
-        prn = sat+192+uGNSS.QZSMIN
+        prn = sat+192-uGNSS.QZSMIN
         sys = uGNSS.QZS
     elif sat > uGNSS.GALMIN:
         prn = sat-uGNSS.GALMIN
