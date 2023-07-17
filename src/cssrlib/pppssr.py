@@ -5,11 +5,11 @@ module for standard PPP positioning
 import numpy as np
 
 import cssrlib.gnss as gn
-from cssrlib.ephemeris import findeph, satposs
-from cssrlib.gnss import rCST, sat2id, sat2prn, uTYP, uGNSS
-from cssrlib.gnss import timeadd, time2str
+from cssrlib.ephemeris import satposs
+from cssrlib.gnss import sat2id, sat2prn, uTYP, uGNSS
+from cssrlib.gnss import time2str
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
-from cssrlib.peph import antModelRx, antModelTx
+from cssrlib.peph import antModelRx
 from cssrlib.rtk import IB, ddcov, resamb_lambda, valpos, holdamb, initx
 from cssrlib.rtk import varerr
 from cssrlib.cssrlib import ssig2rsig, sCType, sSigGPS
@@ -22,8 +22,7 @@ def IT(na):
 
 def II(s, na):
     """ return index of slant ionospheric delay estimate """
-    idx = na-gn.uGNSS.MAXSAT+s-1
-    return idx
+    return na-gn.uGNSS.MAXSAT+s-1
 
 
 def ionoDelay(sig1, sig2, pr1, pr2):
@@ -67,8 +66,8 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     #
     # Observation noise parameters
     #
-    nav.eratio = [100, 100]
-    nav.err = [0, 0.001, 0.001]/np.sqrt(2)
+    nav.eratio = [100, 100, 100]
+    nav.err = [0, 0.003, 0.003]  # [m] sigma
     #nav.eratio = [50, 50]
     #nav.err = [0, 0.01, 0.005]/np.sqrt(2)
 
@@ -387,12 +386,10 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
         lam = np.array([s.wavelength() for s in sigsCP])
 
         if nav.ephopt == 4:
-            # Code and phase signal bias [ns]
+            # Code and phase signal bias, converted from [ns] to [m]
             #
-            cbias = np.array(
-                [bsx.getosb(sat, obs.t, s)[0]*ns2m for s in sigsPR])
-            pbias = np.array(
-                [bsx.getosb(sat, obs.t, s)[0]*ns2m for s in sigsCP])
+            cbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
+            pbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
         else:  # from CSSR
             idx_n = np.where(cs.sat_n == sat)[0][0]
             kidx = [-1]*nav.nf
@@ -436,17 +433,15 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
         # cycle -> m
         phw = lam*nav.phw[sat-1]
 
-        # Receiver/satellite antenna offset
+        # Receiver antenna offset
         #
         antrPR = antModelRx(nav, pos, e[i, :], sigsPR)
         antrCP = antModelRx(nav, pos, e[i, :], sigsCP)
-        antsPR = antModelTx(nav, e[i, :], sigsPR, sat, obs.t, rs[i, :])
-        antsCP = antModelTx(nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
 
         # Range correction
         #
-        prc[i, :] = trop + antsPR + antrPR + cbias
-        cpc[i, :] = trop + antsCP + antrCP + pbias + phw
+        prc[i, :] = trop + antrPR + cbias
+        cpc[i, :] = trop + antrCP + pbias + phw
 
         r += relatv - _c*dts[i]
 
@@ -539,7 +534,7 @@ def sdres(nav, obs, x, y, e, sat, el):
             if len(idx) > 0:
                 i = idx[np.argmax(el[idx])]
 
-                if nav.monlevel > 1:
+                if nav.monlevel > 3:
                     nav.fout.write("{} prn0 {:3s}\n"
                                    .format(time2str(obs.t), sat2id(sat[i])))
 
@@ -634,6 +629,13 @@ def sdres(nav, obs, x, y, e, sat, el):
 
                     Ri[nv] = varerr(nav, el[i], f)  # measurement variance
                     Rj[nv] = varerr(nav, el[j], f)  # measurement variance
+
+                if nav.monlevel > 1:
+                    nav.fout.write("{} {}-{} ({:2d}) {} res {:10.3f} sig_i {:10.3f} sig_j {:10.3f}\n"
+                                   .format(time2str(obs.t),
+                                           sat2id(sat[i]), sat2id(sat[j]),
+                                           nv, sig.str(),
+                                           v[nv], np.sqrt(Ri[nv]), np.sqrt(Rj[nv])))
 
                 nb[b] += 1
                 nv += 1  # counter for single-difference observations
