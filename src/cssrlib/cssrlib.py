@@ -34,6 +34,8 @@ class sCSSR(IntEnum):
     SI = 10
     COMBINED = 11
     ATMOS = 12
+    AUTH = 13
+    VTEC = 16
 
 
 class sCType(IntEnum):
@@ -46,7 +48,10 @@ class sCType(IntEnum):
     STEC = 5
     TROP = 6
     URA = 7
-    MAX = 8
+    AUTH = 8
+    HCLOCK = 8
+    VTEC = 10
+    MAX = 11
 
 
 class sSigGPS(IntEnum):
