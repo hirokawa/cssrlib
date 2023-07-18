@@ -56,6 +56,7 @@ class rCST():
     FREQ_C3 = 1268.520e6     # [Hz] BDS B3
 
     FREQ_J1 = 1575.42e6      # [Hz] QZS L1
+
     FREQ_J2 = 1227.60e6      # [Hz] QZS L2
     FREQ_J5 = 1176.45e6      # [Hz] QZS L5
     FREQ_J6 = 1278.75e6      # [Hz] QZS LEX
@@ -87,7 +88,7 @@ class uGNSS(IntEnum):
     QZSMAX = 10
     BDSMAX = 63
     GLOMAX = 27
-    SBSMAX = 24
+    SBSMAX = 25
     IRNMAX = 10
 
     GPSMIN = 0
@@ -811,7 +812,7 @@ def prn2sat(sys, prn):
     elif sys == uGNSS.BDS:
         sat = prn+uGNSS.BDSMIN
     elif sys == uGNSS.SBS:
-        sat = prn-100+uGNSS.SBSMIN
+        sat = prn-119+uGNSS.SBSMIN
     elif sys == uGNSS.IRN:
         sat = prn+uGNSS.IRNMIN
     else:
@@ -828,7 +829,7 @@ def sat2prn(sat):
         prn = sat-uGNSS.IRNMIN
         sys = uGNSS.IRN
     elif sat > uGNSS.SBSMIN:
-        prn = sat+100-uGNSS.SBSMIN
+        prn = sat+119-uGNSS.SBSMIN
         sys = uGNSS.SBS
     elif sat > uGNSS.GLOMIN:
         prn = sat-uGNSS.GLOMIN
