@@ -10,13 +10,13 @@ from cssrlib.gnss import gpst2time, rCST, prn2sat, uGNSS, gtime_t, rSigRnx, uSIG
 
 class sGNSS(IntEnum):
     """ class to define GNSS """
-    GPS  = 0
-    GLO  = 1
-    GAL  = 2
-    BDS  = 3
-    QZS  = 4
-    SBS  = 5
-    IRN  = 6
+    GPS = 0
+    GLO = 1
+    GAL = 2
+    BDS = 3
+    QZS = 4
+    SBS = 5
+    IRN = 6
     BDS3 = 7
 
 
@@ -126,6 +126,7 @@ class sSigBDS(IntEnum):
     L5P = 13
     L5X = 14
 
+
 class sSigQZS(IntEnum):
     """ class to define QZSS signals """
     L1C = 0
@@ -151,6 +152,7 @@ class sSigSBS(IntEnum):
     L5Q = 2
     L5X = 3
 
+
 class sSigIRN(IntEnum):
     """ class to define NavIC signals """
     L1D = 0
@@ -159,6 +161,7 @@ class sSigIRN(IntEnum):
     L5X = 3
     L9A = 6
 
+
 def sgnss2sys(sys: sGNSS):
     ugnss_tbl = {
         sGNSS.GPS: uGNSS.GPS,
@@ -166,10 +169,11 @@ def sgnss2sys(sys: sGNSS):
         sGNSS.GAL: uGNSS.GAL,
         sGNSS.BDS: uGNSS.BDS,
         sGNSS.QZS: uGNSS.QZS,
-        sGNSS.SBS: uGNSS.SBS,        
-        sGNSS.BDS3: uGNSS.BDS,   
+        sGNSS.SBS: uGNSS.SBS,
+        sGNSS.BDS3: uGNSS.BDS,
     }
     return ugnss_tbl[sys]
+
 
 def sys2sgnss(sys: uGNSS):
     sgnss_tbl = {
@@ -178,11 +182,12 @@ def sys2sgnss(sys: uGNSS):
         uGNSS.GAL: sGNSS.GAL,
         uGNSS.BDS: sGNSS.BDS,
         uGNSS.QZS: sGNSS.QZS,
-        uGNSS.SBS: sGNSS.SBS,         
+        uGNSS.SBS: sGNSS.SBS,
     }
     return sgnss_tbl[sys]
 
-def ssig2rsig(sys : sGNSS, utyp: uTYP, ssig):
+
+def ssig2rsig(sys: sGNSS, utyp: uTYP, ssig):
     gps_tbl = {
         sSigGPS.L1C: uSIG.L1C,
         sSigGPS.L1P: uSIG.L1P,
@@ -214,7 +219,7 @@ def ssig2rsig(sys : sGNSS, utyp: uTYP, ssig):
         sSigGLO.L3Q: uSIG.L3Q,
         sSigGLO.L3X: uSIG.L3X,
     }
-    
+
     gal_tbl = {
         sSigGAL.L1B: uSIG.L1B,
         sSigGAL.L1C: uSIG.L1C,
@@ -232,7 +237,7 @@ def ssig2rsig(sys : sGNSS, utyp: uTYP, ssig):
         sSigGAL.L6C: uSIG.L6C,
         sSigGAL.L6X: uSIG.L6X,
     }
-    
+
     bds_tbl = {
         sSigBDS.L2I: uSIG.L2I,
         sSigBDS.L2Q: uSIG.L2Q,
@@ -250,7 +255,7 @@ def ssig2rsig(sys : sGNSS, utyp: uTYP, ssig):
         sSigBDS.L5P: uSIG.L5P,
         sSigBDS.L5X: uSIG.L5X,
     }
-    
+
     qzs_tbl = {
         sSigQZS.L1C: uSIG.L1C,
         sSigQZS.L1S: uSIG.L1S,
@@ -267,14 +272,14 @@ def ssig2rsig(sys : sGNSS, utyp: uTYP, ssig):
         sSigQZS.L6E: uSIG.L6E,
         sSigQZS.L1E: uSIG.L1E,
     }
-        
+
     sbs_tbl = {
         sSigSBS.L1C: uSIG.L1C,
         sSigSBS.L5I: uSIG.L5I,
         sSigSBS.L5Q: uSIG.L5Q,
         sSigSBS.L5X: uSIG.L5X,
     }
-    
+
     irn_tbl = {
         sSigIRN.L1D: uSIG.L1D,
         sSigIRN.L1P: uSIG.L1P,
@@ -282,7 +287,7 @@ def ssig2rsig(sys : sGNSS, utyp: uTYP, ssig):
         sSigIRN.L5X: uSIG.L5X,
         sSigIRN.L9A: uSIG.L9A,
     }
-    
+
     usig_tbl_ = {
         uGNSS.GPS: gps_tbl,
         uGNSS.GLO: glo_tbl,
@@ -292,10 +297,10 @@ def ssig2rsig(sys : sGNSS, utyp: uTYP, ssig):
         uGNSS.SBS: sbs_tbl,
         uGNSS.IRN: irn_tbl,
     }
-         
-    usig_tbl = usig_tbl_[sys] 
+
+    usig_tbl = usig_tbl_[sys]
     return rSigRnx(sys, utyp, usig_tbl[ssig])
-    
+
 
 class local_corr:
     """ class for local corrections """
@@ -332,7 +337,7 @@ class cssr:
 
     def __init__(self):
         """ constructor of cssr """
-        self.cssrmode = 0 # 0: original, 1: Galileo HAS
+        self.cssrmode = 0  # 0: original, 1: Galileo HAS
         self.monlevel = 0
         self.week = -1
         self.tow0 = -1
@@ -353,7 +358,6 @@ class cssr:
         self.sat_n_p = []
         self.dorb_d = []
         self.dclk_d = []
-        self.cbias_d = []
         self.ura = []
         self.cbias = []
         self.pbias = []
@@ -392,10 +396,11 @@ class cssr:
         self.cb_blen = 11
         self.cb_scl = 0.02
         self.pb_blen = 15
-        self.pb_scl = 0.001 # m
-        
+        self.pb_scl = 0.001  # m
+
         # default navigation message mode: 0:LNAV/INAV, 1: CNAV/CNAV1
-        self.nav_mode = {uGNSS.GPS:0, uGNSS.QZS:0, uGNSS.GAL:0, uGNSS.BDS: 1}
+        self.nav_mode = {uGNSS.GPS: 0, uGNSS.QZS: 0,
+                         uGNSS.GAL: 0, uGNSS.BDS: 1}
 
     def sval(self, u, n, scl):
         """ calculate signed value based on n-bit int, lsb """
@@ -470,7 +475,7 @@ class cssr:
     def decode_cssr_mask(self, msg, i):
         """decode MT4073,1 Mask message """
         head, i = self.decode_head(msg, i, sCSSR.MASK)
-        self.ngnss = bs.unpack_from('u4', msg, i)[0]        
+        self.ngnss = bs.unpack_from('u4', msg, i)[0]
         self.flg_net = False
         i += 4
         self.iodssr = head['iodssr']
@@ -484,12 +489,12 @@ class cssr:
         self.nsig_total = 0
         self.sig_n = []
         self.nsig_max = 0
-        self.nm_idx = np.zeros(self.SYSMAX,dtype=int)
+        self.nm_idx = np.zeros(self.SYSMAX, dtype=int)
 
-        self.dcm = np.ones(self.SYSMAX) # delta clock multipliers for HAS
+        self.dcm = np.ones(self.SYSMAX)  # delta clock multipliers for HAS
         self.gnss_idx = np.zeros(self.ngnss, dtype=int)
         self.nsat_g = np.zeros(self.SYSMAX, dtype=int)
-        
+
         for j in range(self.ngnss):
             v = bs.unpack_from_dict('u4u40u16u1', ['gnssid', 'svmask',
                                                    'sigmask', 'cma'], msg, i)
@@ -524,52 +529,59 @@ class cssr:
                     self.nsig_total = self.nsig_total+nsig
                     self.sig_n.append(sig)
 
-            if self.cssrmode == 1: # HAS only
-                self.nm_idx[v['gnssid']] = bs.unpack_from('u3',msg,i)[0]
-                i+=3
+            if self.cssrmode == 1:  # HAS only
+                self.nm_idx[v['gnssid']] = bs.unpack_from('u3', msg, i)[0]
+                i += 3
 
-        if self.cssrmode == 1: # HAS only
-            i+=6
-        
+        if self.cssrmode == 1:  # HAS only
+            i += 6
+
         self.lc[0].cstat |= (1 << sCType.MASK)
         self.lc[0].t0[sCType.MASK] = self.time
         return i
 
-    def decode_orb_sat(self, msg, i, k, sys = uGNSS.NONE, inet=0):
+    def decode_orb_sat(self, msg, i, k, sys=uGNSS.NONE, inet=0):
         """ decoder orbit correction of cssr """
         n = 10 if sys == uGNSS.GAL else 8
         fmt = 'u{:d}s{:d}s{:d}s{:d}'.format(n,
-                        self.dorb_blen[0],self.dorb_blen[1],self.dorb_blen[2])
-        v = bs.unpack_from_dict(fmt,['iode', 'dx', 'dy', 'dz'], msg, i)
+                                            self.dorb_blen[0], self.dorb_blen[1], self.dorb_blen[2])
+        v = bs.unpack_from_dict(fmt, ['iode', 'dx', 'dy', 'dz'], msg, i)
         self.lc[inet].iode[k] = v['iode']
-        
-        self.lc[inet].dorb[k, 0] = self.sval(v['dx'], self.dorb_blen[0], self.dorb_scl[0])
-        self.lc[inet].dorb[k, 1] = self.sval(v['dy'], self.dorb_blen[1], self.dorb_scl[1])
-        self.lc[inet].dorb[k, 2] = self.sval(v['dz'], self.dorb_blen[2], self.dorb_scl[2])
-        i += n+ self.dorb_blen[0]+self.dorb_blen[1]+self.dorb_blen[2]
+
+        self.lc[inet].dorb[k, 0] = self.sval(
+            v['dx'], self.dorb_blen[0], self.dorb_scl[0])
+        self.lc[inet].dorb[k, 1] = self.sval(
+            v['dy'], self.dorb_blen[1], self.dorb_scl[1])
+        self.lc[inet].dorb[k, 2] = self.sval(
+            v['dz'], self.dorb_blen[2], self.dorb_scl[2])
+        i += n + self.dorb_blen[0]+self.dorb_blen[1]+self.dorb_blen[2]
         return i
 
     def decode_clk_sat(self, msg, i, k, inet=0):
         """ decoder clock correction of cssr """
         v = bs.unpack_from_dict('s'+str(self.dclk_blen), ['dclk'], msg, i)
-        self.lc[inet].dclk[k] = self.sval(v['dclk'], self.dclk_blen, self.dclk_scl)
-        if self.cssrmode == 1: # HAS only
+        self.lc[inet].dclk[k] = self.sval(
+            v['dclk'], self.dclk_blen, self.dclk_scl)
+        if self.cssrmode == 1:  # HAS only
             self.lc[inet].dclk[k] *= self.dcm[self.gnss_n[k]]
-        
+
         i += self.dclk_blen
         return i
 
     def decode_cbias_sat(self, msg, i, k, j, inet=0):
         """ decoder code bias correction of cssr """
         v = bs.unpack_from_dict('s'+str(self.cb_blen), ['cbias'], msg, i)
-        self.lc[inet].cbias[k, j] = self.sval(v['cbias'], self.cb_blen, self.cb_scl)
+        self.lc[inet].cbias[k, j] = self.sval(
+            v['cbias'], self.cb_blen, self.cb_scl)
         i += self.cb_blen
         return i
 
     def decode_pbias_sat(self, msg, i, k, j, inet=0):
         """ decoder phase bias correction of cssr """
-        v = bs.unpack_from_dict('s'+str(self.pb_blen)+'u2', ['pbias', 'di'], msg, i)
-        self.lc[inet].pbias[k, j] = self.sval(v['pbias'], self.pb_blen, self.pb_scl)
+        v = bs.unpack_from_dict('s'+str(self.pb_blen) +
+                                'u2', ['pbias', 'di'], msg, i)
+        self.lc[inet].pbias[k, j] = self.sval(
+            v['pbias'], self.pb_blen, self.pb_scl)
         self.lc[inet].di[k, j] = v['di']
         i += self.pb_blen + 2
         return i
@@ -586,11 +598,10 @@ class cssr:
         self.lc[inet].dorb_d = np.ones((self.nsat_n, 3))*np.nan
         for k in range(0, self.nsat_n):
             i = self.decode_orb_sat(msg, i, k, self.sys_n[k], inet)
-            if self.sat_n[k] in self.sat_n_p:
+            if self.sat_n[k] in self.sat_n_p and dorb_p is not None:
                 j = self.sat_n_p.index(self.sat_n[k])
                 self.lc[inet].dorb_d[k, :] = self.lc[inet].dorb[k, :] \
                     - dorb_p[j, :]
-
         self.lc[inet].cstat |= (1 << sCType.ORBIT)
         self.lc[inet].t0[sCType.ORBIT] = self.time
         return i
@@ -601,12 +612,13 @@ class cssr:
         self.flg_net = False
         if self.iodssr != head['iodssr']:
             return -1
-                
-        if self.cssrmode == 1: # HAS only
+
+        if self.cssrmode == 1:  # HAS only
             for k in range(self.ngnss):
-                self.dcm[self.gnss_idx[k]] = bs.unpack_from('u2',msg,i)[0]+1.0
-                i+=2
-        
+                self.dcm[self.gnss_idx[k]] = bs.unpack_from('u2', msg, i)[
+                    0]+1.0
+                i += 2
+
         dclk_p = self.lc[inet].dclk
         self.lc[inet].dclk = np.zeros(self.nsat_n)
         self.lc[inet].dclk_d = np.ones(self.nsat_n)*np.nan
@@ -615,8 +627,6 @@ class cssr:
             if self.sat_n[k] in self.sat_n_p:
                 j = self.sat_n_p.index(self.sat_n[k])
                 self.lc[inet].dclk_d[k] = self.lc[inet].dclk[k]-dclk_p[j]
-
-        self.sat_n_p = self.sat_n
         self.lc[inet].cstat |= (1 << sCType.CLOCK)
         self.lc[inet].t0[sCType.CLOCK] = self.time
         return i
@@ -944,7 +954,7 @@ class cssr:
             self.lc[inet].t0[sCType.STEC] = self.time
         return i
 
-    def decode_cssr(self, msg, i = 0):
+    def decode_cssr(self, msg, i=0):
         """decode Compact SSR message """
         df = {'msgtype': 4073}
         while df['msgtype'] == 4073:
