@@ -598,10 +598,11 @@ class cssr:
         self.lc[inet].dorb_d = np.ones((self.nsat_n, 3))*np.nan
         for k in range(0, self.nsat_n):
             i = self.decode_orb_sat(msg, i, k, self.sys_n[k], inet)
-            if self.sat_n[k] in self.sat_n_p and dorb_p is not None:
+            if self.sat_n[k] in self.sat_n_p:
                 j = self.sat_n_p.index(self.sat_n[k])
                 self.lc[inet].dorb_d[k, :] = self.lc[inet].dorb[k, :] \
                     - dorb_p[j, :]
+                    
         self.lc[inet].cstat |= (1 << sCType.ORBIT)
         self.lc[inet].t0[sCType.ORBIT] = self.time
         return i
@@ -627,6 +628,9 @@ class cssr:
             if self.sat_n[k] in self.sat_n_p:
                 j = self.sat_n_p.index(self.sat_n[k])
                 self.lc[inet].dclk_d[k] = self.lc[inet].dclk[k]-dclk_p[j]
+                
+        if self.cssrmode == 1:  # HAS only
+            self.sat_n_p = self.sat_n
         self.lc[inet].cstat |= (1 << sCType.CLOCK)
         self.lc[inet].t0[sCType.CLOCK] = self.time
         return i
