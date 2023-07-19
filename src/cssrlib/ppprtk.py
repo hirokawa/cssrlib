@@ -83,7 +83,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.sig_qp = 0.01
     nav.sig_qv = 1.0
     nav.tidecorr = True
-    nav.armode = 1  # 1:contunous,2:instantaneous,3:fix-and-hold
+    nav.armode = 1  # 1:continuous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20)  # elevation mask for AR
     nav.x[0:3] = pos0
 

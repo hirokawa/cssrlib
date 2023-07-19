@@ -66,10 +66,8 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     #
     # Observation noise parameters
     #
-    nav.eratio = [100, 100, 100]
+    nav.eratio = [100, 100, 100]  # [-] factor
     nav.err = [0, 0.003, 0.003]  # [m] sigma
-    #nav.eratio = [50, 50]
-    #nav.err = [0, 0.01, 0.005]/np.sqrt(2)
 
     # Initial sigma for state covariance
     #
