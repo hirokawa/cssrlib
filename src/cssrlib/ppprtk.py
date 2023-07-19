@@ -55,7 +55,7 @@ def logmon(nav, t, sat, cs, iu=None):
     return 0
 
 
-def rtkinit(nav, pos0=np.zeros(3)):
+def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     """ initialize variables for RTK """
     nav.nf = 2
     nav.pmode = 1  # 0:static, 1:kinematic
@@ -103,10 +103,16 @@ def rtkinit(nav, pos0=np.zeros(3)):
                       gn.uGNSS.GAL: [sSigGAL.L1X, sSigGAL.L5X],
                       gn.uGNSS.QZS: [sSigQZS.L1C, sSigQZS.L2X]}
 
+    # Logging level
+    #
     nav.fout = None
-    nav.logfile = 'log.txt'
+    if logfile is None:
+        nav.monlevel = 0
+    else:
+        nav.fout = open(logfile, 'w')
+
     if nav.monlevel >= 2:
-        nav.fout = open(nav.logfile, 'w')
+        nav.fout = open(logfile, 'w')
         nav.fout.write(
             "# tow\tsys\tprn\tpb1\tpb2\tcb1\tcb2\ttrop\tiono\tantr1\tantr2")
         nav.fout.write(
