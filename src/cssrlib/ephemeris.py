@@ -9,7 +9,7 @@ MAX_ITER_KEPLER = 30
 RTOL_KEPLER = 1e-13
 
 
-def findeph(nav, t, sat, iode = -1, mode = 0):
+def findeph(nav, t, sat, iode=-1, mode=0):
     """ find ephemeric for sat """
     dt_p = 3600*4
     eph = None
@@ -52,7 +52,7 @@ def eph2pos(t, eph, flg_v=False):
     n0 = np.sqrt(mu/eph.A**3)
     dna = eph.deln
     Ak = eph.A
-    if eph.mode>0:
+    if eph.mode > 0:
         dna += 0.5*dt*eph.delnd
         Ak += dt*eph.Adot
     n = n0+dna
@@ -202,8 +202,11 @@ def satposs(obs, nav, cs=None, orb=None):
                     idx = cs.sat_n_p.index(sat)
 
                 dclk = cs.lc[0].dclk[idx]
+                mode = cs.nav_mode[sys]
+            else:
+                mode = 0
 
-            eph = findeph(nav.eph, t, sat, iode, mode=cs.nav_mode[sys])
+            eph = findeph(nav.eph, t, sat, iode, mode=mode)
             if eph is None:
                 svh[i] = 1
                 continue
@@ -213,10 +216,12 @@ def satposs(obs, nav, cs=None, orb=None):
         t = timeadd(t, -dt)
 
         if nav.ephopt == 4:
+
             rs_, dts_, _ = orb.peph2pos(t, sat, nav)
             rs[i, :] = rs_[0:3]
             vs[i, :] = rs_[3:6]
             dts[i] = dts_[0]
+
         else:
             rs[i, :], vs[i, :], dts[i] = eph2pos(t, eph, True)
             if cs is not None:  # apply SSR correction

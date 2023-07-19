@@ -8,8 +8,9 @@ from math import floor, sin, cos, sqrt, asin, atan2, fabs
 import numpy as np
 
 gpst0 = [1980, 1, 6, 0, 0, 0]  # GPS system time reference
-gst0  = [1999, 8,22, 0, 0, 0]  # Galileo system time reference
-bdt0  = [2006, 1, 1, 0, 0, 0]  # BeiDou system time reference
+gst0 = [1999, 8, 22, 0, 0, 0]  # Galileo system time reference
+bdt0 = [2006, 1, 1, 0, 0, 0]  # BeiDou system time reference
+
 
 class rCST():
     """ class for constants """
@@ -55,6 +56,7 @@ class rCST():
     FREQ_C3 = 1268.520e6     # [Hz] BDS B3
 
     FREQ_J1 = 1575.42e6      # [Hz] QZS L1
+
     FREQ_J2 = 1227.60e6      # [Hz] QZS L2
     FREQ_J5 = 1176.45e6      # [Hz] QZS L5
     FREQ_J6 = 1278.75e6      # [Hz] QZS LEX
@@ -86,7 +88,7 @@ class uGNSS(IntEnum):
     QZSMAX = 10
     BDSMAX = 63
     GLOMAX = 27
-    SBSMAX = 24
+    SBSMAX = 25
     IRNMAX = 10
 
     GPSMIN = 0
@@ -574,7 +576,7 @@ class Eph():
     sisai = np.zeros(4)
     isc = np.zeros(6)
     integ = 0
-    mode = 0 # 0:LNAV, 1:CNAV, 2:CNAV2, 3:CNAV3
+    mode = 0  # 0:LNAV, 1:CNAV, 2:CNAV2, 3:CNAV3
 
     def __init__(self, sat=0):
         self.sat = sat
@@ -589,9 +591,9 @@ class Nav():
         self.ion = np.array([
             [0.1118E-07, -0.7451E-08, -0.5961E-07, 0.1192E-06],
             [0.1167E+06, -0.2294E+06, -0.1311E+06, 0.1049E+07]])
-        self.ion_region = 0 # 0: wide-area, 1: Japan-aera (QZSS only)
+        self.ion_region = 0  # 0: wide-area, 1: Japan-aera (QZSS only)
         self.sto = np.zeros(3)
-        self.sto_prm = np.zeros(4, dtype = int)
+        self.sto_prm = np.zeros(4, dtype=int)
         self.eop = np.zeros(9)
         self.elmin = np.deg2rad(15.0)
         self.tidecorr = False
@@ -602,7 +604,7 @@ class Nav():
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
         self.pmode = 1  # 0: static, 1: kinematic
-        self.ephopt = 2  # ephemeris option 0: BRDC, 1: SBAS, 2: SSR-APC, 
+        self.ephopt = 2  # ephemeris option 0: BRDC, 1: SBAS, 2: SSR-APC,
                          #                  3: SSR-CG, 4: PREC
 
         self.monlevel = 1
@@ -707,7 +709,7 @@ def gst2time(week, tow):
         tow = 0.0
     t.time += 86400*7*week+int(tow)
     t.sec = tow-int(tow)
-    return t    
+    return t
 
 
 def time2gst(t: gtime_t):
@@ -810,7 +812,7 @@ def prn2sat(sys, prn):
     elif sys == uGNSS.BDS:
         sat = prn+uGNSS.BDSMIN
     elif sys == uGNSS.SBS:
-        sat = prn-120+uGNSS.SBSMIN
+        sat = prn-119+uGNSS.SBSMIN
     elif sys == uGNSS.IRN:
         sat = prn+uGNSS.IRNMIN
     else:
@@ -827,7 +829,7 @@ def sat2prn(sat):
         prn = sat-uGNSS.IRNMIN
         sys = uGNSS.IRN
     elif sat > uGNSS.SBSMIN:
-        prn = sat+120-uGNSS.SBSMIN
+        prn = sat+119-uGNSS.SBSMIN
         sys = uGNSS.SBS
     elif sat > uGNSS.GLOMIN:
         prn = sat-uGNSS.GLOMIN
@@ -857,7 +859,7 @@ def sat2id(sat):
     if sys == uGNSS.QZS:
         prn -= 192
     elif sys == uGNSS.SBS:
-        prn -= 120
+        prn -= 100
     return '%s%02d' % (gnss_tbl[sys], prn)
 
 
@@ -871,7 +873,7 @@ def id2sat(id_):
     if sys == uGNSS.QZS:
         prn += 192
     elif sys == uGNSS.SBS:
-        prn += 120
+        prn += 100
     sat = prn2sat(sys, prn)
     return sat
 
