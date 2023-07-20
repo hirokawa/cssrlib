@@ -5,7 +5,7 @@ Created on Sun Aug 22 21:01:49 2021
 @author: ruihi
 """
 
-from cssrlib.gnss import Nav, id2sat, char2sys, sat2id
+from cssrlib.gnss import Nav, id2sat, sat2id, char2sys
 from cssrlib.gnss import epoch2time, time2epoch, timeadd, timediff, gtime_t
 from cssrlib.gnss import str2time, gpst2utc, utc2gpst
 from cssrlib.gnss import ecef2enu
@@ -630,24 +630,16 @@ def antModelTx(nav, e, sigs, sat, time, rs):
         range correction for each specified signal
     """
 
-    # Satellite antenna frame unit vectors in ECEF assuming standard yaw
-    # attitude law
-    #
-    erpv = np.zeros(5)
-    rsun, _, _ = sunmoonpos(gpst2utc(time), erpv, True)
-    r = -rs
-    ez = r/np.linalg.norm(r)
-    r = rsun-rs
-    es = r/np.linalg.norm(r)
-    r = np.cross(ez, es)
-    ey = r/np.linalg.norm(r)
-    ex = np.cross(ey, ez)
-
     # Select satellite antenna
     #
     ant = searchpcv(nav.sat_ant, sat, time)
     if ant is None:
         return None
+
+    # Rotation matrix from satellite antenna frame to ECEF frame [ex, ey, ez]
+    #
+    A = orb2ecef(time, rs)
+    ez = A[2, :]
 
     # Zenith angle and zenith angle grid
     #
@@ -667,11 +659,9 @@ def antModelTx(nav, e, sigs, sat, time, rs):
         #
         off = ant.off[sig]
 
-        # Satellite PCO in ECEF frame
+        # Convert satellite PCO from antenna frame into ECEF frame
         #
-        pco_v = np.zeros(3)
-        for j in range(3):
-            pco_v[j] = off[0]*ex[j]+off[1]*ey[j]+off[2]*ez[j]
+        pco_v = off@A
 
         # Interpolate PCV and map PCO on line-of-sight vector
         #
@@ -906,6 +896,25 @@ def utc2gmst(t: gtime_t, ut1_utc):
     gmst = gmst0+1.002737909350795*ut
 
     return np.fmod(gmst, 86400.0)*np.pi/43200.0  # 0 <= gmst <= 2*PI
+
+
+def orb2ecef(time, rs):
+    """
+    Rotation matrix from satellite antenna frame to ECEF frame assuming
+    standard yaw attitude law
+    """
+
+    erpv = np.zeros(5)
+    rsun, _, _ = sunmoonpos(gpst2utc(time), erpv, True)
+    r = -rs
+    ez = r/np.linalg.norm(r)
+    r = rsun-rs
+    es = r/np.linalg.norm(r)
+    r = np.cross(ez, es)
+    ey = r/np.linalg.norm(r)
+    ex = np.cross(ey, ez)
+
+    return np.array([ex, ey, ez])
 
 
 def eci2ecef(tutc, erpv):
