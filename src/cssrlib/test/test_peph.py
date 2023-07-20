@@ -16,9 +16,9 @@ from cssrlib.gnss import pos2ecef, enu2xyz
 
 bdir = expanduser('../../../../cssrlib-data/data/')
 atxfile = bdir+"igs14.atx"
-orbfile = bdir+"COD0IGSRAP_20210780000_01D_15M_ORB.SP3"
-clkfile = bdir+"COD0IGSRAP_20210780000_01D_30S_CLK.CLK"
-dcbfile = bdir+"COD0IGSRAP_20210780000_01D_01D_OSB.BIA"
+orbfile = bdir+"COD0OPSRAP_20210780000_01D_15M_ORB.SP3"
+clkfile = bdir+"COD0OPSRAP_20210780000_01D_30S_CLK.CLK"
+dcbfile = bdir+"COD0OPSRAP_20210780000_01D_01D_OSB.BIA"
 
 time = epoch2time([2021, 3, 19, 12, 0, 0])
 sat = id2sat("G01")
