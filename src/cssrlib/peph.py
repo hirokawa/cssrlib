@@ -649,7 +649,7 @@ def antModelTx(nav, e, sigs, sat, time, rs):
     if ant is None:
         return None
 
-    # Zenit angle and zenit angle grid
+    # Zenith angle and zenith angle grid
     #
     za = np.rad2deg(np.arccos(np.dot(ez, -e)))
     za_t = np.arange(ant.zen[0], ant.zen[1]+ant.zen[2], ant.zen[2])
@@ -659,7 +659,7 @@ def antModelTx(nav, e, sigs, sat, time, rs):
     dant = np.zeros(len(sigs))
     for i, sig_ in enumerate(sigs):
 
-        # Subsititute signal if not available
+        # Substitute signal if not available
         #
         sig = substSigTx(ant, sig_)
 
