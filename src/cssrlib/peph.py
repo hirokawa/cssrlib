@@ -763,6 +763,46 @@ def antModelRx(nav, pos, e, sigs, rtype=1):
     return dant
 
 
+def apc2com(nav, sat, time, rs, sigs):
+    """
+    Satellite position vector correction in ECEF from APC to CoM
+    using ANTEX PCO corrections
+    """
+
+    # Select satellite antenna
+    #
+    ant = searchpcv(nav.sat_ant, sat, time)
+    if ant is None:
+        return None
+
+    # Rotation matrix from satellite antenna frame to ECEF frame [ex, ey, ez]
+    #
+    A = orb2ecef(time, rs)
+
+    freq = [s.frequency() for s in sigs]
+    facs = (+freq[0]**2/(freq[0]**2-freq[1]**2),
+            -freq[1]**2/(freq[0]**2-freq[1]**2),)
+
+    # Interpolate PCV and map PCO on line-of-sight vector
+    #
+    dr = np.zeros(3)
+    for fac_, sig_ in zip(facs, sigs):
+
+        # Substitute signal if not available
+        #
+        sig = substSigTx(ant, sig_)
+
+        # Satellite PCO in local antenna frame
+        #
+        off = fac_*ant.off[sig]*1e-3  # [m]
+
+        # Convert satellite PCO from antenna frame into ECEF frame
+        #
+        dr -= off@A
+
+    return dr
+
+
 def Rx(t):
     ct, st = cos(t), sin(t)
     return np.array([[1.0, 0.0, 0.0], [0.0, ct, st], [0.0, -st, ct]])
