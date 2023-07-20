@@ -740,7 +740,6 @@ def ppppos(nav, obs, cs=None, orb=None, bsx=None):
             for f in range(nav.nf):
                 if nav.vsat[j, f] == 0:
                     continue
-                nav.lock[j, f] += 1
                 nav.outc[j, f] = 0
                 if f == 0:
                     nav.ns += 1
