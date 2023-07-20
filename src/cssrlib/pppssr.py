@@ -412,6 +412,10 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
                 pbias = cs.lc[0].pbias[idx_n][kidx]
                 if cs.cssrmode == 1:  # for Gal HAS (cycle -> m)
                     pbias *= lam
+            # For Galileo HAS, switch the sign of the biases
+            if cs.cssrmode == 1:  
+                cbias *= -1
+                pbias *= -1
 
         # Shapipo relativistic effect
         #
