@@ -190,8 +190,10 @@ def satposs(obs, nav, cs=None, orb=None):
         else:
 
             if cs is not None:
+
                 if sat not in cs.sat_n:
                     continue
+
                 idx = cs.sat_n.index(sat)
                 iode = cs.lc[0].iode[idx]
                 dorb = cs.lc[0].dorb[idx, :]
@@ -203,13 +205,16 @@ def satposs(obs, nav, cs=None, orb=None):
 
                 dclk = cs.lc[0].dclk[idx]
                 mode = cs.nav_mode[sys]
+
             else:
+
                 mode = 0
 
             eph = findeph(nav.eph, t, sat, iode, mode=mode)
             if eph is None:
                 svh[i] = 1
                 continue
+
             svh[i] = eph.svh
             dt = eph2clk(t, eph)
 
@@ -223,15 +228,25 @@ def satposs(obs, nav, cs=None, orb=None):
             dts[i] = dts_[0]
 
         else:
+
             rs[i, :], vs[i, :], dts[i] = eph2pos(t, eph, True)
-            if cs is not None:  # apply SSR correction
+
+            # Apply SSR correction
+            #
+            if cs is not None:
+
                 ea = vnorm(vs[i, :])
                 rc = np.cross(rs[i, :], vs[i, :])
                 ec = vnorm(rc)
                 er = np.cross(ea, ec)
                 dorb_e = -dorb@[er, ea, ec]
 
-                rs[i, :] += dorb_e
+                # For Galileo HAS, switch the sign of the orbit corrections
+                #
+                if cs.cssrmode == 1:
+                    rs[i, :] -= dorb_e
+                else:
+                    rs[i, :] += dorb_e
                 dts[i] += dclk/rCST.CLIGHT
 
                 ers = vnorm(rs[i, :]-nav.x[0:3])
@@ -245,6 +260,7 @@ def satposs(obs, nav, cs=None, orb=None):
 
                 nav.dorb[sat] = dorb
                 nav.dclk[sat] = dclk
+
     if cs is not None:
         nav.time_p = cs.lc[0].t0[1]
 
