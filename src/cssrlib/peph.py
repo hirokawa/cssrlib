@@ -599,7 +599,7 @@ def substSigRx(pcv, sig):
     return sig
 
 
-def antModelTx(nav, e, sigs, sat, time, rs):
+def antModelTx(nav, e, sigs, sat, time, rs, sig0=None):
     """
     Range correction for transmitting antenna
 
@@ -623,6 +623,8 @@ def antModelTx(nav, e, sigs, sat, time, rs):
         epoch
     rs : np.array() of float
         satellite position in ECEF
+    sig0: list of rRnxSig
+        RINEX signal codes for APC reference (empty list for CoM)
 
     Returns
     -------
@@ -646,6 +648,28 @@ def antModelTx(nav, e, sigs, sat, time, rs):
     za = np.rad2deg(np.arccos(np.dot(ez, -e)))
     za_t = np.arange(ant.zen[0], ant.zen[1]+ant.zen[2], ant.zen[2])
 
+    # CoM offset of reference signals
+    #
+    off0 = np.zeros(3)
+    if sig0 is not None:
+
+        freq = [s.frequency() for s in sig0]
+        fac0 = [1.0 for s in sig0]
+
+        if len(freq) == 2:
+            fac0 = (+freq[0]**2/(freq[0]**2-freq[1]**2),
+                    -freq[1]**2/(freq[0]**2-freq[1]**2),)
+
+        for fac0_, sig0_ in zip(fac0, sig0):
+
+            # Substitute signal if not available
+            #
+            sig = substSigTx(ant, sig0_)
+
+            # Satellite PCO in local antenna frame
+            #
+            off0 += fac0_*ant.off[sig]
+
     # Interpolate PCV and map PCO on line-of-sight vector
     #
     dant = np.zeros(len(sigs))
@@ -657,7 +681,7 @@ def antModelTx(nav, e, sigs, sat, time, rs):
 
         # Satellite PCO in local antenna frame
         #
-        off = ant.off[sig]
+        off = ant.off[sig] - off0
 
         # Convert satellite PCO from antenna frame into ECEF frame
         #
