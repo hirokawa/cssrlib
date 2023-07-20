@@ -6,7 +6,7 @@ import numpy as np
 
 import cssrlib.gnss as gn
 from cssrlib.ephemeris import satposs
-from cssrlib.gnss import sat2id, sat2prn, uTYP, uGNSS
+from cssrlib.gnss import sat2id, sat2prn, rSigRnx, uTYP, uGNSS
 from cssrlib.gnss import time2str
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.peph import antModelRx, antModelTx
@@ -413,7 +413,7 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
                 if cs.cssrmode == 1:  # for Gal HAS (cycle -> m)
                     pbias *= lam
             # For Galileo HAS, switch the sign of the biases
-            if cs.cssrmode == 1:  
+            if cs.cssrmode == 1:
                 cbias *= -1
                 pbias *= -1
 
@@ -437,12 +437,24 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
         # cycle -> m
         phw = lam*nav.phw[sat-1]
 
+        # Select APC reference signals
+        #
+        if cs.cssrmode == 1:
+            if sys == uGNSS.GPS:
+                sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
+            elif sys == uGNSS.GAL:
+                sig0 = (rSigRnx("EC1C"), rSigRnx("EC7Q"))
+            else:
+                sig0 = None
+        else:
+            sig0 = None
+
         # Receiver antenna offset
         #
         antrPR = antModelRx(nav, pos, e[i, :], sigsPR)
         antrCP = antModelRx(nav, pos, e[i, :], sigsCP)
-        antsPR = antModelTx(nav, e[i, :], sigsPR, sat, obs.t, rs[i, :])
-        antsCP = antModelTx(nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
+        antsPR = antModelTx(nav, e[i, :], sigsPR, sat, obs.t, rs[i, :], sig0)
+        antsCP = antModelTx(nav, e[i, :], sigsCP, sat, obs.t, rs[i, :], sig0)
 
         # Range correction
         #
