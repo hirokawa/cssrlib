@@ -67,7 +67,7 @@ def eph2pos(t, eph, flg_v=False):
     cE = np.cos(E)
     dtc = dtadjust(t, eph.toc)
     dtrel = -2.0*np.sqrt(mu)*eph.e*np.sqrt(eph.A)*sE/rCST.CLIGHT**2
-    dts = eph.af0+eph.af1*dtc+eph.af2*dtc**2+dtrel
+    dts = eph.af0+eph.af1*dtc+eph.af2*dtc**2 + dtrel
 
     nus = np.sqrt(1.0-eph.e**2)*sE
     nuc = cE-eph.e
@@ -167,7 +167,9 @@ def satposs(obs, nav, cs=None, orb=None):
     dts = np.zeros(n)
     svh = np.zeros(n, dtype=int)
     iode = -1
+
     for i in range(n):
+
         sat = obs.sat[i]
         sys, _ = sat2prn(sat)
         if sys not in obs.sig.keys():

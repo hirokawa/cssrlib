@@ -371,7 +371,8 @@ class peph:
         # differentiation
         #
         if dtss[0] != 0.0:
-            dts[0] = dtss[0] - 2.0*(rs[0:3]@rs[3:6])/(rCST.CLIGHT**2)
+            dt_rel = - 2.0*(rs[0:3]@rs[3:6])/(rCST.CLIGHT**2)
+            dts[0] = dtss[0] + dt_rel
             dts[1] = (dtst[0]-dtss[0])/tt
         else:
             dts = dtss
