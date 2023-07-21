@@ -354,6 +354,11 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
         if svh[i] > 0 or sys not in obs.sig.keys() or sat in nav.excl_sat:
             continue
 
+        # Check for valid orbit and clock offset
+        #
+        if np.isnan(rs[i, :].any()) or np.isnan(dts[i]):
+            continue
+
         # Check for measurement consistency
         #
         flg_m = True
@@ -367,6 +372,8 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
         if obs.S[i, 0] < nav.cnr_min:
             flg_m = False
 
+        # Skip flagged satellites
+        #
         if flg_m is False:
             continue
 
