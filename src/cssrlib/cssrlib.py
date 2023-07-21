@@ -204,6 +204,7 @@ def ssig2rsig(sys: sGNSS, utyp: uTYP, ssig):
         sSigGPS.L5Q: uSIG.L5Q,
         sSigGPS.L5X: uSIG.L5X,
     }
+
     glo_tbl = {
         sSigGLO.L1C: uSIG.L1C,
         sSigGLO.L1P: uSIG.L1P,
@@ -405,7 +406,8 @@ class cssr:
     def sval(self, u, n, scl):
         """ calculate signed value based on n-bit int, lsb """
         invalid = -(2**(n-1)-1)
-        y = np.nan if u == invalid else u*scl
+        dnu = -(2**(n-1))
+        y = np.nan if u == invalid or u == dnu else u*scl
         return y
 
     def isset(self, mask, nbit, k):
@@ -543,25 +545,28 @@ class cssr:
     def decode_orb_sat(self, msg, i, k, sys=uGNSS.NONE, inet=0):
         """ decoder orbit correction of cssr """
         n = 10 if sys == uGNSS.GAL else 8
-        fmt = 'u{:d}s{:d}s{:d}s{:d}'.format(n,
-                                            self.dorb_blen[0], self.dorb_blen[1], self.dorb_blen[2])
+        fmt = 'u{:d}s{:d}s{:d}s{:d}'\
+            .format(n, self.dorb_blen[0], self.dorb_blen[1], self.dorb_blen[2])
         v = bs.unpack_from_dict(fmt, ['iode', 'dx', 'dy', 'dz'], msg, i)
-        self.lc[inet].iode[k] = v['iode']
 
-        self.lc[inet].dorb[k, 0] = self.sval(
-            v['dx'], self.dorb_blen[0], self.dorb_scl[0])
-        self.lc[inet].dorb[k, 1] = self.sval(
-            v['dy'], self.dorb_blen[1], self.dorb_scl[1])
-        self.lc[inet].dorb[k, 2] = self.sval(
-            v['dz'], self.dorb_blen[2], self.dorb_scl[2])
+        self.lc[inet].iode[k] = v['iode']
+        self.lc[inet].dorb[k, 0] = \
+            self.sval(v['dx'], self.dorb_blen[0], self.dorb_scl[0])
+        self.lc[inet].dorb[k, 1] = \
+            self.sval(v['dy'], self.dorb_blen[1], self.dorb_scl[1])
+        self.lc[inet].dorb[k, 2] = \
+            self.sval(v['dz'], self.dorb_blen[2], self.dorb_scl[2])
+
         i += n + self.dorb_blen[0]+self.dorb_blen[1]+self.dorb_blen[2]
         return i
 
     def decode_clk_sat(self, msg, i, k, inet=0):
         """ decoder clock correction of cssr """
         v = bs.unpack_from_dict('s'+str(self.dclk_blen), ['dclk'], msg, i)
-        self.lc[inet].dclk[k] = self.sval(
-            v['dclk'], self.dclk_blen, self.dclk_scl)
+
+        self.lc[inet].dclk[k] = \
+            self.sval(v['dclk'], self.dclk_blen, self.dclk_scl)
+
         if self.cssrmode == 1:  # HAS only
             self.lc[inet].dclk[k] *= self.dcm[self.gnss_n[k]]
 
@@ -571,8 +576,8 @@ class cssr:
     def decode_cbias_sat(self, msg, i, k, j, inet=0):
         """ decoder code bias correction of cssr """
         v = bs.unpack_from_dict('s'+str(self.cb_blen), ['cbias'], msg, i)
-        self.lc[inet].cbias[k, j] = self.sval(
-            v['cbias'], self.cb_blen, self.cb_scl)
+        self.lc[inet].cbias[k, j] = \
+            self.sval(v['cbias'], self.cb_blen, self.cb_scl)
         i += self.cb_blen
         return i
 
@@ -580,8 +585,8 @@ class cssr:
         """ decoder phase bias correction of cssr """
         v = bs.unpack_from_dict('s'+str(self.pb_blen) +
                                 'u2', ['pbias', 'di'], msg, i)
-        self.lc[inet].pbias[k, j] = self.sval(
-            v['pbias'], self.pb_blen, self.pb_scl)
+        self.lc[inet].pbias[k, j] = \
+            self.sval(v['pbias'], self.pb_blen, self.pb_scl)
         self.lc[inet].di[k, j] = v['di']
         i += self.pb_blen + 2
         return i
@@ -602,7 +607,7 @@ class cssr:
                 j = self.sat_n_p.index(self.sat_n[k])
                 self.lc[inet].dorb_d[k, :] = self.lc[inet].dorb[k, :] \
                     - dorb_p[j, :]
-                    
+
         self.lc[inet].cstat |= (1 << sCType.ORBIT)
         self.lc[inet].t0[sCType.ORBIT] = self.time
         return i
@@ -616,8 +621,8 @@ class cssr:
 
         if self.cssrmode == 1:  # HAS only
             for k in range(self.ngnss):
-                self.dcm[self.gnss_idx[k]] = bs.unpack_from('u2', msg, i)[
-                    0]+1.0
+                self.dcm[self.gnss_idx[k]] = \
+                    bs.unpack_from('u2', msg, i)[0]+1.0
                 i += 2
 
         dclk_p = self.lc[inet].dclk
@@ -628,7 +633,7 @@ class cssr:
             if self.sat_n[k] in self.sat_n_p:
                 j = self.sat_n_p.index(self.sat_n[k])
                 self.lc[inet].dclk_d[k] = self.lc[inet].dclk[k]-dclk_p[j]
-                
+
         if self.cssrmode == 1:  # HAS only
             self.sat_n_p = self.sat_n
         self.lc[inet].cstat |= (1 << sCType.CLOCK)
