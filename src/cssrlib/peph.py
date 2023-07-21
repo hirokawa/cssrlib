@@ -781,8 +781,13 @@ def apc2com(nav, sat, time, rs, sigs):
     A = orb2ecef(time, rs)
 
     freq = [s.frequency() for s in sigs]
-    facs = (+freq[0]**2/(freq[0]**2-freq[1]**2),
-            -freq[1]**2/(freq[0]**2-freq[1]**2),)
+    if len(sigs) == 1:
+        facs = (1.0,)
+    elif len(sigs) == 2:
+        f12 = (freq[0]**2-freq[1]**2)
+        facs = (+freq[0]**2/f12, -freq[1]**2/f12)
+    else:
+        return None
 
     # Interpolate PCV and map PCO on line-of-sight vector
     #
