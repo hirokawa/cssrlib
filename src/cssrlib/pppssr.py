@@ -12,7 +12,7 @@ from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.peph import antModelRx
 from cssrlib.rtk import IB, ddcov, resamb_lambda, valpos, holdamb, initx
 from cssrlib.rtk import varerr
-from cssrlib.cssrlib import ssig2rsig, sCType, sSigGPS
+from cssrlib.cssrlib import sCType, sSigGPS
 
 
 def IT(na):
@@ -370,13 +370,6 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
         if flg_m is False:
             continue
 
-        # Geometric distance corrected for Earth rotation during flight time
-        #
-        r, e[i, :] = gn.geodist(rs[i, :], rr_)
-        _, el[i] = gn.satazel(pos, e[i, :])
-        if el[i] < nav.elmin:
-            continue
-
         # Pseudorange and carrier-phase signals
         #
         sigsPR = obs.sig[sys][gn.uTYP.C]
@@ -385,34 +378,52 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
         # Wavelength
         lam = np.array([s.wavelength() for s in sigsCP])
 
+        cbias = np.zeros(nav.nf)
+        pbias = np.zeros(nav.nf)
+
         if nav.ephopt == 4:
             # Code and phase signal bias, converted from [ns] to [m]
             #
             cbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
             pbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
         else:  # from CSSR
-            idx_n = np.where(cs.sat_n == sat)[0][0]
+            idx_n_ = np.where(cs.sat_n == sat)[0]
+            if len(idx_n_) == 0:
+                continue
+            idx_n = idx_n_[0]
+            
             kidx = [-1]*nav.nf
             nsig = 0
             for k, sig in enumerate(cs.sig_n[idx_n]):
+                if sig < 0:
+                    continue
                 for f in range(nav.nf):
                     if cs.cssrmode == 1 and sys == uGNSS.GPS and sig == sSigGPS.L2P:
                         sig = sSigGPS.L2W  # work-around
-                    if ssig2rsig(sys, uTYP.C, sig) == sigsPR[f]:
+                    if cs.ssig2rsig(sys, uTYP.C, sig) == sigsPR[f]:
                         kidx[f] = k
                         nsig += 1
-            if nsig < nav.nf:
+                    elif cs.ssig2rsig(sys, uTYP.C, sig) == sigsPR[f].toAtt('X'):
+                        kidx[f] = k
+                        nsig += 1  
+            if nsig >= nav.nf:
+                if cs.lc[0].cstat & (1 << sCType.CBIAS) == (1 << sCType.CBIAS):
+                    cbias = cs.lc[0].cbias[idx_n][kidx]
+                if cs.lc[0].cstat & (1 << sCType.PBIAS) == (1 << sCType.PBIAS):
+                    pbias = cs.lc[0].pbias[idx_n][kidx]
+                    if cs.cssrmode == 1:  # for Gal HAS (cycle -> m)
+                        pbias *= lam
+
+            if np.all(cs.lc[0].dorb[idx_n] == np.array([0.0, 0.0, 0.0])):
                 continue
-
-            cbias = np.zeros(nav.nf)
-            pbias = np.zeros(nav.nf)
-            if cs.lc[0].cstat & (1 << sCType.CBIAS) == (1 << sCType.CBIAS):
-                cbias = cs.lc[0].cbias[idx_n][kidx]
-            if cs.lc[0].cstat & (1 << sCType.PBIAS) == (1 << sCType.PBIAS):
-                pbias = cs.lc[0].pbias[idx_n][kidx]
-                if cs.cssrmode == 1:  # for Gal HAS (cycle -> m)
-                    pbias *= lam
-
+          
+        # Geometric distance corrected for Earth rotation during flight time
+        #
+        r, e[i, :] = gn.geodist(rs[i, :], rr_)
+        _, el[i] = gn.satazel(pos, e[i, :])
+        if el[i] < nav.elmin:
+            continue  
+          
         # Shapipo relativistic effect
         #
         relatv = shapiro(rs[i, :], rr_)
