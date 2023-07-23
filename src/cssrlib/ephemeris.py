@@ -197,10 +197,11 @@ def satposs(obs, nav, cs=None, orb=None):
                 dorb = cs.lc[0].dorb[idx, :]
 
                 if cs.cssrmode == 1:  # HAS only
-                    if sat not in cs.sat_n_p:
-                        continue
-                    idx = cs.sat_n_p.index(sat)
-
+                    if cs.mask_id != cs.mask_id_clk:  # mask has changed
+                        if sat not in cs.sat_n_p:
+                            continue
+                        idx = cs.sat_n_p.index(sat)
+                
                 dclk = cs.lc[0].dclk[idx]
                 mode = cs.nav_mode[sys]
             else:
@@ -235,15 +236,15 @@ def satposs(obs, nav, cs=None, orb=None):
                 dts[i] += dclk/rCST.CLIGHT
 
                 ers = vnorm(rs[i, :]-nav.x[0:3])
-                dorb = ers@dorb_e
-                sis = dclk-dorb
+                dorb_ = ers@dorb_e
+                sis = dclk-dorb_
                 if cs.lc[0].t0[1].time % 30 == 0 and \
                         timediff(cs.lc[0].t0[1], nav.time_p) > 0:
                     if abs(nav.sis[sat]) > 0:
                         nav.dsis[sat] = sis - nav.sis[sat]
                     nav.sis[sat] = sis
 
-                nav.dorb[sat] = dorb
+                nav.dorb[sat] = dorb_
                 nav.dclk[sat] = dclk
     if cs is not None:
         nav.time_p = cs.lc[0].t0[1]

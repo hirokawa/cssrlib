@@ -187,120 +187,7 @@ def sys2sgnss(sys: uGNSS):
     return sgnss_tbl[sys]
 
 
-def ssig2rsig(sys: sGNSS, utyp: uTYP, ssig):
-    gps_tbl = {
-        sSigGPS.L1C: uSIG.L1C,
-        sSigGPS.L1P: uSIG.L1P,
-        sSigGPS.L1W: uSIG.L1W,
-        sSigGPS.L1S: uSIG.L1S,
-        sSigGPS.L1L: uSIG.L1L,
-        sSigGPS.L1X: uSIG.L1X,
-        sSigGPS.L2S: uSIG.L2S,
-        sSigGPS.L2L: uSIG.L2L,
-        sSigGPS.L2X: uSIG.L2X,
-        sSigGPS.L2P: uSIG.L2P,
-        sSigGPS.L2W: uSIG.L2W,
-        sSigGPS.L5I: uSIG.L5I,
-        sSigGPS.L5Q: uSIG.L5Q,
-        sSigGPS.L5X: uSIG.L5X,
-    }
-    glo_tbl = {
-        sSigGLO.L1C: uSIG.L1C,
-        sSigGLO.L1P: uSIG.L1P,
-        sSigGLO.L2C: uSIG.L2C,
-        sSigGLO.L2P: uSIG.L2P,
-        sSigGLO.L4A: uSIG.L4A,
-        sSigGLO.L4B: uSIG.L4B,
-        sSigGLO.L4X: uSIG.L4X,
-        sSigGLO.L6A: uSIG.L6A,
-        sSigGLO.L6B: uSIG.L6B,
-        sSigGLO.L6X: uSIG.L6X,
-        sSigGLO.L3I: uSIG.L3I,
-        sSigGLO.L3Q: uSIG.L3Q,
-        sSigGLO.L3X: uSIG.L3X,
-    }
-
-    gal_tbl = {
-        sSigGAL.L1B: uSIG.L1B,
-        sSigGAL.L1C: uSIG.L1C,
-        sSigGAL.L1X: uSIG.L1X,
-        sSigGAL.L5I: uSIG.L5I,
-        sSigGAL.L5Q: uSIG.L5Q,
-        sSigGAL.L5X: uSIG.L5X,
-        sSigGAL.L7I: uSIG.L7I,
-        sSigGAL.L7Q: uSIG.L7Q,
-        sSigGAL.L7X: uSIG.L7X,
-        sSigGAL.L8I: uSIG.L8I,
-        sSigGAL.L8Q: uSIG.L8Q,
-        sSigGAL.L8X: uSIG.L8X,
-        sSigGAL.L6B: uSIG.L6B,
-        sSigGAL.L6C: uSIG.L6C,
-        sSigGAL.L6X: uSIG.L6X,
-    }
-
-    bds_tbl = {
-        sSigBDS.L2I: uSIG.L2I,
-        sSigBDS.L2Q: uSIG.L2Q,
-        sSigBDS.L2X: uSIG.L2X,
-        sSigBDS.L6I: uSIG.L6I,
-        sSigBDS.L6Q: uSIG.L6Q,
-        sSigBDS.L6X: uSIG.L6X,
-        sSigBDS.L7I: uSIG.L7I,
-        sSigBDS.L7Q: uSIG.L7Q,
-        sSigBDS.L7X: uSIG.L7X,
-        sSigBDS.L1D: uSIG.L1D,
-        sSigBDS.L1P: uSIG.L1P,
-        sSigBDS.L1X: uSIG.L1X,
-        sSigBDS.L5D: uSIG.L5D,
-        sSigBDS.L5P: uSIG.L5P,
-        sSigBDS.L5X: uSIG.L5X,
-    }
-
-    qzs_tbl = {
-        sSigQZS.L1C: uSIG.L1C,
-        sSigQZS.L1S: uSIG.L1S,
-        sSigQZS.L1L: uSIG.L1C,
-        sSigQZS.L1X: uSIG.L1X,
-        sSigQZS.L2S: uSIG.L2S,
-        sSigQZS.L2L: uSIG.L2L,
-        sSigQZS.L2X: uSIG.L2X,
-        sSigQZS.L5I: uSIG.L5I,
-        sSigQZS.L5Q: uSIG.L5Q,
-        sSigQZS.L5X: uSIG.L5X,
-        sSigQZS.L6D: uSIG.L6D,
-        sSigQZS.L6P: uSIG.L6P,
-        sSigQZS.L6E: uSIG.L6E,
-        sSigQZS.L1E: uSIG.L1E,
-    }
-
-    sbs_tbl = {
-        sSigSBS.L1C: uSIG.L1C,
-        sSigSBS.L5I: uSIG.L5I,
-        sSigSBS.L5Q: uSIG.L5Q,
-        sSigSBS.L5X: uSIG.L5X,
-    }
-
-    irn_tbl = {
-        sSigIRN.L1D: uSIG.L1D,
-        sSigIRN.L1P: uSIG.L1P,
-        sSigIRN.L1X: uSIG.L1X,
-        sSigIRN.L5X: uSIG.L5X,
-        sSigIRN.L9A: uSIG.L9A,
-    }
-
-    usig_tbl_ = {
-        uGNSS.GPS: gps_tbl,
-        uGNSS.GLO: glo_tbl,
-        uGNSS.GAL: gal_tbl,
-        uGNSS.BDS: bds_tbl,
-        uGNSS.QZS: qzs_tbl,
-        uGNSS.SBS: sbs_tbl,
-        uGNSS.IRN: irn_tbl,
-    }
-
-    usig_tbl = usig_tbl_[sys]
-    return rSigRnx(sys, utyp, usig_tbl[ssig])
-
+    
 
 class local_corr:
     """ class for local corrections """
@@ -342,6 +229,8 @@ class cssr:
         self.week = -1
         self.tow0 = -1
         self.iodssr = -1
+        self.mask_id = -1
+        self.mask_id_clk = -1
         self.msgtype = 4073
         self.subtype = 0
         self.svmask = [-1, -1, -1, -1]
@@ -349,7 +238,6 @@ class cssr:
         self.sys_n = []
         self.sat_n = []
         self.nsig_n = []
-        self.iodssr = -1
         self.nsig_total = 0
         self.sig_n = []
         self.dorb = []
@@ -401,6 +289,120 @@ class cssr:
         # default navigation message mode: 0:LNAV/INAV, 1: CNAV/CNAV1
         self.nav_mode = {uGNSS.GPS: 0, uGNSS.QZS: 0,
                          uGNSS.GAL: 0, uGNSS.BDS: 1}
+
+    def ssig2rsig(self, sys : sGNSS, utyp: uTYP, ssig):
+        gps_tbl = {
+            sSigGPS.L1C: uSIG.L1C,
+            sSigGPS.L1P: uSIG.L1P,
+            sSigGPS.L1W: uSIG.L1W,
+            sSigGPS.L1S: uSIG.L1S,
+            sSigGPS.L1L: uSIG.L1L,
+            sSigGPS.L1X: uSIG.L1X,
+            sSigGPS.L2S: uSIG.L2S,
+            sSigGPS.L2L: uSIG.L2L,
+            sSigGPS.L2X: uSIG.L2X,
+            sSigGPS.L2P: uSIG.L2P,
+            sSigGPS.L2W: uSIG.L2W,
+            sSigGPS.L5I: uSIG.L5I,
+            sSigGPS.L5Q: uSIG.L5Q,
+            sSigGPS.L5X: uSIG.L5X,
+        }
+        glo_tbl = {
+            sSigGLO.L1C: uSIG.L1C,
+            sSigGLO.L1P: uSIG.L1P,
+            sSigGLO.L2C: uSIG.L2C,
+            sSigGLO.L2P: uSIG.L2P,
+            sSigGLO.L4A: uSIG.L4A,
+            sSigGLO.L4B: uSIG.L4B,
+            sSigGLO.L4X: uSIG.L4X,
+            sSigGLO.L6A: uSIG.L6A,
+            sSigGLO.L6B: uSIG.L6B,
+            sSigGLO.L6X: uSIG.L6X,
+            sSigGLO.L3I: uSIG.L3I,
+            sSigGLO.L3Q: uSIG.L3Q,
+            sSigGLO.L3X: uSIG.L3X,
+        }
+        
+        gal_tbl = {
+            sSigGAL.L1B: uSIG.L1B,
+            sSigGAL.L1C: uSIG.L1C,
+            sSigGAL.L1X: uSIG.L1X,
+            sSigGAL.L5I: uSIG.L5I,
+            sSigGAL.L5Q: uSIG.L5Q,
+            sSigGAL.L5X: uSIG.L5X,
+            sSigGAL.L7I: uSIG.L7I,
+            sSigGAL.L7Q: uSIG.L7Q,
+            sSigGAL.L7X: uSIG.L7X,
+            sSigGAL.L8I: uSIG.L8I,
+            sSigGAL.L8Q: uSIG.L8Q,
+            sSigGAL.L8X: uSIG.L8X,
+            sSigGAL.L6B: uSIG.L6B,
+            sSigGAL.L6C: uSIG.L6C,
+            sSigGAL.L6X: uSIG.L6X,
+        }
+        
+        bds_tbl = {
+            sSigBDS.L2I: uSIG.L2I,
+            sSigBDS.L2Q: uSIG.L2Q,
+            sSigBDS.L2X: uSIG.L2X,
+            sSigBDS.L6I: uSIG.L6I,
+            sSigBDS.L6Q: uSIG.L6Q,
+            sSigBDS.L6X: uSIG.L6X,
+            sSigBDS.L7I: uSIG.L7I,
+            sSigBDS.L7Q: uSIG.L7Q,
+            sSigBDS.L7X: uSIG.L7X,
+            sSigBDS.L1D: uSIG.L1D,
+            sSigBDS.L1P: uSIG.L1P,
+            sSigBDS.L1X: uSIG.L1X,
+            sSigBDS.L5D: uSIG.L5D,
+            sSigBDS.L5P: uSIG.L5P,
+            sSigBDS.L5X: uSIG.L5X,
+        }
+        
+        qzs_tbl = {
+            sSigQZS.L1C: uSIG.L1C,
+            sSigQZS.L1S: uSIG.L1S,
+            sSigQZS.L1L: uSIG.L1C,
+            sSigQZS.L1X: uSIG.L1X,
+            sSigQZS.L2S: uSIG.L2S,
+            sSigQZS.L2L: uSIG.L2L,
+            sSigQZS.L2X: uSIG.L2X,
+            sSigQZS.L5I: uSIG.L5I,
+            sSigQZS.L5Q: uSIG.L5Q,
+            sSigQZS.L5X: uSIG.L5X,
+            sSigQZS.L6D: uSIG.L6D,
+            sSigQZS.L6P: uSIG.L6P,
+            sSigQZS.L6E: uSIG.L6E,
+            sSigQZS.L1E: uSIG.L1E,
+        }
+            
+        sbs_tbl = {
+            sSigSBS.L1C: uSIG.L1C,
+            sSigSBS.L5I: uSIG.L5I,
+            sSigSBS.L5Q: uSIG.L5Q,
+            sSigSBS.L5X: uSIG.L5X,
+        }
+        
+        irn_tbl = {
+            sSigIRN.L1D: uSIG.L1D,
+            sSigIRN.L1P: uSIG.L1P,
+            sSigIRN.L1X: uSIG.L1X,
+            sSigIRN.L5X: uSIG.L5X,
+            sSigIRN.L9A: uSIG.L9A,
+        }
+        
+        usig_tbl_ = {
+            uGNSS.GPS: gps_tbl,
+            uGNSS.GLO: glo_tbl,
+            uGNSS.GAL: gal_tbl,
+            uGNSS.BDS: bds_tbl,
+            uGNSS.QZS: qzs_tbl,
+            uGNSS.SBS: sbs_tbl,
+            uGNSS.IRN: irn_tbl,
+        }
+             
+        usig_tbl = usig_tbl_[sys] 
+        return rSigRnx(sys, utyp, usig_tbl[ssig])
 
     def sval(self, u, n, scl):
         """ calculate signed value based on n-bit int, lsb """
@@ -628,9 +630,8 @@ class cssr:
             if self.sat_n[k] in self.sat_n_p:
                 j = self.sat_n_p.index(self.sat_n[k])
                 self.lc[inet].dclk_d[k] = self.lc[inet].dclk[k]-dclk_p[j]
-                
-        if self.cssrmode == 1:  # HAS only
-            self.sat_n_p = self.sat_n
+
+        self.sat_n_p = self.sat_n
         self.lc[inet].cstat |= (1 << sCType.CLOCK)
         self.lc[inet].t0[sCType.CLOCK] = self.time
         return i

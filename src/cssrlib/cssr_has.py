@@ -71,24 +71,23 @@ class cssr_has(cssr):
             return False
         # time of hour
         # flags: mask, orbit, clock, clock subset, cbias, pbias, mask_id, iodset_id
-        self.toh,flags,res,self.mask_id,self.iodssr=bs.unpack_from('u12u6u4u5u5',msg,i)  
+        self.toh,flags,res,mask_id,self.iodssr=bs.unpack_from('u12u6u4u5u5',msg,i)  
         i+=32
         
         if self.mon_level>0:
-            print("TOH={:6d} flags={:12s} mask_id={:2d} iod_s={:1d}".format(self.toh,bin(flags),self.mask_id,self.iodssr))
+            print("TOH={:6d} flags={:12s} mask_id={:2d} iod_s={:1d}".format(self.toh,bin(flags),mask_id,self.iodssr))
 
         if self.toh>=3600:
             print(f"invalid TOH={self.toh}")
             return False
-        
-        if self.toh >= 250:
-            self.toh
-                
+                        
         if (flags>>5)&1: # mask block
+            self.mask_id = mask_id
             i = self.decode_cssr_mask(msg, i)
         if (flags>>4)&1: # orbit block
             i = self.decode_cssr_orb(msg, i)
         if (flags>>3)&1: # clock block
+            self.mask_id_clk = mask_id
             i = self.decode_cssr_clk(msg, i)
         if (flags>>2)&1: # clock subset block
             i = self.decode_cssr_clk_sub(msg, i)
