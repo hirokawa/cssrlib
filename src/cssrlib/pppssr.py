@@ -13,6 +13,7 @@ from cssrlib.peph import antModelRx, antModelTx
 from cssrlib.rtk import IB, ddcov, resamb_lambda, valpos, holdamb, initx
 from cssrlib.rtk import varerr
 from cssrlib.cssrlib import sCType, sSigGPS
+from cssrlib.cssrlib import sCSSRTYPE as sc
 
 
 def IT(na):
@@ -398,43 +399,46 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
             if len(idx_n_) == 0:
                 continue
             idx_n = idx_n_[0]
-            
+
             kidx = [-1]*nav.nf
             nsig = 0
             for k, sig in enumerate(cs.sig_n[idx_n]):
                 if sig < 0:
                     continue
                 for f in range(nav.nf):
-                    if cs.cssrmode == 1 and sys == uGNSS.GPS and sig == sSigGPS.L2P:
+                    if cs.cssrmode == sc.GAL_HAS and sys == uGNSS.GPS and sig == sSigGPS.L2P:
                         sig = sSigGPS.L2W  # work-around
                     if cs.ssig2rsig(sys, uTYP.C, sig) == sigsPR[f]:
                         kidx[f] = k
                         nsig += 1
                     elif cs.ssig2rsig(sys, uTYP.C, sig) == sigsPR[f].toAtt('X'):
                         kidx[f] = k
-                        nsig += 1  
+                        nsig += 1
             if nsig >= nav.nf:
                 if cs.lc[0].cstat & (1 << sCType.CBIAS) == (1 << sCType.CBIAS):
                     cbias = cs.lc[0].cbias[idx_n][kidx]
                 if cs.lc[0].cstat & (1 << sCType.PBIAS) == (1 << sCType.PBIAS):
                     pbias = cs.lc[0].pbias[idx_n][kidx]
-                    if cs.cssrmode == 1:  # for Gal HAS (cycle -> m)
-                        pbias *= lam
-                # For Galileo HAS, switch the sign of the biases
-                if cs.cssrmode == 1:
+
+                # For QZSS MADOCA and Galileo HAS, switch the sign of the biases
+                if cs.cssrmode == sc.GAL_HAS or cs.cssrmode == sc.QZS_MADOCA:
                     cbias *= -1
                     pbias *= -1
-                    
+
+                # For Galileo HAS, convert from cycles to meters
+                if cs.cssrmode == sc.GAL_HAS:
+                    pbias *= lam
+
             if np.all(cs.lc[0].dorb[idx_n] == np.array([0.0, 0.0, 0.0])):
                 continue
-          
+
         # Geometric distance corrected for Earth rotation during flight time
         #
         r, e[i, :] = gn.geodist(rs[i, :], rr_)
         _, el[i] = gn.satazel(pos, e[i, :])
         if el[i] < nav.elmin:
-            continue  
-          
+            continue
+
         # Shapipo relativistic effect
         #
         relatv = shapiro(rs[i, :], rr_)
@@ -457,7 +461,7 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
 
         # Select APC reference signals
         #
-        if cs.cssrmode == 1:
+        if cs.cssrmode == sc.GAL_HAS:
             if sys == uGNSS.GPS:
                 sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
             elif sys == uGNSS.GAL:

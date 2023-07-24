@@ -8,6 +8,15 @@ from enum import IntEnum
 from cssrlib.gnss import gpst2time, rCST, prn2sat, uGNSS, gtime_t, rSigRnx, uSIG, uTYP
 
 
+class sCSSRTYPE(IntEnum):
+    QZS_CLAS = 0
+    QZS_MADOCA = 1
+    GAL_HAS = 2
+    BDS_PPP = 3
+    IGS_SSR = 4
+    RTCM3_SSR = 5
+
+
 class sGNSS(IntEnum):
     """ class to define GNSS """
     GPS = 0
@@ -222,7 +231,7 @@ class cssr:
 
     def __init__(self):
         """ constructor of cssr """
-        self.cssrmode = 0  # 0: original, 1: Galileo HAS
+        self.cssrmode = sCSSRTYPE.QZS_CLAS
         self.monlevel = 0
         self.week = -1
         self.tow0 = -1
@@ -530,11 +539,11 @@ class cssr:
                     self.nsig_total = self.nsig_total+nsig
                     self.sig_n.append(sig)
 
-            if self.cssrmode == 1:  # HAS only
+            if self.cssrmode == sCSSRTYPE.GAL_HAS:  # HAS only
                 self.nm_idx[v['gnssid']] = bs.unpack_from('u3', msg, i)[0]
                 i += 3
 
-        if self.cssrmode == 1:  # HAS only
+        if self.cssrmode == sCSSRTYPE.GAL_HAS:  # HAS only
             i += 6
 
         self.lc[0].cstat |= (1 << sCType.MASK)
@@ -566,7 +575,7 @@ class cssr:
         self.lc[inet].dclk[k] = \
             self.sval(v['dclk'], self.dclk_blen, self.dclk_scl)
 
-        if self.cssrmode == 1:  # HAS only
+        if self.cssrmode == sCSSRTYPE.GAL_HAS:  # HAS only
             self.lc[inet].dclk[k] *= self.dcm[self.gnss_n[k]]
 
         i += self.dclk_blen
@@ -618,7 +627,7 @@ class cssr:
         if self.iodssr != head['iodssr']:
             return -1
 
-        if self.cssrmode == 1:  # HAS only
+        if self.cssrmode == sCSSRTYPE.GAL_HAS:  # HAS only
             for k in range(self.ngnss):
                 self.dcm[self.gnss_idx[k]] = \
                     bs.unpack_from('u2', msg, i)[0]+1.0
@@ -633,7 +642,7 @@ class cssr:
                 j = self.sat_n_p.index(self.sat_n[k])
                 self.lc[inet].dclk_d[k] = self.lc[inet].dclk[k]-dclk_p[j]
 
-        if self.cssrmode == 1:  # HAS only
+        if self.cssrmode == sCSSRTYPE.GAL_HAS:  # HAS only
             self.sat_n_p = self.sat_n
         self.lc[inet].cstat |= (1 << sCType.CLOCK)
         self.lc[inet].t0[sCType.CLOCK] = self.time
