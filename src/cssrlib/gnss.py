@@ -605,7 +605,7 @@ class Nav():
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
         self.pmode = 1  # 0: static, 1: kinematic
         self.ephopt = 2  # ephemeris option 0: BRDC, 1: SBAS, 2: SSR-APC,
-                         #                  3: SSR-CG, 4: PREC
+        #                  3: SSR-CG, 4: PREC
 
         self.monlevel = 1
         self.cnr_min = 35
@@ -627,18 +627,9 @@ class Nav():
         self.outc = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
         # Carrier-phase processed indicator
         self.vsat = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
-        # ??? set but not used
-        self.lock = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
-        # ??? not used
-        self.slip = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
 
         self.tt = 0
         self.t = gtime_t()
-
-
-def leaps(tgps):
-    """ return leap seconds (TBD) """
-    return -18.0
 
 
 def epoch2time(ep):
@@ -660,10 +651,39 @@ def epoch2time(ep):
     return time
 
 
-def gpst2utc(tgps, leaps_=-18):
-    """ calculate UTC-time from gps-time """
-    tutc = timeadd(tgps, leaps_)
-    return tutc
+leaps_ = [[2017, 1, 1, 0, 0, 0, -18],
+          [2015, 7, 1, 0, 0, 0, -17],
+          [2012, 7, 1, 0, 0, 0, -16],
+          [2009, 1, 1, 0, 0, 0, -15],
+          [2006, 1, 1, 0, 0, 0, -14],
+          [1999, 1, 1, 0, 0, 0, -13],
+          [1997, 7, 1, 0, 0, 0, -12],
+          [1996, 1, 1, 0, 0, 0, -11],
+          [1994, 7, 1, 0, 0, 0, -10],
+          [1993, 7, 1, 0, 0, 0, -9],
+          [1992, 7, 1, 0, 0, 0, -8],
+          [1991, 1, 1, 0, 0, 0, -7],
+          [1990, 1, 1, 0, 0, 0, -6],
+          [1988, 1, 1, 0, 0, 0, -5],
+          [1985, 7, 1, 0, 0, 0, -4],
+          [1983, 7, 1, 0, 0, 0, -3],
+          [1982, 7, 1, 0, 0, 0, -2],
+          [1981, 7, 1, 0, 0, 0, -1]]
+
+
+def gpst2utc(t: gtime_t):
+    for i in range(len(leaps_)):
+        tu = timeadd(t, leaps_[i][6])
+        if timediff(tu, epoch2time(leaps_[i])) >= 0.0:
+            return tu
+    return t
+
+
+def utc2gpst(t: gtime_t):
+    for i in range(len(leaps_)):
+        if timediff(t, epoch2time(leaps_[i])) >= 0.0:
+            return timeadd(t, -leaps_[i][6])
+    return t
 
 
 def timeadd(t: gtime_t, sec: float):

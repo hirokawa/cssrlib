@@ -67,7 +67,7 @@ def eph2pos(t, eph, flg_v=False):
     cE = np.cos(E)
     dtc = dtadjust(t, eph.toc)
     dtrel = -2.0*np.sqrt(mu)*eph.e*np.sqrt(eph.A)*sE/rCST.CLIGHT**2
-    dts = eph.af0+eph.af1*dtc+eph.af2*dtc**2+dtrel
+    dts = eph.af0+eph.af1*dtc+eph.af2*dtc**2 + dtrel
 
     nus = np.sqrt(1.0-eph.e**2)*sE
     nuc = cE-eph.e
@@ -167,7 +167,9 @@ def satposs(obs, nav, cs=None, orb=None):
     dts = np.zeros(n)
     svh = np.zeros(n, dtype=int)
     iode = -1
+
     for i in range(n):
+
         sat = obs.sat[i]
         sys, _ = sat2prn(sat)
         if sys not in obs.sig.keys():
@@ -190,8 +192,10 @@ def satposs(obs, nav, cs=None, orb=None):
         else:
 
             if cs is not None:
+
                 if sat not in cs.sat_n:
                     continue
+
                 idx = cs.sat_n.index(sat)
                 iode = cs.lc[0].iode[idx]
                 dorb = cs.lc[0].dorb[idx, :]
@@ -204,13 +208,16 @@ def satposs(obs, nav, cs=None, orb=None):
                 
                 dclk = cs.lc[0].dclk[idx]
                 mode = cs.nav_mode[sys]
+
             else:
+
                 mode = 0
 
             eph = findeph(nav.eph, t, sat, iode, mode=mode)
             if eph is None:
                 svh[i] = 1
                 continue
+
             svh[i] = eph.svh
             dt = eph2clk(t, eph)
 
@@ -224,15 +231,25 @@ def satposs(obs, nav, cs=None, orb=None):
             dts[i] = dts_[0]
 
         else:
+
             rs[i, :], vs[i, :], dts[i] = eph2pos(t, eph, True)
-            if cs is not None:  # apply SSR correction
+
+            # Apply SSR correction
+            #
+            if cs is not None:
+
                 ea = vnorm(vs[i, :])
                 rc = np.cross(rs[i, :], vs[i, :])
                 ec = vnorm(rc)
                 er = np.cross(ea, ec)
                 dorb_e = -dorb@[er, ea, ec]
 
-                rs[i, :] += dorb_e
+                # For Galileo HAS, switch the sign of the orbit corrections
+                #
+                if cs.cssrmode == 1:
+                    rs[i, :] -= dorb_e
+                else:
+                    rs[i, :] += dorb_e
                 dts[i] += dclk/rCST.CLIGHT
 
                 ers = vnorm(rs[i, :]-nav.x[0:3])
@@ -246,6 +263,7 @@ def satposs(obs, nav, cs=None, orb=None):
 
                 nav.dorb[sat] = dorb_
                 nav.dclk[sat] = dclk
+
     if cs is not None:
         nav.time_p = cs.lc[0].t0[1]
 
