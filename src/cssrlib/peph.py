@@ -5,9 +5,9 @@ Created on Sun Aug 22 21:01:49 2021
 @author: ruihi
 """
 
-from cssrlib.gnss import Nav, id2sat, char2sys, sat2id
+from cssrlib.gnss import Nav, id2sat, sat2id, char2sys
 from cssrlib.gnss import epoch2time, time2epoch, timeadd, timediff, gtime_t
-from cssrlib.gnss import str2time
+from cssrlib.gnss import str2time, gpst2utc, utc2gpst
 from cssrlib.gnss import ecef2enu
 from cssrlib.gnss import rCST, rSigRnx, uGNSS, uTYP, uSIG
 
@@ -371,7 +371,8 @@ class peph:
         # differentiation
         #
         if dtss[0] != 0.0:
-            dts[0] = dtss[0] - 2.0*(rs[0:3]@rs[3:6])/(rCST.CLIGHT**2)
+            dt_rel = - 2.0*(rs[0:3]@rs[3:6])/(rCST.CLIGHT**2)
+            dts[0] = dtss[0] + dt_rel
             dts[1] = (dtst[0]-dtss[0])/tt
         else:
             dts = dtss
@@ -599,7 +600,7 @@ def substSigRx(pcv, sig):
     return sig
 
 
-def antModelTx(nav, e, sigs, sat, time, rs):
+def antModelTx(nav, e, sigs, sat, time, rs, sig0=None):
     """
     Range correction for transmitting antenna
 
@@ -623,6 +624,8 @@ def antModelTx(nav, e, sigs, sat, time, rs):
         epoch
     rs : np.array() of float
         satellite position in ECEF
+    sig0: list of rRnxSig
+        RINEX signal codes for APC reference (empty list for CoM)
 
     Returns
     -------
@@ -630,48 +633,60 @@ def antModelTx(nav, e, sigs, sat, time, rs):
         range correction for each specified signal
     """
 
-    # Satellite antenna frame unit vectors in ECEF assuming standard yaw
-    # attitude law
-    #
-    erpv = np.zeros(5)
-    rsun, _, _ = sunmoonpos(gpst2utc(time), erpv, True)
-    r = -rs
-    ez = r/np.linalg.norm(r)
-    r = rsun-rs
-    es = r/np.linalg.norm(r)
-    r = np.cross(ez, es)
-    ey = r/np.linalg.norm(r)
-    ex = np.cross(ey, ez)
-
     # Select satellite antenna
     #
     ant = searchpcv(nav.sat_ant, sat, time)
     if ant is None:
         return None
 
-    # Zenit angle and zenit angle grid
+    # Rotation matrix from satellite antenna frame to ECEF frame [ex, ey, ez]
+    #
+    A = orb2ecef(time, rs)
+    ez = A[2, :]
+
+    # Zenith angle and zenith angle grid
     #
     za = np.rad2deg(np.arccos(np.dot(ez, -e)))
     za_t = np.arange(ant.zen[0], ant.zen[1]+ant.zen[2], ant.zen[2])
+
+    # CoM offset of reference signals
+    #
+    off0 = np.zeros(3)
+    if sig0 is not None:
+
+        freq = [s.frequency() for s in sig0]
+        fac0 = [1.0 for s in sig0]
+
+        if len(freq) == 2:
+            fac0 = (+freq[0]**2/(freq[0]**2-freq[1]**2),
+                    -freq[1]**2/(freq[0]**2-freq[1]**2),)
+
+        for fac0_, sig0_ in zip(fac0, sig0):
+
+            # Substitute signal if not available
+            #
+            sig = substSigTx(ant, sig0_)
+
+            # Satellite PCO in local antenna frame
+            #
+            off0 += fac0_*ant.off[sig]
 
     # Interpolate PCV and map PCO on line-of-sight vector
     #
     dant = np.zeros(len(sigs))
     for i, sig_ in enumerate(sigs):
 
-        # Subsititute signal if not available
+        # Substitute signal if not available
         #
         sig = substSigTx(ant, sig_)
 
         # Satellite PCO in local antenna frame
         #
-        off = ant.off[sig]
+        off = ant.off[sig] - off0
 
-        # Satellite PCO in ECEF frame
+        # Convert satellite PCO from antenna frame into ECEF frame
         #
-        pco_v = np.zeros(3)
-        for j in range(3):
-            pco_v[j] = off[0]*ex[j]+off[1]*ey[j]+off[2]*ez[j]
+        pco_v = off@A
 
         # Interpolate PCV and map PCO on line-of-sight vector
         #
@@ -749,39 +764,49 @@ def antModelRx(nav, pos, e, sigs, rtype=1):
     return dant
 
 
-leaps_ = [[2017, 1, 1, 0, 0, 0, -18],
-          [2015, 7, 1, 0, 0, 0, -17],
-          [2012, 7, 1, 0, 0, 0, -16],
-          [2009, 1, 1, 0, 0, 0, -15],
-          [2006, 1, 1, 0, 0, 0, -14],
-          [1999, 1, 1, 0, 0, 0, -13],
-          [1997, 7, 1, 0, 0, 0, -12],
-          [1996, 1, 1, 0, 0, 0, -11],
-          [1994, 7, 1, 0, 0, 0, -10],
-          [1993, 7, 1, 0, 0, 0, -9],
-          [1992, 7, 1, 0, 0, 0, -8],
-          [1991, 1, 1, 0, 0, 0, -7],
-          [1990, 1, 1, 0, 0, 0, -6],
-          [1988, 1, 1, 0, 0, 0, -5],
-          [1985, 7, 1, 0, 0, 0, -4],
-          [1983, 7, 1, 0, 0, 0, -3],
-          [1982, 7, 1, 0, 0, 0, -2],
-          [1981, 7, 1, 0, 0, 0, -1]]
+def apc2com(nav, sat, time, rs, sigs):
+    """
+    Satellite position vector correction in ECEF from APC to CoM
+    using ANTEX PCO corrections
+    """
 
+    # Select satellite antenna
+    #
+    ant = searchpcv(nav.sat_ant, sat, time)
+    if ant is None:
+        return None
 
-def gpst2utc(t: gtime_t):
-    for i in range(len(leaps_)):
-        tu = timeadd(t, leaps_[i][6])
-        if timediff(tu, epoch2time(leaps_[i])) >= 0.0:
-            return tu
-    return t
+    # Rotation matrix from satellite antenna frame to ECEF frame [ex, ey, ez]
+    #
+    A = orb2ecef(time, rs)
 
+    freq = [s.frequency() for s in sigs]
+    if len(sigs) == 1:
+        facs = (1.0,)
+    elif len(sigs) == 2:
+        f12 = (freq[0]**2-freq[1]**2)
+        facs = (+freq[0]**2/f12, -freq[1]**2/f12)
+    else:
+        return None
 
-def utc2gpst(t: gtime_t):
-    for i in range(len(leaps_)):
-        if timediff(t, epoch2time(leaps_[i])) >= 0.0:
-            return timeadd(t, -leaps_[i][6])
-    return t
+    # Interpolate PCV and map PCO on line-of-sight vector
+    #
+    dr = np.zeros(3)
+    for fac_, sig_ in zip(facs, sigs):
+
+        # Substitute signal if not available
+        #
+        sig = substSigTx(ant, sig_)
+
+        # Satellite PCO in local antenna frame
+        #
+        off = fac_*ant.off[sig]*1e-3  # [m]
+
+        # Convert satellite PCO from antenna frame into ECEF frame
+        #
+        dr -= off@A
+
+    return dr
 
 
 def Rx(t):
@@ -941,6 +966,25 @@ def utc2gmst(t: gtime_t, ut1_utc):
     gmst = gmst0+1.002737909350795*ut
 
     return np.fmod(gmst, 86400.0)*np.pi/43200.0  # 0 <= gmst <= 2*PI
+
+
+def orb2ecef(time, rs):
+    """
+    Rotation matrix from satellite antenna frame to ECEF frame assuming
+    standard yaw attitude law
+    """
+
+    erpv = np.zeros(5)
+    rsun, _, _ = sunmoonpos(gpst2utc(time), erpv, True)
+    r = -rs
+    ez = r/np.linalg.norm(r)
+    r = rsun-rs
+    es = r/np.linalg.norm(r)
+    r = np.cross(ez, es)
+    ey = r/np.linalg.norm(r)
+    ex = np.cross(ey, ez)
+
+    return np.array([ex, ey, ez])
 
 
 def eci2ecef(tutc, erpv):
