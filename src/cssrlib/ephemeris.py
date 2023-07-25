@@ -260,11 +260,7 @@ def satposs(obs, nav, cs=None, orb=None):
                     rs[i, :] += dorb_e
                 else:
                     rs[i, :] -= dorb_e
-
-                if cs.cssrmode == sc.GAL_HAS:
-                    dts[i] -= dclk/rCST.CLIGHT
-                else:
-                    dts[i] += dclk/rCST.CLIGHT
+                dts[i] += dclk/rCST.CLIGHT
 
                 ers = vnorm(rs[i, :]-nav.x[0:3])
                 dorb_ = -ers@dorb_e
