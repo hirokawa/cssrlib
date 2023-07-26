@@ -182,6 +182,8 @@ def satposs(obs, nav, cs=None, orb=None):
         if nav.ephopt == 4:
 
             rs_, dts_, _ = orb.peph2pos(t, sat, nav)
+            if rs_ is None or dts_ is None:
+                continue
             dt = dts_[0]
 
             eph = findeph(nav.eph, t, sat)
