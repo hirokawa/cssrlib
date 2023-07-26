@@ -205,7 +205,7 @@ def satposs(obs, nav, cs=None, orb=None):
                         if sat not in cs.sat_n_p:
                             continue
                         idx = cs.sat_n_p.index(sat)
-                
+
                 dclk = cs.lc[0].dclk[idx]
                 mode = cs.nav_mode[sys]
 
