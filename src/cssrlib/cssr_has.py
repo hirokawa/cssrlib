@@ -45,8 +45,8 @@ class cssr_has(cssr):
             i += self.nsat_g[gnss]
             idx, nclk = self.decode_mask(mask_s, self.nsat_g[gnss])
             for k in range(nclk):
-                dclk = bs.unpack_from('s'+str(self.dclk_blen), msg, i)
-                *self.dclk_scl*(dcm+1)
+                dclk = bs.unpack_from('s'+str(self.dclk_blen), msg, i) \
+                    * self.dclk_scl*(dcm+1)
                 self.lc[0].dclk[idx_s[idx[k]]] = dclk
                 i += self.dclk_blen
         return i

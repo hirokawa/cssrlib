@@ -333,5 +333,5 @@ class cssr_bds(cssr):
         elif mt == 7:
             i = self.decode_cssr_comb2(msg, i)
 
-        if self.mon_level > 0:
-            print(f"mt={mt} tow={self.tow}")
+        if self.monlevel > 0:
+            print("mt={:2d} tow={:6.1f}".format(mt, self.tow))

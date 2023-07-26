@@ -224,6 +224,7 @@ class rtcm(cssr):
         self.ddorb_n[k, 0] = self.sval(ddx, 21, 1e-6)
         self.ddorb_n[k, 1] = self.sval(ddy, 19, 4e-6)
         self.ddorb_n[k, 2] = self.sval(ddz, 19, 4e-6)
+
         return i
 
     def decode_clk_sat(self, msg, i, k, inet=0):
@@ -338,6 +339,8 @@ class rtcm(cssr):
                 i += 19
 
                 self.lc[0].cbias[sat_][sig] = self.sval(cb, 14, 0.01)
+                if self.cssrmode == 2:  # work-around for HAS IDD
+                    self.lc[0].cbias[sat_][sig] *= -1.0
 
         self.lc[0].cstat |= (1 << sCType.CBIAS)
         self.lc[0].t0[sCType.CBIAS] = self.time
@@ -374,6 +377,8 @@ class rtcm(cssr):
                 i += 32
 
                 self.lc[0].pbias[sat_][sig] = self.sval(pb, 20, 1e-4)
+                if self.cssrmode == 2:  # work-around for HAS IDD
+                    self.lc[0].pbias[sat_][sig] *= -1.0
 
         self.lc[0].cstat |= (1 << sCType.PBIAS)
         self.lc[0].t0[sCType.PBIAS] = self.time

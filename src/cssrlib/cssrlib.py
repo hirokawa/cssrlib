@@ -223,7 +223,7 @@ class cssr:
 
     def __init__(self, foutname=None):
         """ constructor of cssr """
-        self.cssrmode = 0  # 0: original, 1: Galileo HAS
+        self.cssrmode = 0  # 0: orig, 1: Galileo HAS SIS, 2: Galileo HAS IDD
         self.monlevel = 0
         self.week = -1
         self.tow0 = -1
@@ -561,6 +561,9 @@ class cssr:
         self.lc[inet].dorb[k, 2] = \
             self.sval(v['dz'], self.dorb_blen[2], self.dorb_scl[2])
 
+        if self.cssrmode == 1:  # HAS SIS
+            self.lc[inet].dorb[k, :] *= -1.0
+
         i += n + self.dorb_blen[0]+self.dorb_blen[1]+self.dorb_blen[2]
         return i
 
@@ -571,7 +574,7 @@ class cssr:
         self.lc[inet].dclk[k] = \
             self.sval(v['dclk'], self.dclk_blen, self.dclk_scl)
 
-        if self.cssrmode == 1:  # HAS only
+        if self.cssrmode == 1:  # HAS SIS
             self.lc[inet].dclk[k] *= self.dcm[self.gnss_n[k]]
 
         i += self.dclk_blen
@@ -582,6 +585,8 @@ class cssr:
         v = bs.unpack_from_dict('s'+str(self.cb_blen), ['cbias'], msg, i)
         self.lc[inet].cbias[k, j] = \
             self.sval(v['cbias'], self.cb_blen, self.cb_scl)
+        if self.cssrmode == 1:  # work-around for HAS
+            self.lc[inet].cbias[k, j] *= -1.0
         i += self.cb_blen
         return i
 
@@ -591,6 +596,8 @@ class cssr:
                                 'u2', ['pbias', 'di'], msg, i)
         self.lc[inet].pbias[k, j] = \
             self.sval(v['pbias'], self.pb_blen, self.pb_scl)
+        if self.cssrmode == 1:  # work-around for HAS
+            self.lc[inet].pbias[k, j] *= -1.0
         self.lc[inet].di[k, j] = v['di']
         i += self.pb_blen + 2
         return i

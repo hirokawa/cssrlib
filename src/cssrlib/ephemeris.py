@@ -238,18 +238,20 @@ def satposs(obs, nav, cs=None, orb=None):
             #
             if cs is not None:
 
-                ea = vnorm(vs[i, :])
-                rc = np.cross(rs[i, :], vs[i, :])
-                ec = vnorm(rc)
-                er = np.cross(ea, ec)
-                dorb_e = -dorb@[er, ea, ec]
-
-                # For Galileo HAS, switch the sign of the orbit corrections
-                #
-                if cs.cssrmode == 1:
-                    rs[i, :] -= dorb_e
+                if cs.cssrmode == 3:  # BDS PPP
+                    er = vnorm(rs[i, :])
+                    rc = np.cross(rs[i, :], vs[i, :])
+                    ec = vnorm(rc)
+                    ea = np.cross(ec, er)
                 else:
-                    rs[i, :] += dorb_e
+                    ea = vnorm(vs[i, :])
+                    rc = np.cross(rs[i, :], vs[i, :])
+                    ec = vnorm(rc)
+                    er = np.cross(ea, ec)
+
+                dorb_e = dorb@[er, ea, ec]
+
+                rs[i, :] -= dorb_e
                 dts[i] += dclk/rCST.CLIGHT
 
                 ers = vnorm(rs[i, :]-nav.x[0:3])
