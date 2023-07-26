@@ -456,8 +456,10 @@ class atxdec():
                 elif "NOAZI" in line[3:8]:  # unit [mm]
                     var = [float(x) for x in line[8:].split()]
                     if len(var) > pcv.nv:
+                        """
                         print("WARNING: fix length of NOAZI for {} {} {}"
                               .format(pcv.type.strip(), pcv.code, sig))
+                        """
                         var = var[0:pcv.nv]
                     pcv.var.update({sig: np.array(var)})
 
