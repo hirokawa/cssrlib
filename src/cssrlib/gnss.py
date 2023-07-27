@@ -671,6 +671,19 @@ leaps_ = [[2017, 1, 1, 0, 0, 0, -18],
           [1981, 7, 1, 0, 0, 0, -1]]
 
 
+def glo2time(tref: gtime_t, tod):
+    time = timeadd(gpst2utc(tref), 10800.0)
+    week, tow = time2gpst(time)
+    tod_p = tow % 86400.0
+    tow -= tod_p
+    if tod < tod_p-43200.0:
+        tod += 86400.0
+    elif tod > tod_p+43200.0:
+        tod -= 86400.0
+    time = gpst2time(week, tow+tod)
+    return utc2gpst(timeadd(time, -10800.0))
+
+
 def gpst2utc(t: gtime_t):
     for i in range(len(leaps_)):
         tu = timeadd(t, leaps_[i][6])

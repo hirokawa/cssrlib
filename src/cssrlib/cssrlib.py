@@ -411,6 +411,7 @@ class cssr:
         """ calculate signed value based on n-bit int, lsb """
         invalid = -(2**(n-1)-1)
         dnu = -(2**(n-1))
+        #dnu = (2**(n-1)-1)
         y = np.nan if u == invalid or u == dnu else u*scl
         return y
 
@@ -585,8 +586,8 @@ class cssr:
         v = bs.unpack_from_dict('s'+str(self.cb_blen), ['cbias'], msg, i)
         self.lc[inet].cbias[k, j] = \
             self.sval(v['cbias'], self.cb_blen, self.cb_scl)
-        if self.cssrmode == 1:  # work-around for HAS
-            self.lc[inet].cbias[k, j] *= -1.0
+        # if self.cssrmode == 1:  # work-around for HAS
+        #    self.lc[inet].cbias[k, j] *= -1.0
         i += self.cb_blen
         return i
 
@@ -596,8 +597,8 @@ class cssr:
                                 'u2', ['pbias', 'di'], msg, i)
         self.lc[inet].pbias[k, j] = \
             self.sval(v['pbias'], self.pb_blen, self.pb_scl)
-        if self.cssrmode == 1:  # work-around for HAS
-            self.lc[inet].pbias[k, j] *= -1.0
+        # if self.cssrmode == 1:  # work-around for HAS
+        #    self.lc[inet].pbias[k, j] *= -1.0
         self.lc[inet].di[k, j] = v['di']
         i += self.pb_blen + 2
         return i
