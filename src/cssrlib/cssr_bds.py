@@ -8,7 +8,7 @@ Precise Point Positioning Service Signal PPP-B2b (Version 1.0), 2020
 import numpy as np
 import bitstruct as bs
 import galois
-from cssrlib.cssrlib import cssr, sCSSR, sGNSS, prn2sat, sCType
+from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE, sGNSS, prn2sat, sCType
 from cssrlib.gnss import gpst2time, uGNSS, uSIG, uTYP, rSigRnx
 
 
@@ -16,6 +16,7 @@ class cssr_bds(cssr):
     def __init__(self, foutname=None):
         super().__init__(foutname)
         self.MAXNET = 1
+        self.cssrmode = sCSSRTYPE.BDS_PPP        
         self.GF = galois.GF(2**6)
         self.nsig_max = 8
         self.iodp = -1
@@ -124,8 +125,8 @@ class cssr_bds(cssr):
         self.iodp = bs.unpack_from('u4', msg, i)[0]
         i += 4
 
-        mask_bds, mask_gps, mask_gal, mask_glo = bs.unpack_from(
-            'u63u37u37u37', msg, i)
+        mask_bds, mask_gps, mask_gal, mask_glo = \
+         bs.unpack_from('u63u37u37u37', msg, i)
         i += 174
 
         if self.iodp != self.iodp_p:
@@ -160,8 +161,8 @@ class cssr_bds(cssr):
         return i
 
     def decode_cssr_orb_sat(self, msg, i, inet, sat_n):
-        slot, iodn, iodc, dx, dy, dz, ucls, uval = bs.unpack_from(
-            'u9u10u3s15s13s13u3u3', msg, i)
+        slot, iodn, iodc, dx, dy, dz, ucls, uval = \
+            bs.unpack_from('u9u10u3s15s13s13u3u3', msg, i)
         i += 69
         sys, prn = self.slot2prn(slot)
         if sys == uGNSS.NONE:
@@ -275,8 +276,8 @@ class cssr_bds(cssr):
         sat_n = np.array(self.sat_n)
 
         if numc > 0:
-            tod, _, iodssr, iodp, slot_s = bs.unpack_from('u17u4u2u4u9',
-                                                          msg, i)
+            tod, _, iodssr, iodp, slot_s = \
+                bs.unpack_from('u17u4u2u4u9', msg, i)
             i += 36
             for k in range(numc):
                 idx = slot_s+k

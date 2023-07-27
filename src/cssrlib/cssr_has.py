@@ -9,7 +9,7 @@ Galileo HAS correction data decoder
 import numpy as np
 import bitstruct as bs
 import galois
-from cssrlib.cssrlib import cssr, sCSSR
+from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE
 from cssrlib.gnss import gpst2time
 
 
@@ -17,7 +17,7 @@ class cssr_has(cssr):
     def __init__(self, foutname=None):
         super().__init__(foutname)
         self.MAXNET = 1
-        self.cssrmode = 1  # for Galileo HAS
+        self.cssrmode = sCSSRTYPE.GAL_HAS_SIS
         self.dorb_scl = [0.0025, 0.0080, 0.0080]
         self.dclk_scl = 0.0025
         self.dorb_blen = [13, 12, 12]

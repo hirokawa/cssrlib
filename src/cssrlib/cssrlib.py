@@ -9,6 +9,16 @@ from cssrlib.gnss import gpst2time, rCST, prn2sat, uGNSS, gtime_t, rSigRnx
 from cssrlib.gnss import uSIG, uTYP, sat2prn, time2str, sat2id
 
 
+class sCSSRTYPE(IntEnum):
+    QZS_CLAS = 0
+    QZS_MADOCA = 1
+    GAL_HAS_SIS = 2  # Galileo HAS Signal-In-Space
+    GAL_HAS_IDD = 3  # Galileo HAS Internet Data Distribution
+    BDS_PPP = 4
+    IGS_SSR = 5
+    RTCM3_SSR = 6
+
+
 class sGNSS(IntEnum):
     """ class to define GNSS """
     GPS = 0
@@ -223,7 +233,7 @@ class cssr:
 
     def __init__(self, foutname=None):
         """ constructor of cssr """
-        self.cssrmode = 0  # 0: orig, 1: Galileo HAS SIS, 2: Galileo HAS IDD
+        self.cssrmode = sCSSRTYPE.QZS_CLAS
         self.monlevel = 0
         self.week = -1
         self.tow0 = -1
@@ -411,7 +421,6 @@ class cssr:
         """ calculate signed value based on n-bit int, lsb """
         invalid = -(2**(n-1)-1)
         dnu = -(2**(n-1))
-        #dnu = (2**(n-1)-1)
         y = np.nan if u == invalid or u == dnu else u*scl
         return y
 
@@ -536,11 +545,11 @@ class cssr:
                     self.nsig_total = self.nsig_total+nsig
                     self.sig_n.append(sig)
 
-            if self.cssrmode == 1:  # HAS only
+            if self.cssrmode == sCSSRTYPE.GAL_HAS_SIS:  # HAS only
                 self.nm_idx[v['gnssid']] = bs.unpack_from('u3', msg, i)[0]
                 i += 3
 
-        if self.cssrmode == 1:  # HAS only
+        if self.cssrmode == sCSSRTYPE.GAL_HAS_SIS:  # HAS only
             i += 6
 
         self.lc[0].cstat |= (1 << sCType.MASK)
@@ -562,7 +571,7 @@ class cssr:
         self.lc[inet].dorb[k, 2] = \
             self.sval(v['dz'], self.dorb_blen[2], self.dorb_scl[2])
 
-        if self.cssrmode == 1:  # HAS SIS
+        if self.cssrmode == sCSSRTYPE.GAL_HAS_SIS:  # HAS SIS
             self.lc[inet].dorb[k, :] *= -1.0
 
         i += n + self.dorb_blen[0]+self.dorb_blen[1]+self.dorb_blen[2]
@@ -575,7 +584,7 @@ class cssr:
         self.lc[inet].dclk[k] = \
             self.sval(v['dclk'], self.dclk_blen, self.dclk_scl)
 
-        if self.cssrmode == 1:  # HAS SIS
+        if self.cssrmode == sCSSRTYPE.GAL_HAS_SIS:  # HAS SIS
             self.lc[inet].dclk[k] *= self.dcm[self.gnss_n[k]]
 
         i += self.dclk_blen
@@ -586,7 +595,7 @@ class cssr:
         v = bs.unpack_from_dict('s'+str(self.cb_blen), ['cbias'], msg, i)
         self.lc[inet].cbias[k, j] = \
             self.sval(v['cbias'], self.cb_blen, self.cb_scl)
-        # if self.cssrmode == 1:  # work-around for HAS
+        # if self.cssrmode == GAL_HAS_SIS:  # work-around for HAS
         #    self.lc[inet].cbias[k, j] *= -1.0
         i += self.cb_blen
         return i
@@ -597,7 +606,7 @@ class cssr:
                                 'u2', ['pbias', 'di'], msg, i)
         self.lc[inet].pbias[k, j] = \
             self.sval(v['pbias'], self.pb_blen, self.pb_scl)
-        # if self.cssrmode == 1:  # work-around for HAS
+        # if self.cssrmode == GAL_HAS_SIS:  # work-around for HAS
         #    self.lc[inet].pbias[k, j] *= -1.0
         self.lc[inet].di[k, j] = v['di']
         i += self.pb_blen + 2
@@ -634,7 +643,7 @@ class cssr:
         if (self.lc[0].cstat & (1 << sCType.MASK)) != (1 << sCType.MASK):
             return -1
 
-        if self.cssrmode == 1:  # HAS only
+        if self.cssrmode == sCSSRTYPE.GAL_HAS_SIS:  # HAS only
             for k in range(self.ngnss):
                 self.dcm[self.gnss_idx[k]] = \
                     bs.unpack_from('u2', msg, i)[0]+1.0
@@ -649,7 +658,7 @@ class cssr:
                 j = self.sat_n_p.index(self.sat_n[k])
                 self.lc[inet].dclk_d[k] = self.lc[inet].dclk[k]-dclk_p[j]
 
-        if self.cssrmode == 1:  # HAS only
+        if self.cssrmode == sCSSRTYPE.GAL_HAS_SIS:  # HAS only
             self.sat_n_p = self.sat_n
         self.lc[inet].cstat |= (1 << sCType.CLOCK)
         self.lc[inet].t0[sCType.CLOCK] = self.time
