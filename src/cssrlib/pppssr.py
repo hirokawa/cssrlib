@@ -408,7 +408,7 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
                 if sig < 0:
                     continue
                 for f in range(nav.nf):
-                    if cs.cssrmode == sc.GAL_HAS and sys == uGNSS.GPS and \
+                    if cs.cssrmode == sc.GAL_HAS_SIS and sys == uGNSS.GPS and \
                             sig == sSigGPS.L2P:
                         sig = sSigGPS.L2W  # work-around
                     if cs.ssig2rsig(sys, uTYP.C, sig) == sigsPR[f]:
@@ -423,7 +423,8 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
                     cbias = cs.lc[0].cbias[idx_n][kidx]
                 if cs.lc[0].cstat & (1 << sCType.PBIAS) == (1 << sCType.PBIAS):
                     pbias = cs.lc[0].pbias[idx_n][kidx]
-                    if cs.cssrmode == sc.GAL_HAS:  # for Gal HAS (cycle -> m)
+                    # for Gal HAS (cycle -> m)
+                    if cs.cssrmode == sc.GAL_HAS_SIS:
                         pbias *= lam
 
             if np.all(cs.lc[0].dorb[idx_n] == np.array([0.0, 0.0, 0.0])):
@@ -458,7 +459,7 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
 
         # Select APC reference signals
         #
-        if cs.cssrmode == sc.GAL_HAS:
+        if cs.cssrmode == sc.GAL_HAS_SIS or cs.cssrmode == sc.GAL_HAS_IDD:
             if sys == uGNSS.GPS:
                 sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
             elif sys == uGNSS.GAL:
@@ -472,7 +473,7 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
         #
         antrPR = antModelRx(nav, pos, e[i, :], sigsPR)
         antrCP = antModelRx(nav, pos, e[i, :], sigsCP)
-        if cs.cssrmode == sc.GAL_HAS:
+        if cs.cssrmode == sc.GAL_HAS_SIS or cs.cssrmode == sc.GAL_HAS_IDD:
             antsPR = antModelTx(nav, e[i, :], sigsPR,
                                 sat, obs.t, rs[i, :], sig0)
             antsCP = antModelTx(nav, e[i, :], sigsCP,

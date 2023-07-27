@@ -203,7 +203,7 @@ def satposs(obs, nav, cs=None, orb=None):
                 iode = cs.lc[0].iode[idx]
                 dorb = cs.lc[0].dorb[idx, :]  # radial,along-track,cross-track
 
-                if cs.cssrmode == sc.GAL_HAS:  # HAS only
+                if cs.cssrmode == sc.GAL_HAS_SIS:  # HAS only
                     if cs.mask_id != cs.mask_id_clk:  # mask has changed
                         if sat not in cs.sat_n_p:
                             continue
