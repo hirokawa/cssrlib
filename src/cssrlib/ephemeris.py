@@ -247,7 +247,7 @@ def satposs(obs, nav, cs=None, orb=None):
                     ec = vnorm(rc)
                     ea = np.cross(ec, er)
                     A = [er, ea, ec]
-                else:  # QZS MADOCA, Galileo HAS
+                else:
                     ea = vnorm(vs[i, :])
                     rc = np.cross(rs[i, :], vs[i, :])
                     ec = vnorm(rc)
@@ -256,12 +256,7 @@ def satposs(obs, nav, cs=None, orb=None):
 
                 dorb_e = dorb@A
 
-                # For Galileo HAS, add the orbit corrections!
-                #
-                if cs.cssrmode == sc.GAL_HAS:
-                    rs[i, :] += dorb_e
-                else:
-                    rs[i, :] -= dorb_e
+                rs[i, :] -= dorb_e
                 dts[i] += dclk/rCST.CLIGHT
 
                 ers = vnorm(rs[i, :]-nav.x[0:3])

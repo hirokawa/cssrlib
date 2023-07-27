@@ -13,10 +13,10 @@ from cssrlib.gnss import gpst2time, uGNSS, uSIG, uTYP, rSigRnx
 
 
 class cssr_bds(cssr):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, foutname=None):
+        super().__init__(foutname)
         self.MAXNET = 1
-        self.cssrmode = sCSSRTYPE.BDS_PPP
+        self.cssrmode = sCSSRTYPE.BDS_PPP        
         self.GF = galois.GF(2**6)
         self.nsig_max = 8
         self.iodp = -1
@@ -89,7 +89,7 @@ class cssr_bds(cssr):
 
     def decode_head(self, msg, i, st=-1):
         self.tod, _, iodssr = bs.unpack_from('u17u4u2', msg, i)
-        i += 17+4+2
+        i += 23
 
         if st == sCSSR.MASK:
             self.iodssr = iodssr
@@ -126,8 +126,8 @@ class cssr_bds(cssr):
         i += 4
 
         mask_bds, mask_gps, mask_gal, mask_glo = \
-            bs.unpack_from('u63u37u37u37', msg, i)
-        i += 63+37+37+37
+         bs.unpack_from('u63u37u37u37', msg, i)
+        i += 174
 
         if self.iodp != self.iodp_p:
             self.nsat_n = 0
@@ -139,7 +139,7 @@ class cssr_bds(cssr):
             self.sig_n = []
             self.nm_idx = np.zeros(self.SYSMAX, dtype=int)
             self.ngnss = 0
-            #self.gnss_idx = np.zeros(self.ngnss, dtype=int)
+            # self.gnss_idx = np.zeros(self.ngnss, dtype=int)
             self.nsat_g = np.zeros(self.SYSMAX, dtype=int)
 
             self.add_gnss(mask_bds, 63, sGNSS.BDS)
@@ -334,5 +334,5 @@ class cssr_bds(cssr):
         elif mt == 7:
             i = self.decode_cssr_comb2(msg, i)
 
-        if self.mon_level > 0:
-            print(f"mt={mt} tow={self.tow}")
+        if self.monlevel > 0:
+            print("mt={:2d} tow={:6.1f}".format(mt, self.tow))

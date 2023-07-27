@@ -43,7 +43,8 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.nf = 2  # TODO: make obsolete if possible
     nav.ephopt = 2  # SSR-APC
 
-    # Position (+ optional velocity), zenith tropo delay and slant ionospheric delay states
+    # Position (+ optional velocity), zenith tropo delay and
+    # slant ionospheric delay states
     #
     nav.na = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
     nav.nq = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
@@ -185,7 +186,8 @@ def udstate(nav, obs):
     #
     for f in range(nav.nf):
 
-        # Reset phase-ambiguity if instantaneous AR or expire obs outage counter
+        # Reset phase-ambiguity if instantaneous AR
+        # or expire obs outage counter
         #
         for i in range(gn.uGNSS.MAXSAT):
 
@@ -296,7 +298,8 @@ def udstate(nav, obs):
                 if nav.monlevel > 0:
                     sig = obs.sig[sys_i][uTYP.L][f]
                     nav.fout.write("{}  {} - init  ambiguity  {} {:12.3f}\n"
-                                   .format(time2str(obs.t), sat2id(sat[i]), sig, bias[i]))
+                                   .format(time2str(obs.t), sat2id(sat[i]),
+                                           sig, bias[i]))
 
             j = II(sat[i], nav.na)
             if ion[i] != 0 and nav.x[j] == 0.0:
@@ -305,7 +308,8 @@ def udstate(nav, obs):
 
                 if nav.monlevel > 0:
                     nav.fout.write("{}  {} - init  ionosphere      {:12.3f}\n"
-                                   .format(time2str(obs.t), sat2id(sat[i]), ion[i]))
+                                   .format(time2str(obs.t), sat2id(sat[i]),
+                                           ion[i]))
 
     return 0
 
@@ -404,12 +408,14 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
                 if sig < 0:
                     continue
                 for f in range(nav.nf):
-                    if cs.cssrmode == sc.GAL_HAS and sys == uGNSS.GPS and sig == sSigGPS.L2P:
+                    if cs.cssrmode == sc.GAL_HAS and sys == uGNSS.GPS and \
+                            sig == sSigGPS.L2P:
                         sig = sSigGPS.L2W  # work-around
                     if cs.ssig2rsig(sys, uTYP.C, sig) == sigsPR[f]:
                         kidx[f] = k
                         nsig += 1
-                    elif cs.ssig2rsig(sys, uTYP.C, sig) == sigsPR[f].toAtt('X'):
+                    elif cs.ssig2rsig(sys, uTYP.C, sig) == \
+                            sigsPR[f].toAtt('X'):
                         kidx[f] = k
                         nsig += 1
             if nsig >= nav.nf:
@@ -417,15 +423,8 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
                     cbias = cs.lc[0].cbias[idx_n][kidx]
                 if cs.lc[0].cstat & (1 << sCType.PBIAS) == (1 << sCType.PBIAS):
                     pbias = cs.lc[0].pbias[idx_n][kidx]
-
-                # For QZSS MADOCA and Galileo HAS, switch the sign of the biases
-                if cs.cssrmode == sc.GAL_HAS or cs.cssrmode == sc.QZS_MADOCA:
-                    cbias *= -1
-                    pbias *= -1
-
-                # For Galileo HAS, convert from cycles to meters
-                if cs.cssrmode == sc.GAL_HAS:
-                    pbias *= lam
+                    if cs.cssrmode == sc.GAL_HAS:  # for Gal HAS (cycle -> m)
+                        pbias *= lam
 
             if np.all(cs.lc[0].dorb[idx_n] == np.array([0.0, 0.0, 0.0])):
                 continue
@@ -619,7 +618,8 @@ def sdres(nav, obs, x, y, e, sat, el):
                                            idx_i, idx_i,
                                            (mapfwi-mapfwj),
                                            x[IT(nav.na)],
-                                           np.sqrt(nav.P[IT(nav.na), IT(nav.na)])))
+                                           np.sqrt(nav.P[IT(nav.na),
+                                                         IT(nav.na)])))
 
                 # SD ionosphere
                 #
@@ -679,7 +679,8 @@ def sdres(nav, obs, x, y, e, sat, el):
                                    .format(time2str(obs.t),
                                            sat2id(sat[i]), sat2id(sat[j]),
                                            nv, sig.str(),
-                                           v[nv], np.sqrt(Ri[nv]), np.sqrt(Rj[nv])))
+                                           v[nv], np.sqrt(Ri[nv]),
+                                           np.sqrt(Rj[nv])))
 
                 nb[b] += 1
                 nv += 1  # counter for single-difference observations
@@ -722,7 +723,7 @@ def ppppos(nav, obs, cs=None, orb=None, bsx=None):
     #
     udstate(nav, obs)
 
-    #xa = np.zeros(nav.nx)
+    # xa = np.zeros(nav.nx)
     xp = nav.x.copy()
 
     # Non-differential residuals
@@ -744,7 +745,8 @@ def ppppos(nav, obs, cs=None, orb=None, bsx=None):
     nav.y = y
     ns = len(sat)
 
-    # Check if observations of at least 6 satellites are left over after editing
+    # Check if observations of at least 6 satellites are left over
+    # after editing
     #
     ny = y.shape[0]
     if ny < 6:

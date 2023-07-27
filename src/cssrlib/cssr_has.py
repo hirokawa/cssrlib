@@ -14,10 +14,10 @@ from cssrlib.gnss import gpst2time
 
 
 class cssr_has(cssr):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, foutname=None):
+        super().__init__(foutname)
         self.MAXNET = 1
-        self.cssrmode = sCSSRTYPE.GAL_HAS
+        self.cssrmode = sCSSRTYPE.GAL_HAS        
         self.dorb_scl = [0.0025, 0.0080, 0.0080]
         self.dclk_scl = 0.0025
         self.dorb_blen = [13, 12, 12]
@@ -45,8 +45,8 @@ class cssr_has(cssr):
             i += self.nsat_g[gnss]
             idx, nclk = self.decode_mask(mask_s, self.nsat_g[gnss])
             for k in range(nclk):
-                dclk = bs.unpack_from(
-                    's'+str(self.dclk_blen), msg, i)*self.dclk_scl*(dcm+1)
+                dclk = bs.unpack_from('s'+str(self.dclk_blen), msg, i) \
+                    * self.dclk_scl*(dcm+1)
                 self.lc[0].dclk[idx_s[idx[k]]] = dclk
                 i += self.dclk_blen
         return i
@@ -72,14 +72,14 @@ class cssr_has(cssr):
             print(f"invalid MT={self.msgtype}")
             return False
         # time of hour
-        # flags: mask, orbit, clock, clock subset, cbias, pbias, mask_id, iodset_id
+        # flags: mask,orbit,clock,clock subset,cbias,pbias,mask_id,iodset_id
         self.toh, flags, res, mask_id, self.iodssr = bs.unpack_from(
             'u12u6u4u5u5', msg, i)
         i += 32
 
-        if self.mon_level > 0:
-            print("TOH={:6d} flags={:12s} mask_id={:2d} iod_s={:1d}".format(
-                self.toh, bin(flags), mask_id, self.iodssr))
+        if self.monlevel > 0 and self.fh is not None:
+            self.fh.write("##### Galileo HAS SSR: TOH{:6d} flags={:12s} mask_id={:2d} iod_s={:1d}\n"
+                          .format(self.toh, bin(flags), mask_id, self.iodssr))
 
         if self.toh >= 3600:
             print(f"invalid TOH={self.toh}")
@@ -87,21 +87,31 @@ class cssr_has(cssr):
 
         if (flags >> 5) & 1:  # mask block
             self.mask_id = mask_id
+            self.subtype = sCSSR.MASK
             i = self.decode_cssr_mask(msg, i)
         if (flags >> 4) & 1:  # orbit block
+            self.subtype = sCSSR.ORBIT
             i = self.decode_cssr_orb(msg, i)
+            if self.monlevel > 0 and self.fh is not None:
+                self.out_log()
         if (flags >> 3) & 1:  # clock block
             self.mask_id_clk = mask_id
+            self.subtype = sCSSR.CLOCK
             i = self.decode_cssr_clk(msg, i)
+            if self.monlevel > 0 and self.fh is not None:
+                self.out_log()
         if (flags >> 2) & 1:  # clock subset block
             i = self.decode_cssr_clk_sub(msg, i)
         if (flags >> 1) & 1:  # code bias block
+            self.subtype = sCSSR.CBIAS
             i = self.decode_cssr_cbias(msg, i)
+            if self.monlevel > 0 and self.fh is not None:
+                self.out_log()
         if (flags >> 0) & 1:  # phase bias block
+            self.subtype = sCSSR.PBIAS
             i = self.decode_cssr_pbias(msg, i)
 
     def decode_has_header(self, buff, i):
-
         if bs.unpack_from('u24', buff, i)[0] == 0xaf3bc3:
             return 0, 0, 0, 0, 0
 

@@ -5,7 +5,8 @@ module for Compact SSR processing
 import cbitstruct as bs
 import numpy as np
 from enum import IntEnum
-from cssrlib.gnss import gpst2time, rCST, prn2sat, uGNSS, gtime_t, rSigRnx, uSIG, uTYP
+from cssrlib.gnss import gpst2time, rCST, prn2sat, uGNSS, gtime_t, rSigRnx
+from cssrlib.gnss import uSIG, uTYP, sat2prn, time2str, sat2id
 
 
 class sCSSRTYPE(IntEnum):
@@ -229,7 +230,7 @@ class cssr:
     stec_sz_t = [4, 4, 5, 7]
     stec_scl_t = [0.04, 0.12, 0.16, 0.24]
 
-    def __init__(self):
+    def __init__(self, foutname=None):
         """ constructor of cssr """
         self.cssrmode = sCSSRTYPE.QZS_CLAS
         self.monlevel = 0
@@ -296,6 +297,10 @@ class cssr:
         # default navigation message mode: 0:LNAV/INAV, 1: CNAV/CNAV1
         self.nav_mode = {uGNSS.GPS: 0, uGNSS.QZS: 0,
                          uGNSS.GAL: 0, uGNSS.BDS: 1}
+
+        self.fh = None
+        if foutname is not None:
+            self.fh = open(foutname, "w")
 
     def ssig2rsig(self, sys: sGNSS, utyp: uTYP, ssig):
         gps_tbl = {
@@ -565,6 +570,9 @@ class cssr:
         self.lc[inet].dorb[k, 2] = \
             self.sval(v['dz'], self.dorb_blen[2], self.dorb_scl[2])
 
+        if self.cssrmode == sCSSRTYPE.GAL_HAS:  # HAS SIS
+            self.lc[inet].dorb[k, :] *= -1.0
+
         i += n + self.dorb_blen[0]+self.dorb_blen[1]+self.dorb_blen[2]
         return i
 
@@ -575,7 +583,7 @@ class cssr:
         self.lc[inet].dclk[k] = \
             self.sval(v['dclk'], self.dclk_blen, self.dclk_scl)
 
-        if self.cssrmode == sCSSRTYPE.GAL_HAS:  # HAS only
+        if self.cssrmode == sCSSRTYPE.GAL_HAS:  # HAS SIS
             self.lc[inet].dclk[k] *= self.dcm[self.gnss_n[k]]
 
         i += self.dclk_blen
@@ -586,6 +594,8 @@ class cssr:
         v = bs.unpack_from_dict('s'+str(self.cb_blen), ['cbias'], msg, i)
         self.lc[inet].cbias[k, j] = \
             self.sval(v['cbias'], self.cb_blen, self.cb_scl)
+        if self.cssrmode == sCSSRTYPE.GAL_HAS:  # work-around for HAS
+            self.lc[inet].cbias[k, j] *= -1.0
         i += self.cb_blen
         return i
 
@@ -595,6 +605,8 @@ class cssr:
                                 'u2', ['pbias', 'di'], msg, i)
         self.lc[inet].pbias[k, j] = \
             self.sval(v['pbias'], self.pb_blen, self.pb_scl)
+        if self.cssrmode == sCSSRTYPE.GAL_HAS:  # work-around for HAS
+            self.lc[inet].pbias[k, j] *= -1.0
         self.lc[inet].di[k, j] = v['di']
         i += self.pb_blen + 2
         return i
@@ -625,6 +637,9 @@ class cssr:
         head, i = self.decode_head(msg, i)
         self.flg_net = False
         if self.iodssr != head['iodssr']:
+            return -1
+
+        if (self.lc[0].cstat & (1 << sCType.MASK)) != (1 << sCType.MASK):
             return -1
 
         if self.cssrmode == sCSSRTYPE.GAL_HAS:  # HAS only
@@ -1014,6 +1029,9 @@ class cssr:
                     print("tow={:6d} subtype={:2d}".format(self.tow,
                                                            self.subtype))
 
+            if self.monlevel > 0 and self.fh is not None:
+                self.out_log()
+
     def chk_stat(self):
         """ check status for received messages """
         cs_global = self.lc[0].cstat
@@ -1026,6 +1044,57 @@ class cssr:
         if self.local_pbias and (cs_local & 0x10) != 0x10:  # pbias(loc)
             return False
         return True
+
+    def out_log(self):
+        self.fh.write("{:4d}\t{:s}\n".format(self.msgtype,
+                                             time2str(self.time)))
+
+        if (self.lc[0].cstat & (1 << sCType.MASK)) != (1 << sCType.MASK):
+            return
+
+        if self.subtype == sCSSR.CLOCK:
+            self.fh.write(" {:s}\t{:s}\n".format("SatID", "dclk [m]"))
+            for k, sat_ in enumerate(self.sat_n):
+                self.fh.write(" {:s}\t{:6.3f}\n".format(sat2id(sat_),
+                                                        self.lc[0].dclk[k]))
+
+        elif self.subtype == sCSSR.ORBIT:
+            self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\t{:s}\n"
+                          .format("SatID", "IODE", "Radial[m]",
+                                  "Along[m]", "Cross[m]"))
+            for k, sat_ in enumerate(self.sat_n):
+                self.fh.write(" {:s}\t{:3d}\t{:6.3f}\t{:6.3f}\t{:6.3f}\n"
+                              .format(sat2id(sat_),
+                                      self.lc[0].iode[k],
+                                      self.lc[0].dorb[k][0],
+                                      self.lc[0].dorb[k][1],
+                                      self.lc[0].dorb[k][2]))
+
+        elif self.subtype == sCSSR.COMBINED:
+            self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\t{:s}\t{:s}\n"
+                          .format("SatID", "IODE", "Radial[m]",
+                                  "Along[m]", "Cross[m]", "dclk[m]"))
+            for k, sat_ in enumerate(self.sat_n):
+                self.fh.write(
+                    " {:s}\t{:3d}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\n"
+                    .format(sat2id(sat_),
+                            self.lc[0].iode[k],
+                            self.lc[0].dorb[k][0],
+                            self.lc[0].dorb[k][1],
+                            self.lc[0].dorb[k][2],
+                            self.lc[0].dclk[k]))
+
+        elif self.subtype == sCSSR.CBIAS:
+            self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\n"
+                          .format("SatID", "SigID", "Bias[m]", "..."))
+            for k, sat_ in enumerate(self.sat_n):
+                sys_, _ = sat2prn(sat_)
+                self.fh.write(" {:s}\t".format(sat2id(sat_)))
+                for j in range(self.nsig_n[k]):
+                    sig_ = self.ssig2rsig(sys_, uTYP.C, self.sig_n[k][j])
+                    self.fh.write("{:s}\t{:5.2f}\t"
+                                  .format(sig_.str(), self.lc[0].cbias[k, j]))
+                self.fh.write("\n")
 
     def read_griddef(self, file):
         """load grid coordinates from file """
