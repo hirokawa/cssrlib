@@ -70,8 +70,6 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     #
     nav.eratio = [100, 100, 100]
     nav.err = [0, 0.003, 0.003]  # [m] sigma
-    # nav.eratio = [50, 50]
-    # nav.err = [0, 0.01, 0.005]/np.sqrt(2)
 
     # Initial sigma for state covariance
     #
