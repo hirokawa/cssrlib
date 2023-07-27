@@ -410,7 +410,7 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
                 if sig < 0:
                     continue
                 for f in range(nav.nf):
-                    if cs.cssrmode == GAL_HAS and sys == uGNSS.GPS and \
+                    if cs.cssrmode == sc.GAL_HAS and sys == uGNSS.GPS and \
                             sig == sSigGPS.L2P:
                         sig = sSigGPS.L2W  # work-around
                     if cs.ssig2rsig(sys, uTYP.C, sig) == sigsPR[f]:
@@ -425,7 +425,7 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
                     cbias = cs.lc[0].cbias[idx_n][kidx]
                 if cs.lc[0].cstat & (1 << sCType.PBIAS) == (1 << sCType.PBIAS):
                     pbias = cs.lc[0].pbias[idx_n][kidx]
-                    if cs.cssrmode == GAL_HAS:  # for Gal HAS (cycle -> m)
+                    if cs.cssrmode == sc.GAL_HAS:  # for Gal HAS (cycle -> m)
                         pbias *= lam
 
             if np.all(cs.lc[0].dorb[idx_n] == np.array([0.0, 0.0, 0.0])):
