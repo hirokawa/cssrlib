@@ -9,7 +9,7 @@ RTCM 3 decoder
 import numpy as np
 import struct as st
 import bitstruct.c as bs
-from cssrlib.cssrlib import cssr, sCSSR, prn2sat, sCType
+from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE, prn2sat, sCType
 from cssrlib.gnss import uGNSS, sat2id, gpst2time, timediff, time2str, sat2prn
 from cssrlib.gnss import uTYP, uSIG, rSigRnx, bdt2time, bdt2gpst, glo2time
 from cssrlib.gnss import time2bdt, gpst2bdt, rCST
@@ -484,7 +484,7 @@ class rtcm(cssr):
                 i += 19
 
                 self.lc[0].cbias[sat_][sig] = self.sval(cb, 14, 0.01)
-                # if self.cssrmode == 2:  # work-around for HAS IDD
+                #if self.cssrmode == sCSSRTYPE.GAL_HAS:  # work-around for HAS IDD
                 #    self.lc[0].cbias[sat_][sig] *= -1.0
 
         self.lc[0].cstat |= (1 << sCType.CBIAS)
@@ -522,7 +522,7 @@ class rtcm(cssr):
                 i += 32
 
                 self.lc[0].pbias[sat_][sig] = self.sval(pb, 20, 1e-4)
-                # if self.cssrmode == 2:  # work-around for HAS IDD
+                #if self.cssrmode == sCSSRTYPE.GAL_HAS:  # work-around for HAS IDD
                 #    self.lc[0].pbias[sat_][sig] *= -1.0
 
         self.lc[0].cstat |= (1 << sCType.PBIAS)

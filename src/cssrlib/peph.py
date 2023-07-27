@@ -452,9 +452,15 @@ class atxdec():
                     pcv.off[sig][2] = neu[2]
                 elif "ZEN1 / ZEN2 / DZEN" in line[60:]:
                     pcv.zen = [float(x) for x in line[3:20].split()]
-                    pcv.nv = int((pcv.zen[1]-pcv.zen[0]+1)/pcv.zen[2])
+                    pcv.nv = int((pcv.zen[1]-pcv.zen[0])/pcv.zen[2])+1
                 elif "NOAZI" in line[3:8]:  # unit [mm]
                     var = [float(x) for x in line[8:].split()]
+                    if len(var) > pcv.nv:
+                        """
+                        print("WARNING: fix length of NOAZI for {} {} {}"
+                              .format(pcv.type.strip(), pcv.code, sig))
+                        """
+                        var = var[0:pcv.nv]
                     pcv.var.update({sig: np.array(var)})
 
 
