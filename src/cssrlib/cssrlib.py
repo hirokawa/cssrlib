@@ -570,7 +570,7 @@ class cssr:
         self.lc[inet].dorb[k, 2] = \
             self.sval(v['dz'], self.dorb_blen[2], self.dorb_scl[2])
 
-        if self.cssrmode == 1:  # HAS SIS
+        if self.cssrmode == sCSSRTYPE.GAL_HAS:  # HAS SIS
             self.lc[inet].dorb[k, :] *= -1.0
 
         i += n + self.dorb_blen[0]+self.dorb_blen[1]+self.dorb_blen[2]
