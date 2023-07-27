@@ -415,6 +415,9 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         antsPR = antModelTx(nav, e[i, :], sigsPR, sat, obs.t, rs[i, :])
         antsCP = antModelTx(nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
 
+        if antrPR is None or antrCP is None or antsPR is None or antsCP is None:
+            continue
+
         # Range correction
         #
         prc[i, :] = trop + antsPR + antrPR + cbias

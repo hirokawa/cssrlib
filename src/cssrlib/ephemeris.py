@@ -4,6 +4,7 @@ module for ephemeris processing
 
 import numpy as np
 from cssrlib.gnss import uGNSS, rCST, sat2prn, timediff, timeadd, vnorm
+from cssrlib.cssrlib import sCSSRTYPE as sc
 
 MAX_ITER_KEPLER = 30
 RTOL_KEPLER = 1e-13
@@ -181,6 +182,8 @@ def satposs(obs, nav, cs=None, orb=None):
         if nav.ephopt == 4:
 
             rs_, dts_, _ = orb.peph2pos(t, sat, nav)
+            if rs_ is None or dts_ is None:
+                continue
             dt = dts_[0]
 
             eph = findeph(nav.eph, t, sat)
@@ -198,9 +201,9 @@ def satposs(obs, nav, cs=None, orb=None):
 
                 idx = cs.sat_n.index(sat)
                 iode = cs.lc[0].iode[idx]
-                dorb = cs.lc[0].dorb[idx, :]
+                dorb = cs.lc[0].dorb[idx, :]  # radial,along-track,cross-track
 
-                if cs.cssrmode == 1:  # HAS only
+                if cs.cssrmode == sc.GAL_HAS:  # HAS only
                     if cs.mask_id != cs.mask_id_clk:  # mask has changed
                         if sat not in cs.sat_n_p:
                             continue
@@ -238,24 +241,26 @@ def satposs(obs, nav, cs=None, orb=None):
             #
             if cs is not None:
 
-                if cs.cssrmode == 3:  # BDS PPP
+                if cs.cssrmode == sc.BDS_PPP:
                     er = vnorm(rs[i, :])
                     rc = np.cross(rs[i, :], vs[i, :])
                     ec = vnorm(rc)
                     ea = np.cross(ec, er)
+                    A = [er, ea, ec]
                 else:
                     ea = vnorm(vs[i, :])
                     rc = np.cross(rs[i, :], vs[i, :])
                     ec = vnorm(rc)
                     er = np.cross(ea, ec)
+                    A = [er, ea, ec]
 
-                dorb_e = dorb@[er, ea, ec]
+                dorb_e = dorb@A
 
                 rs[i, :] -= dorb_e
                 dts[i] += dclk/rCST.CLIGHT
 
                 ers = vnorm(rs[i, :]-nav.x[0:3])
-                dorb_ = ers@dorb_e
+                dorb_ = -ers@dorb_e
                 sis = dclk-dorb_
                 if cs.lc[0].t0[1].time % 30 == 0 and \
                         timediff(cs.lc[0].t0[1], nav.time_p) > 0:
