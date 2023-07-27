@@ -69,8 +69,6 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     #
     nav.eratio = [100, 100, 100]
     nav.err = [0, 0.003, 0.003]  # [m] sigma
-    #nav.eratio = [50, 50]
-    #nav.err = [0, 0.01, 0.005]/np.sqrt(2)
 
     # Initial sigma for state covariance
     #
@@ -475,8 +473,14 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
         #
         antrPR = antModelRx(nav, pos, e[i, :], sigsPR)
         antrCP = antModelRx(nav, pos, e[i, :], sigsCP)
-        antsPR = antModelTx(nav, e[i, :], sigsPR, sat, obs.t, rs[i, :], sig0)
-        antsCP = antModelTx(nav, e[i, :], sigsCP, sat, obs.t, rs[i, :], sig0)
+        if cs.cssrmode == sc.GAL_HAS:
+            antsPR = antModelTx(nav, e[i, :], sigsPR,
+                                sat, obs.t, rs[i, :], sig0)
+            antsCP = antModelTx(nav, e[i, :], sigsCP,
+                                sat, obs.t, rs[i, :], sig0)
+        else:
+            antsPR = [0 for sig in sigsPR]
+            antsCP = [0 for sig in sigsCP]
 
         # Range correction
         #
