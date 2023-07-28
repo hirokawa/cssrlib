@@ -88,7 +88,7 @@ class uGNSS(IntEnum):
     QZSMAX = 10
     BDSMAX = 63
     GLOMAX = 27
-    SBSMAX = 25
+    SBSMAX = 39
     IRNMAX = 10
 
     GPSMIN = 0
@@ -576,7 +576,49 @@ class Eph():
     sisai = np.zeros(4)
     isc = np.zeros(6)
     integ = 0
-    mode = 0  # 0:LNAV, 1:CNAV, 2:CNAV2, 3:CNAV3
+    # 0:LNAV,INAV,D1/D2, 1:CNAV/CNAV1/FNAV, 2: CNAV2, 3: CNAV3, 4:FDMA, 5:SBAS
+    mode = 0
+
+    def __init__(self, sat=0):
+        self.sat = sat
+
+
+class Geph():
+    """ class to define GLONASS ephemeris """
+    sat = 0
+    iode = 0  # IODE: 0-6bit of tb field
+    frq = 0
+    svh = 0
+    sva = 0
+    age = 0.0
+    toe = gtime_t()
+    tof = gtime_t()
+    pos = np.zeros(3)
+    vel = np.zeros(3)
+    acc = np.zeros(3)
+    taun = 0.0         # SV clock bias [s]
+    gamn = 0.0         # relative frq bias
+    dtaun = 0.0        # delta between L1 and L2 [s]
+    mode = 0
+
+    def __init__(self, sat=0):
+        self.sat = sat
+
+
+class Seph():
+    """ class to define SBAS ephemeris """
+    sat = 0
+    iodn = 0
+    t0 = gtime_t()
+    tof = gtime_t()
+    svh = 0
+    sva = 0
+    pos = np.zeros(3)
+    vel = np.zeros(3)
+    acc = np.zeros(3)
+    af0 = 0.0
+    af1 = 0.0
+    mode = 0
 
     def __init__(self, sat=0):
         self.sat = sat

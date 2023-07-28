@@ -40,7 +40,9 @@ class rnxdec:
         self.ant = None
         self.ts = None
         self.te = None
-        self.mode_nav = 0  # 0:LNAV, 1:CNAV/CNAV1, 2: CNAV2, 3: CNAV3
+        # 0:LNAV,INAV,D1/D2, 1:CNAV/CNAV1/FNAV, 2: CNAV2, 3: CNAV3,
+        # 4:FDMA, 5:SBAS
+        self.mode_nav = 0
 
     def setSignals(self, sigList):
         """ define the signal list for each constellation """
@@ -208,13 +210,18 @@ class rnxdec:
 
                     elif line[0:5] == '> EPH':
                         sys = char2sys(line[6])
-                        self.mode_nav = 0
-                        if line[10:14] == 'CNAV' or line[10:14] == 'CNV1':
+                        self.mode_nav = 0  # LNAV, D1/D2, INAV
+                        m = line[10:14]
+                        if m == 'CNAV' or m == 'CNV1' or m == 'FNAV':
                             self.mode_nav = 1
-                        elif line[10:14] == 'CNV2':
+                        elif m == 'CNV2':
                             self.mode_nav = 2
-                        elif line[10:14] == 'CNV3':
+                        elif m == 'CNV3':
                             self.mode_nav = 3
+                        elif m == 'FDMA':
+                            self.mode_nav = 4
+                        elif m == 'SBAS':
+                            self.mode_nav = 5
 
                     line = fnav.readline()
 

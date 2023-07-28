@@ -12,10 +12,10 @@ import bitstruct.c as bs
 from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE, prn2sat, sCType
 from cssrlib.gnss import uGNSS, sat2id, gpst2time, timediff, time2str, sat2prn
 from cssrlib.gnss import uTYP, uSIG, rSigRnx, bdt2time, bdt2gpst, glo2time
-from cssrlib.gnss import time2bdt, gpst2bdt, rCST
+from cssrlib.gnss import time2bdt, gpst2bdt, rCST, time2gpst, utc2gpst
 from crccheck.crc import Crc24LteA
 from enum import IntEnum
-from cssrlib.gnss import Eph, Obs
+from cssrlib.gnss import Eph, Obs, Geph, Seph
 
 
 class sRTCM(IntEnum):
@@ -25,7 +25,13 @@ class sRTCM(IntEnum):
     ANT_DESC = 1003
     ANT_POS = 1004
     GLO_BIAS = 1005
-
+    GPS_EPH = 1011
+    GLO_EPH = 1012
+    GAL_EPH = 1013
+    BDS_EPH = 1014
+    QZS_EPH = 1015
+    IRN_EPH = 1016
+    SBS_EPH = 1016
 
 class rtcm(cssr):
     def __init__(self, foutname=None):
@@ -44,6 +50,26 @@ class rtcm(cssr):
             uGNSS.GPS: 1057, uGNSS.GLO: 1063, uGNSS.GAL: 1240,
             uGNSS.QZS: 1246, uGNSS.SBS: 1252, uGNSS.BDS: 1258
         }
+
+        self.P2_11 = 4.882812500000000E-04
+        self.P2_19 = 1.907348632812500E-06
+        self.P2_20 = 9.536743164062500E-07
+        self.P2_28 = 3.725290298461914E-09
+        self.P2_29 = 1.862645149230957E-09
+        self.P2_30 = 9.313225746154785E-10
+        self.P2_31 = 4.656612873077393E-10
+        self.P2_32 = 2.328306436538696E-10
+        self.P2_33 = 1.164153218269348E-10
+        self.P2_34 = 5.820766091346740E-11
+        self.P2_40 = 9.094947017729280E-13
+        self.P2_41 = 4.547473508864641E-13
+        self.P2_43 = 1.136868377216160E-13
+        self.P2_46 = 1.421085471520200E-14
+        self.P2_50 = 8.881784197001252E-16
+        self.P2_55 = 2.775557561562891E-17
+        self.P2_59 = 1.734723475976810E-18
+        self.P2_66 = 1.355252715606880E-20
+        self.SC2RAD = 3.1415926535898
 
     def is_msmtype(self, msgtype):
         for sys_ in self.msm_t.keys():
@@ -204,6 +230,15 @@ class rtcm(cssr):
             3: uSIG.L1P,
             8: uSIG.L2C,
             9: uSIG.L2P,
+            10: uSIG.L4A,
+            11: uSIG.L4B,
+            12: uSIG.L4X,
+            13: uSIG.L6A,
+            13: uSIG.L6B,
+            14: uSIG.L6X,
+            15: uSIG.L3I,
+            16: uSIG.L3Q,
+            17: uSIG.L3X,
         }
 
         gal_tbl = {
@@ -270,6 +305,11 @@ class rtcm(cssr):
             24: uSIG.L5X,
         }
 
+        irn_tbl = {
+            8: uSIG.L9A,
+            22: uSIG.L5A,
+        }
+
         usig_tbl_ = {
             uGNSS.GPS: gps_tbl,
             uGNSS.GLO: glo_tbl,
@@ -277,10 +317,19 @@ class rtcm(cssr):
             uGNSS.BDS: bds_tbl,
             uGNSS.QZS: qzs_tbl,
             uGNSS.SBS: sbs_tbl,
+            uGNSS.IRN: irn_tbl,
         }
 
         usig_tbl = usig_tbl_[sys]
         return rSigRnx(sys, utyp, usig_tbl[ssig])
+
+    def sys2str(self, sys: uGNSS):
+        gnss_t = {uGNSS.GPS: "GPS", uGNSS.GLO: "GLO", uGNSS.GAL: "GAL",
+                  uGNSS.BDS: "BDS", uGNSS.QZS: "QZS", uGNSS.SBS: "SBAS",
+                  uGNSS.IRN: "NAVIC"}
+        if sys not in gnss_t:
+            return ""
+        return gnss_t[sys]
 
     def sync(self, buff, k):
         return buff[k] == 0xd3
@@ -736,7 +785,7 @@ class rtcm(cssr):
 
         return False
 
-    def out_log(self):
+    def out_log(self, obs=None, eph=None, geph=None, seph=None):
         sys = self.get_ssr_sys(self.msgtype)
         self.fh.write("{:4d}\t{:s}\n".format(self.msgtype,
                                              time2str(self.time)))
@@ -866,6 +915,27 @@ class rtcm(cssr):
                                                   self.nsat))
             self.fh.write(" {:20s}{:6d}\n".format("Number of Signals:",
                                                   self.nsig))
+
+        if eph is not None:
+            sys, prn = sat2prn(eph.sat)
+            self.fh.write(" {:20s}{:6d} ({:s})\n".format("PRN:", prn,
+                                                         self.sys2str(sys)))
+            self.fh.write(" {:20s}{:6d}\n".format("IODE:", eph.iode))
+            self.fh.write(" {:20s}{:6d}\n".format("MODE:", eph.mode))
+
+        if geph is not None:
+            sys, prn = sat2prn(geph.sat)
+            self.fh.write(" {:20s}{:6d} ({:s})\n".format("PRN:", prn,
+                                                         self.sys2str(sys)))
+            self.fh.write(" {:20s}{:6d}\n".format("IODE:", geph.iode))
+            self.fh.write(" {:20s}{:6d}\n".format("MODE:", geph.mode))
+
+        if seph is not None:
+            sys, prn = sat2prn(seph.sat)
+            self.fh.write(" {:20s}{:6d} ({:s})\n".format("PRN:", prn,
+                                                         self.sys2str(sys)))
+            self.fh.write(" {:20s}{:6d}\n".format("IODN:", seph.iodn))
+            self.fh.write(" {:20s}{:6d}\n".format("MODE:", seph.mode))
 
     def decode_msm(self, msg, i):
         sys, msm = self.msmtype(self.msgtype)
@@ -1078,17 +1148,17 @@ class rtcm(cssr):
         self.refid = bs.unpack_from('u12', msg, i)[0]
         i += 18
         if self.msgtype == 1005 or self.msgtype == 1006:
-            ind = bs.unpack_from('u4', msg, i)[0]
+            # ind = bs.unpack_from('u4', msg, i)[0]
             i += 4
         xp = bs.unpack_from('s38', msg, i)[0]
         i += 38
         if self.msgtype == 1005 or self.msgtype == 1006:
-            oi = bs.unpack_from('u1', msg, i)[0]
+            # oi = bs.unpack_from('u1', msg, i)[0]
             i += 2
         yp = bs.unpack_from('s38', msg, i)[0]
         i += 38
         if self.msgtype == 1005 or self.msgtype == 1006:
-            qci = bs.unpack_from('u2', msg, i)[0]
+            # qci = bs.unpack_from('u2', msg, i)[0]
             i += 2
         zp = bs.unpack_from('s38', msg, i)[0]
         i += 38
@@ -1110,6 +1180,383 @@ class rtcm(cssr):
 
         return i
 
+    def decode_gps_eph(self, msg, i):
+        """ GPS Satellite Ephemeris Message """
+        prn, week, sva, code, idot = bs.unpack_from('u6u10s22s16s8', msg, i)
+        i += 6+10+4+2+14
+        iode, toc, af2, af1, af0 = bs.unpack_from('u8u16s8s16s22', msg, i)
+        i += 8+16+8+16+22
+        iodc, crs, deln, M0, cuc = bs.unpack_from('u10s16s16s32s16', msg, i)
+        i += 10+16+16+32+16
+        e, cus, Asq, toe, cic = bs.unpack_from('u32s16u32u16s16', msg, i)
+        i += 32+16+32+16+16
+        Omg0, cis, i0, crc, omg = bs.unpack_from('s32s16s32s16s32', msg, i)
+        i += 32+16+32+16+32
+        OMGd, tgd, svh, flag, fit = bs.unpack_from('s24s8u6u1u1', msg, i)
+        i += 40
+
+        eph = Eph()
+        eph.sat = prn2sat(uGNSS.GPS, prn)
+        eph.week = week
+        eph.sva = sva
+        eph.code = code
+        eph.idot = idot*self.P2_43*self.SC2RAD
+        eph.iode = iode
+        toc *= 16.0
+        eph.af2 = af0*self.P2_55
+        eph.af1 = af1*self.P2_43
+        eph.af0 = af0*self.P2_31
+        eph.iodc = iodc
+        eph.crs = crs*0.03125
+        eph.deln = deln*self.P2_43*self.SC2RAD
+        eph.M0 = M0*self.P2_31*self.SC2RAD
+        eph.cuc = cuc*self.P2_29
+        eph.e = e*self.P2_33
+        eph.cus = cus*self.P2_29
+        sqrtA = Asq*self.P2_19
+        eph.toes = toe*60.0
+        eph.cic = cic*self.P2_29
+        eph.OMG0 = Omg0*self.P2_31*self.SC2RAD
+        eph.cis = cis*self.P2_29
+        eph.i0 = i0*self.P2_31*self.SC2RAD
+        eph.crc = crc*0.03125
+        eph.omg = omg*self.P2_31*self.SC2RAD
+        eph.OMGd = OMGd*self.P2_43*self.SC2RAD
+        eph.tgd = tgd*self.P2_31
+        eph.svh = svh
+        eph.flag = flag
+        eph.fit = fit
+
+        eph.toe = gpst2time(eph.week, eph.toes)
+        eph.toc = gpst2time(eph.week, toc)
+        eph.ttr = self.time
+        eph.A = sqrtA*sqrtA
+        eph.mode = 0
+
+        return i, eph
+
+    def decode_glo_eph(self, msg, i):
+        """ GLONASS Satellite Ephemeris Message """
+        prn, frq, cn, svh, P1 = bs.unpack_from('u6u5u1u1u2', msg, i)
+        i += 15
+        tk_h, tk_m, tk_s = bs.unpack_from('u5u6u1', msg, i)
+        i += 12
+        bn, P2, tb = bs.unpack_from('u1u1u7', msg, i)
+        i += 9
+        xd, x, xdd = bs.unpack_from('s24s27s5', msg, i)
+        i += 56
+        yd, y, ydd = bs.unpack_from('s24s27s5', msg, i)
+        i += 56
+        zd, z, zdd = bs.unpack_from('s24s27s5', msg, i)
+        i += 56
+        P3, gamn, P, ln, taun, dtaun = bs.unpack_from('u1s11u2u1s22s5', msg, i)
+        i += 42
+        En, P4, Ft, Nt, M, ad, Na, tauc, N4, taugps, ln = \
+            bs.unpack_from('u5u1u4u11u2u1u11s32u5s22u1', msg, i)
+        i += 102
+
+        geph = Geph()
+        geph.frq = frq-7
+        tk_s *= 30.0
+        geph.vel[0] = xd*self.P2_20*1e3
+        geph.pos[0] = x*self.P2_11*1e3
+        geph.acc[0] = xdd*self.P2_30*1e3
+        geph.vel[1] = xd*self.P2_20*1e3
+        geph.pos[1] = x*self.P2_11*1e3
+        geph.acc[1] = xdd*self.P2_30*1e3
+        geph.vel[2] = xd*self.P2_20*1e3
+        geph.pos[2] = x*self.P2_11*1e3
+        geph.acc[2] = xdd*self.P2_30*1e3
+        geph.gamn = gamn*self.P2_40
+        geph.taun = taun*self.P2_30
+        geph.dtaun = dtaun*self.P2_30
+        geph.age = En
+
+        geph.sat = prn2sat(uGNSS.GLO, prn)
+        geph.svh = bn
+        geph.iode = tb & 0x7F
+
+        week, tow = time2gpst(self.time)
+        tod = tow % 86400.0
+        tow -= tod
+        tof = tk_h*3600.0+tk_m*60.0+tk_s-10800.0
+        if tof < tod-43200.0:
+            tof += 86400.0
+        elif tof > tod+43200.0:
+            tof -= 86400.0
+        geph.tof = utc2gpst(gpst2time(week, tow+tof))
+        toe = tb*900.0-10800.0
+        if toe < tod-43200.0:
+            toe += 86400.0
+        elif toe > tod+43200.0:
+            toe -= 86400.0
+        geph.toe = utc2gpst(gpst2time(week, tow+toe))
+        geph.mode = 0
+
+        return i, geph
+
+    def decode_gal_eph(self, msg, i):
+        """ Galileo Satellite Ephemeris Message """
+        prn, week, iodnav, sisa, idot = bs.unpack_from('u6u12u10u8s14', msg, i)
+        i += 6+12+10+8+14
+        toc, af2, af1, af0 = bs.unpack_from('u14s6s21s31', msg, i)
+        i += 14+6+21+31
+        crs, deln, M0, cuc = bs.unpack_from('s16s16s32s16', msg, i)
+        i += 16+16+32+16
+        e, cus, Asq, toe, cic = bs.unpack_from('u32s16u32u14s16', msg, i)
+        i += 32+16+32+14+16
+        Omg0, cis, i0, crc, omg = bs.unpack_from('s32s16s32s16s32', msg, i)
+        i += 32+16+32+16+32
+        OMGd, tgd = bs.unpack_from('s24s10', msg, i)
+        i += 24+10
+        if self.msgtype == 1045:  # F/NAV
+            hs, dvs = bs.unpack_from('u2u1', msg, i)
+            i += 2+1+7
+        else:  # I/NAV
+            tgd2, hs, dvs, hs1, dvs1 = bs.unpack_from('s10u2u1u2u1', msg, i)
+            i += 18
+
+        eph = Eph()
+        eph.sat = prn2sat(uGNSS.GAL, prn)
+        eph.week = week
+        eph.iode = iodnav
+        eph.sva = sisa
+        eph.idot = idot*self.P2_43*self.SC2RAD
+        toc *= 60.0
+
+        eph.af2 = af0*self.P2_59
+        eph.af1 = af1*self.P2_46
+        eph.af0 = af0*self.P2_34
+        eph.crs = crs*0.03125
+        eph.deln = deln*self.P2_43*self.SC2RAD
+        eph.M0 = M0*self.P2_31*self.SC2RAD
+        eph.cuc = cuc*self.P2_29
+        eph.e = e*self.P2_33
+        eph.cus = cus*self.P2_29
+        sqrtA = Asq*self.P2_19
+        eph.toes = toe*60.0
+        eph.cic = cic*self.P2_29
+        eph.OMG0 = Omg0*self.P2_31*self.SC2RAD
+        eph.cis = cis*self.P2_29
+        eph.i0 = i0*self.P2_31*self.SC2RAD
+        eph.crc = crc*0.03125
+        eph.omg = omg*self.P2_31*self.SC2RAD
+        eph.OMGd = OMGd*self.P2_43*self.SC2RAD
+        eph.tgd = tgd*self.P2_32
+        if self.msgtype == 1046:
+            eph.tgd_b = tgd2*self.P2_32
+
+        eph.toe = gpst2time(eph.week, eph.toes)
+        eph.toc = gpst2time(eph.week, toc)
+        eph.ttr = self.time
+        eph.A = sqrtA*sqrtA
+        eph.svh = (hs << 7)+(dvs << 6)
+        if self.msgtype == 1046:
+            eph.svh |= (hs1 << 1)+(dvs1)
+        eph.code = (1 << 0)+(1 << 2)+(1 << 9)
+        eph.iodc = eph.iode
+
+        eph.mode = 0 if self.msgtype == 1046 else 1
+
+        return i, eph
+
+    def decode_qzs_eph(self, msg, i):
+        """ QZS Satellite Ephemeris Message """
+        prn, toc, af2, af1, af0 = bs.unpack_from('u4u16s8s16s22', msg, i)
+        i += 4+16+8+16+22
+        iode, crs, deln, M0, cuc = bs.unpack_from('u8s16s16s32s16', msg, i)
+        i += 8+16+16+32+16
+        e, cus, Asq, toe, cic = bs.unpack_from('u32s16u32u16s16', msg, i)
+        i += 32+16+32+16+16
+        Omg0, cis, i0, crc, omg = bs.unpack_from('s32s16s32s16s32', msg, i)
+        i += 32+16+32+16+32
+        OMGd, idot, l2c, week, sva = bs.unpack_from('s24s14u2u10u4', msg, i)
+        i += 24+14+2+10+4
+        svh, tgd, iodc, fit = bs.unpack_from('u6s8u10u1', msg, i)
+        i += 6+8+10+1
+
+        eph = Eph()
+        eph.sat = prn2sat(uGNSS.QZS, prn+192)
+        toc *= 16.0
+        eph.af2 = af0*self.P2_55
+        eph.af1 = af1*self.P2_43
+        eph.af0 = af0*self.P2_31
+        eph.iode = iode
+        eph.crs = crs*0.03125
+        eph.deln = deln*self.P2_43*self.SC2RAD
+        eph.M0 = M0*self.P2_31*self.SC2RAD
+        eph.cuc = cuc*self.P2_29
+        eph.e = e*self.P2_33
+        eph.cus = cus*self.P2_29
+        sqrtA = Asq*self.P2_19
+        eph.toes = toe*16.0
+        eph.cic = cic*self.P2_29
+        eph.OMG0 = Omg0*self.P2_31*self.SC2RAD
+        eph.cis = cis*self.P2_29
+        eph.i0 = i0*self.P2_31*self.SC2RAD
+        eph.crc = crc*0.03125
+        eph.omg = omg*self.P2_31*self.SC2RAD
+        eph.OMGd = OMGd*self.P2_43*self.SC2RAD
+        eph.idot = idot*self.P2_43*self.SC2RAD
+        eph.code = l2c
+
+        eph.week = week
+        eph.sva = sva
+        eph.svh = svh
+        eph.tgd = tgd*self.P2_31
+        eph.iodc = iodc
+        eph.fit = fit
+
+        eph.toe = gpst2time(eph.week, eph.toes)
+        eph.toc = gpst2time(eph.week, toc)
+        eph.ttr = self.time
+        eph.A = sqrtA*sqrtA
+        eph.flag = 1
+        eph.mode = 0
+
+        return i, eph
+
+    def decode_bds_eph(self, msg, i):
+        """ BDS Satellite Ephemeris Message """
+        prn, week, ura, idot = bs.unpack_from('u6u13u4s14', msg, i)
+        i += 6+13+4+14
+        aode, toc, af2, af1, af0 = bs.unpack_from('u5u17s11s22s24', msg, i)
+        i += 5+17+11+22+24
+        aodc, crs, deln, M0, cuc = bs.unpack_from('u5s18s16s32s18', msg, i)
+        i += 5+18+16+32+18
+        e, cus, Asq, toe, cic = bs.unpack_from('u32s16u32u17s18', msg, i)
+        i += 32+16+32+17+18
+        Omg0, cis, i0, crc, omg = bs.unpack_from('s32s18s32s18s32', msg, i)
+        i += 32+18+32+18+32
+        OMGd, tgd1, tgd2, svh = bs.unpack_from('s24s10s10u1', msg, i)
+        i += 45
+
+        eph = Eph()
+        eph.sat = prn2sat(uGNSS.BDS, prn)
+        eph.week = week
+        eph.sva = ura
+        eph.idot = idot*self.P2_43*self.SC2RAD
+        eph.iode = aode
+        toc *= 8.0
+        eph.af2 = af0*self.P2_66
+        eph.af1 = af1*self.P2_50
+        eph.af0 = af0*self.P2_33
+        eph.iodc = aodc
+        eph.crs = crs*0.015625
+        eph.deln = deln*self.P2_43*self.SC2RAD
+        eph.M0 = M0*self.P2_31*self.SC2RAD
+        eph.cuc = cuc*self.P2_31
+        eph.e = e*self.P2_33
+        eph.cus = cus*self.P2_31
+        sqrtA = Asq*self.P2_19
+        eph.toes = toe*8.0
+        eph.cic = cic*self.P2_31
+        eph.OMG0 = Omg0*self.P2_31*self.SC2RAD
+        eph.cis = cis*self.P2_31
+        eph.i0 = i0*self.P2_31*self.SC2RAD
+        eph.crc = crc*0.015625
+        eph.omg = omg*self.P2_31*self.SC2RAD
+        eph.OMGd = OMGd*self.P2_43*self.SC2RAD
+        eph.tgd = tgd1*1e-10
+        eph.tgd_b = tgd2*1e-10
+        eph.svh = svh
+
+        eph.toe = bdt2gpst(bdt2time(eph.week, eph.toes))
+        eph.toc = bdt2gpst(bdt2time(eph.week, toc))
+        eph.ttr = self.time
+        eph.A = sqrtA*sqrtA
+        eph.mode = 0
+
+        return i, eph
+
+    def decode_irn_eph(self, msg, i):
+        """ NavIC Satellite Ephemeris Message """
+        prn, week, af0, af1, af2 = bs.unpack_from('u6u10s22s16s8', msg, i)
+        i += 6+10+22+16+8
+        ura, toc, tgd, deln, iode = bs.unpack_from('u4u16s8s22u8', msg, i)
+        i += 4+16+8+22+8+10
+        svh, cuc, cus, cic = bs.unpack_from('u2s15s15s15', msg, i)
+        i += 32+15
+        cis, crc, crs, idot, M0 = bs.unpack_from('s15s15s15s14s32', msg, i)
+        i += 59+32
+        toe, e, Asq, Omg0, omg = bs.unpack_from('u16u32u32s32s32', msg, i)
+        i += 80+64
+        OMGd, i0 = bs.unpack_from('s22s32', msg, i)
+        i += 22+32+2+2
+
+        eph = Eph()
+        eph.sat = prn2sat(uGNSS.IRN, prn)
+        eph.week = week
+        eph.af0 = af0*self.P2_31
+        eph.af1 = af1*self.P2_43
+        eph.af2 = af0*self.P2_55
+        eph.sva = ura
+        toc *= 16.0
+        eph.tgd = tgd*self.P2_31
+        eph.deln = deln*self.P2_41*self.SC2RAD
+        eph.iode = iode
+        eph.svh = svh
+        eph.cuc = cuc*self.P2_28
+        eph.cus = cus*self.P2_28
+        eph.cic = cic*self.P2_28
+        eph.cis = cis*self.P2_28
+        eph.crc = crc*0.0625
+        eph.crs = crs*0.0625
+        eph.idot = idot*self.P2_43*self.SC2RAD
+        eph.M0 = M0*self.P2_31*self.SC2RAD
+        eph.toes = toe*16.0
+        eph.e = e*self.P2_33
+        sqrtA = Asq*self.P2_19
+        eph.OMG0 = Omg0*self.P2_31*self.SC2RAD
+        eph.omg = omg*self.P2_31*self.SC2RAD
+        eph.OMGd = OMGd*self.P2_41*self.SC2RAD
+        eph.i0 = i0*self.P2_31*self.SC2RAD
+
+        eph.toe = gpst2time(eph.week, eph.toes)
+        eph.toc = gpst2time(eph.week, toc)
+        eph.ttr = self.time
+        eph.A = sqrtA*sqrtA
+        eph.iodc = eph.iode
+        eph.mode = 0
+
+        return i, eph
+
+    def decode_sbs_eph(self, msg, i):
+        """ SBAS Satellite Ephemeris Message """
+        prn, iodn, toc, ura = bs.unpack_from('u6u8u13u4', msg, i)
+        i += 6+8+13+4
+        x, y, z = bs.unpack_from('s30s30s25', msg, i)
+        i += 30+30+25
+        vx, vy, vz = bs.unpack_from('s17s17s18', msg, i)
+        i += 17+17+18
+        ax, ay, az = bs.unpack_from('s10s10s10', msg, i)
+        i += 10+10+10
+        af0, af1 = bs.unpack_from('s12s8', msg, i)
+        i += 12+8
+
+        seph = Seph()
+        seph.sat = prn2sat(uGNSS.SBS, prn+119)
+        seph.iode = iodn
+        toc *= 16.0
+        seph.ura = ura
+        seph.pos[0] = x*0.08
+        seph.pos[1] = y*0.08
+        seph.pos[2] = z*0.4
+        seph.vel[0] = vx*0.000625
+        seph.vel[1] = vy*0.000625
+        seph.vel[2] = vz*0.004
+        seph.acc[0] = ax*0.0000125
+        seph.acc[1] = ay*0.0000125
+        seph.acc[2] = az*0.0000625
+        seph.af0 = af0*self.P2_31
+        seph.af1 = af1*self.P2_40
+        week, tow = time2gpst(self.time)
+        tod = (tow//86400)*86400
+        seph.t0 = gpst2time(week, toc+tod)
+        seph.mode = 0
+
+        return i, seph
+
     def decode(self, msg):
         i = 24
         self.msgtype = bs.unpack_from('u12', msg, i)[0]
@@ -1120,7 +1567,9 @@ class rtcm(cssr):
 
         obs = None
         eph = None
-
+        geph = None
+        seph = None
+        
         # Network RTK residual messages
         if self.msgtype in (1057, 1063, 1240, 1246, 1252, 1258):
             self.subtype = sCSSR.ORBIT
@@ -1157,10 +1606,31 @@ class rtcm(cssr):
         elif self.msgtype == 1230:
             self.subtype = sRTCM.GLO_BIAS
             i = self.decode_glo_bias(msg, i)
+        elif self.msgtype == 1019:
+            self.subtype = sRTCM.GPS_EPH
+            i, eph = self.decode_gps_eph(msg, i)
+        elif self.msgtype == 1020:
+            self.subtype = sRTCM.GLO_EPH
+            i, geph = self.decode_glo_eph(msg, i)
+        elif self.msgtype == 1041:
+            self.subtype = sRTCM.IRN_EPH
+            i, eph = self.decode_irn_eph(msg, i)
+        elif self.msgtype == 1042 or self.msgtype == 63:
+            self.subtype = sRTCM.BDS_EPH
+            i, eph = self.decode_bds_eph(msg, i)
+        elif self.msgtype == 1043:
+            self.subtype = sRTCM.SBS_EPH
+            i, seph = self.decode_sbs_eph(msg, i)
+        elif self.msgtype == 1044:
+            self.subtype = sRTCM.QZS_EPH
+            i, eph = self.decode_qzs_eph(msg, i)
+        elif self.msgtype == 1045 or self.msgtype == 1046:
+            self.subtype = sRTCM.GAL_EPH
+            i, eph = self.decode_gal_eph(msg, i)
         else:
             self.subtype = -1
 
         if self.monlevel > 0 and self.fh is not None:
-            self.out_log()
+            self.out_log(obs, eph, geph, seph)
 
         return i, obs, eph
