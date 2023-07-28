@@ -419,8 +419,8 @@ class cssr:
 
     def sval(self, u, n, scl):
         """ calculate signed value based on n-bit int, lsb """
-        invalid = -(2**(n-1)-1)
-        dnu = -(2**(n-1))
+        invalid = -2**(n-1)
+        dnu = 2**(n-1)-1
         y = np.nan if u == invalid or u == dnu else u*scl
         return y
 
