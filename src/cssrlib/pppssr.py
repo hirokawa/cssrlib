@@ -484,8 +484,8 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
 
         # Range correction
         #
-        prc[i, :] = trop + antrPR + antsPR + cbias
-        cpc[i, :] = trop + antrCP + antsCP + pbias + phw
+        prc[i, :] = trop + antrPR + antsPR - cbias
+        cpc[i, :] = trop + antrCP + antsCP - pbias + phw
 
         r += relatv - _c*dts[i]
 
