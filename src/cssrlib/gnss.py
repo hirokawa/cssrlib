@@ -321,6 +321,13 @@ class rSigRnx():
         else:
             raise ValueError
 
+    def isGPS_PY(self):
+        """
+        Check if signal is GPS P(Y) tracking
+        """
+        return self.sys == uGNSS.GPS and \
+            (self.sig == uSIG.L1W or self.sig == uSIG.L2W)
+
     def str2sig(self, sys, s):
         """ string to signal code conversion """
 
@@ -650,7 +657,8 @@ class Nav():
         #                  3: SSR-CG, 4: PREC
 
         self.monlevel = 1
-        self.cnr_min = 35
+        self.cnr_min = 25
+        self.cnr_min_gpy = 15
         self.maxout = 5  # maximum outage [epochs]
 
         self.sat_ant = None

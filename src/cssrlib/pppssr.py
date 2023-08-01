@@ -68,7 +68,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     #
     # Observation noise parameters
     #
-    nav.eratio = [100, 100, 100]
+    nav.eratio = [100, 100, 100]  # [-] factor
     nav.err = [0, 0.003, 0.003]  # [m] sigma
 
     # Initial sigma for state covariance
@@ -362,6 +362,12 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
         if np.isnan(rs[i, :].any()) or np.isnan(dts[i]):
             continue
 
+        # Pseudorange, carrier-phase and C/N0 signals
+        #
+        sigsPR = obs.sig[sys][gn.uTYP.C]
+        sigsCP = obs.sig[sys][gn.uTYP.L]
+        sigsCN = obs.sig[sys][gn.uTYP.S]
+
         # Check for measurement consistency
         #
         flg_m = True
@@ -370,20 +376,16 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
             if obs.P[i, f] == 0.0 or obs.L[i, f] == 0.0 or obs.lli[i, f] == 1:
                 flg_m = False
 
-        # Check C/N0 at first frequency
-        #
-        if obs.S[i, 0] < nav.cnr_min:
-            flg_m = False
+            # Check C/N0
+            #
+            cnr_min = nav.cnr_min_gpy if sigsCN[f].isGPS_PY() else nav.cnr_min
+            if obs.S[i, f] < cnr_min:
+                flg_m = False
 
         # Skip flagged satellites
         #
         if flg_m is False:
             continue
-
-        # Pseudorange and carrier-phase signals
-        #
-        sigsPR = obs.sig[sys][gn.uTYP.C]
-        sigsCP = obs.sig[sys][gn.uTYP.L]
 
         # Wavelength
         lam = np.array([s.wavelength() for s in sigsCP])

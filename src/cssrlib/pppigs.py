@@ -184,7 +184,8 @@ def udstate(nav, obs):
     #
     for f in range(nav.nf):
 
-        # Reset phase-ambiguity if instantaneous AR or expire obs outage counter
+        # Reset phase-ambiguity if instantaneous AR
+        # or expire obs outage counter
         #
         for i in range(gn.uGNSS.MAXSAT):
 
@@ -352,6 +353,17 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         if svh[i] > 0 or sys not in obs.sig.keys() or sat in nav.excl_sat:
             continue
 
+        # Check for valid orbit and clock offset
+        #
+        if np.isnan(rs[i, :].any()) or np.isnan(dts[i]):
+            continue
+
+        # Pseudorange, carrier-phase and C/N0 signals
+        #
+        sigsPR = obs.sig[sys][gn.uTYP.C]
+        sigsCP = obs.sig[sys][gn.uTYP.L]
+        sigsCN = obs.sig[sys][gn.uTYP.S]
+
         # Check for measurement consistency
         #
         flg_m = True
@@ -360,11 +372,14 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
             if obs.P[i, f] == 0.0 or obs.L[i, f] == 0.0 or obs.lli[i, f] == 1:
                 flg_m = False
 
-        # Check C/N0 at first frequency
-        #
-        if obs.S[i, 0] < nav.cnr_min:
-            flg_m = False
+            # Check C/N0
+            #
+            cnr_min = nav.cnr_min_gpy if sigsCN[f].isGPS_PY() else nav.cnr_min
+            if obs.S[i, f] < cnr_min:
+                flg_m = False
 
+        # Skip flagged satellites
+        #
         if flg_m is False:
             continue
 
@@ -374,11 +389,6 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         _, el[i] = gn.satazel(pos, e[i, :])
         if el[i] < nav.elmin:
             continue
-
-        # Pseudorange and carrier-phase signals
-        #
-        sigsPR = obs.sig[sys][gn.uTYP.C]
-        sigsCP = obs.sig[sys][gn.uTYP.L]
 
         # Wavelength
         lam = np.array([s.wavelength() for s in sigsCP])
@@ -420,8 +430,8 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
 
         # Range correction
         #
-        prc[i, :] = trop + antsPR + antrPR + cbias
-        cpc[i, :] = trop + antsCP + antrCP + pbias + phw
+        prc[i, :] = trop + antrPR + antsPR + cbias
+        cpc[i, :] = trop + antrCP + antsCP + pbias + phw
 
         r += relatv - _c*dts[i]
 
@@ -658,7 +668,7 @@ def ppppos(nav, obs, orb, bsx):
     #
     udstate(nav, obs)
 
-    #xa = np.zeros(nav.nx)
+    # xa = np.zeros(nav.nx)
     xp = nav.x.copy()
 
     # Non-differential residuals
@@ -680,7 +690,8 @@ def ppppos(nav, obs, orb, bsx):
     nav.y = y
     ns = len(sat)
 
-    # Check if observations of at least 6 satellites are left over after editing
+    # Check if observations of at least 6 satellites are left over
+    # after editing
     #
     ny = y.shape[0]
     if ny < 6:
@@ -735,7 +746,7 @@ def ppppos(nav, obs, orb, bsx):
             y = yu[iu, :]
             e = eu[iu, :]
             v, H, R = sdres(nav, obs, xa, y, e, sat, el)
-            # R <= Q=HPH'+R  chisq<max_inno[3] (0.5)
+            # R <= Q=H'PH+R  chisq<max_inno[3] (0.5)
             if valpos(nav, v, R):
                 if nav.armode == 3:     # fix and hold
                     holdamb(nav, xa)    # hold fixed ambiguity
