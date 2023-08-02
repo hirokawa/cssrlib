@@ -1056,8 +1056,9 @@ class cssr:
         if self.subtype == sCSSR.CLOCK:
             self.fh.write(" {:s}\t{:s}\n".format("SatID", "dclk [m]"))
             for k, sat_ in enumerate(self.sat_n):
-                self.fh.write(" {:s}\t{:6.3f}\n".format(sat2id(sat_),
-                                                        self.lc[0].dclk[k]))
+                self.fh.write(" {:s}\t{:8.4f}\n"
+                              .format(sat2id(sat_),
+                                      self.lc[0].dclk[k]))
 
         elif self.subtype == sCSSR.ORBIT:
             self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\t{:s}\n"
@@ -1087,15 +1088,33 @@ class cssr:
 
         elif self.subtype == sCSSR.CBIAS:
             self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\n"
-                          .format("SatID", "SigID", "Bias[m]", "..."))
+                          .format("SatID", "SigID", "Code Bias[m]", "..."))
             for k, sat_ in enumerate(self.sat_n):
                 sys_, _ = sat2prn(sat_)
                 self.fh.write(" {:s}\t".format(sat2id(sat_)))
                 for j in range(self.nsig_n[k]):
+                    if self.sig_n[k][j] == -1:
+                        continue
                     sig_ = self.ssig2rsig(sys_, uTYP.C, self.sig_n[k][j])
                     self.fh.write("{:s}\t{:5.2f}\t"
                                   .format(sig_.str(), self.lc[0].cbias[k, j]))
                 self.fh.write("\n")
+
+        elif self.subtype == sCSSR.PBIAS:
+            self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\n"
+                          .format("SatID", "SigID", "Phase Bias[m]", "..."))
+            for k, sat_ in enumerate(self.sat_n):
+                sys_, _ = sat2prn(sat_)
+                self.fh.write(" {:s}\t".format(sat2id(sat_)))
+                for j in range(self.nsig_n[k]):
+                    if self.sig_n[k][j] == -1:
+                        continue
+                    sig_ = self.ssig2rsig(sys_, uTYP.L, self.sig_n[k][j])
+                    self.fh.write("{:s}\t{:5.2f}\t"
+                                  .format(sig_.str(), self.lc[0].pbias[k, j]))
+                self.fh.write("\n")
+
+        self.fh.flush()
 
     def read_griddef(self, file):
         """load grid coordinates from file """
