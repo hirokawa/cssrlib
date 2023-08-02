@@ -1027,9 +1027,8 @@ class cssr:
                     print("tow={:6d} subtype={:2d} inet={:2d}".
                           format(self.tow, self.subtype, self.inet))
                 else:
-                    print("tow={:6d} subtype={:2d}".format(self.tow,
-                                                           self.subtype))
-
+                    print("tow={:6.0f} subtype={:2d}".format(self.tow,
+                                                             self.subtype))
             if self.monlevel > 0 and self.fh is not None:
                 self.out_log()
 
@@ -1047,9 +1046,13 @@ class cssr:
         return True
 
     def out_log(self):
+
+        if self.time == -1:
+            return
+        
         self.fh.write("{:4d}\t{:s}\n".format(self.msgtype,
                                              time2str(self.time)))
-
+        
         if (self.lc[0].cstat & (1 << sCType.MASK)) != (1 << sCType.MASK):
             return
 
