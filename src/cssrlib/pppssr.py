@@ -76,7 +76,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.sig_p0 = 100.0
     nav.sig_v0 = 1.0
     nav.sig_ztd0 = 0.25
-    nav.sig_ion0 = 1.0
+    nav.sig_ion0 = 10.0
     nav.sig_n0 = 30.0
 
     # Process noise sigma
@@ -88,7 +88,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
         nav.sig_qp = 0.01/np.sqrt(1)  # [m/sqrt(s)]
         nav.sig_qv = 1.0/np.sqrt(1)  # [m/s/sqrt(s)]
     nav.sig_qztd = 0.1/np.sqrt(3600)  # [m/sqrt(s)] -> 1 cm**2/h
-    nav.sig_qion = 1.0  # [m]
+    nav.sig_qion = 10.0  # [m]
 
     nav.tidecorr = True
     nav.armode = 0  # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
@@ -461,11 +461,15 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
 
         # Select APC reference signals
         #
-        if cs.cssrmode == sc.GAL_HAS_SIS or cs.cssrmode == sc.GAL_HAS_IDD:
+        if cs.cssrmode == sc.GAL_HAS_SIS or \
+                cs.cssrmode == sc.GAL_HAS_IDD or \
+                cs.cssrmode == sc.QZS_MADOCA:
             if sys == uGNSS.GPS:
                 sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
             elif sys == uGNSS.GAL:
                 sig0 = (rSigRnx("EC1C"), rSigRnx("EC7Q"))
+            elif sys == uGNSS.QZS:
+                sig0 = (rSigRnx("JC1C"), rSigRnx("JC2S"))
             else:
                 sig0 = None
         else:

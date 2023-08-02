@@ -74,7 +74,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.sig_p0 = 100.0
     nav.sig_v0 = 1.0
     nav.sig_ztd0 = 0.25
-    nav.sig_ion0 = 1.0
+    nav.sig_ion0 = 10.0
     nav.sig_n0 = 30.0
 
     # Process noise sigma
@@ -86,7 +86,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
         nav.sig_qp = 0.01/np.sqrt(1)  # [m/sqrt(s)]
         nav.sig_qv = 1.0/np.sqrt(1)  # [m/s/sqrt(s)]
     nav.sig_qztd = 0.1/np.sqrt(3600)  # [m/sqrt(s)] -> 1 cm**2/h
-    nav.sig_qion = 1.0  # [m]
+    nav.sig_qion = 10.0  # [m]
 
     nav.tidecorr = True
     nav.armode = 3  # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
@@ -565,7 +565,8 @@ def sdres(nav, obs, x, y, e, sat, el):
                                            idx_i, idx_i,
                                            (mapfwi-mapfwj),
                                            x[IT(nav.na)],
-                                           np.sqrt(nav.P[IT(nav.na), IT(nav.na)])))
+                                           np.sqrt(nav.P[IT(nav.na),
+                                                         IT(nav.na)])))
 
                 # SD ionosphere
                 #
@@ -624,8 +625,8 @@ def sdres(nav, obs, x, y, e, sat, el):
                     nav.fout.write("{} {}-{} ({:2d}) {} res {:10.3f} sig_i {:10.3f} sig_j {:10.3f}\n"
                                    .format(time2str(obs.t),
                                            sat2id(sat[i]), sat2id(sat[j]),
-                                           nv, sig.str(),
-                                           v[nv], np.sqrt(Ri[nv]), np.sqrt(Rj[nv])))
+                                           nv, sig.str(), v[nv],
+                                           np.sqrt(Ri[nv]), np.sqrt(Rj[nv])))
 
                 nb[b] += 1
                 nv += 1  # counter for single-difference observations
