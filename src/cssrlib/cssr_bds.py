@@ -16,7 +16,7 @@ class cssr_bds(cssr):
     def __init__(self, foutname=None):
         super().__init__(foutname)
         self.MAXNET = 1
-        self.cssrmode = sCSSRTYPE.BDS_PPP        
+        self.cssrmode = sCSSRTYPE.BDS_PPP
         self.GF = galois.GF(2**6)
         self.nsig_max = 8
         self.iodp = -1
@@ -126,7 +126,7 @@ class cssr_bds(cssr):
         i += 4
 
         mask_bds, mask_gps, mask_gal, mask_glo = \
-         bs.unpack_from('u63u37u37u37', msg, i)
+            bs.unpack_from('u63u37u37u37', msg, i)
         i += 174
 
         if self.iodp != self.iodp_p:
@@ -153,6 +153,7 @@ class cssr_bds(cssr):
             self.lc[inet].iode = np.zeros(self.nsat_n, dtype=int)
             self.lc[inet].iodc = np.zeros(self.nsat_n, dtype=int)
             self.lc[inet].cbias = np.zeros((self.nsat_n, self.nsig_max))
+            self.nsig_n = np.ones(self.nsat_n, dtype=int)*self.nsig_max
             self.sig_n = -1*np.ones((self.nsat_n, self.nsig_max), dtype=int)
             self.ura = np.zeros(self.nsat_n)
 
@@ -320,14 +321,25 @@ class cssr_bds(cssr):
         i += 6
 
         if mt == 1:
+            self.subtype = sCSSR.MASK
             i = self.decode_cssr_mask(msg, i)
         elif mt == 2:
+            self.subtype = sCSSR.ORBIT
             i = self.decode_cssr_orb(msg, i)
+            if self.monlevel > 0 and self.fh is not None:
+                self.out_log()
         elif mt == 3:
+            self.subtype = sCSSR.CBIAS
             i = self.decode_cssr_cbias(msg, i)
+            if self.monlevel > 0 and self.fh is not None:
+                self.out_log()
         elif mt == 4:
+            self.subtype = sCSSR.CLOCK
             i = self.decode_cssr_clk(msg, i)
+            if self.monlevel > 0 and self.fh is not None:
+                self.out_log()
         elif mt == 5:
+            self.subtype = sCSSR.URA
             i = self.decode_cssr_ura(msg, i)
         elif mt == 6:
             i = self.decode_cssr_comb1(msg, i)
