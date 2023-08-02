@@ -73,8 +73,8 @@ class cssr_has(cssr):
             return False
         # time of hour
         # flags: mask,orbit,clock,clock subset,cbias,pbias,mask_id,iodset_id
-        self.toh, flags, res, mask_id, self.iodssr = bs.unpack_from(
-            'u12u6u4u5u5', msg, i)
+        self.toh, flags, res, mask_id, self.iodssr = \
+            bs.unpack_from('u12u6u4u5u5', msg, i)
         i += 32
 
         if self.monlevel > 0 and self.fh is not None:
@@ -110,6 +110,8 @@ class cssr_has(cssr):
         if (flags >> 0) & 1:  # phase bias block
             self.subtype = sCSSR.PBIAS
             i = self.decode_cssr_pbias(msg, i)
+            if self.monlevel > 0 and self.fh is not None:
+                self.out_log()
 
     def decode_has_header(self, buff, i):
         if bs.unpack_from('u24', buff, i)[0] == 0xaf3bc3:
