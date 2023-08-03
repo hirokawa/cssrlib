@@ -3,7 +3,6 @@ module for standard PPP positioning
 """
 
 import numpy as np
-import sys
 
 import cssrlib.gnss as gn
 from cssrlib.ephemeris import satposs
@@ -398,6 +397,11 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         cbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
         pbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
 
+        # Check for invalid biases
+        #
+        if np.isnan(cbias.any()) or np.isnan(pbias.any()):
+            continue
+
         # Shapipo relativistic effect
         #
         relatv = shapiro(rs[i, :], rr_)
@@ -537,7 +541,7 @@ def sdres(nav, obs, x, y, e, sat, el):
                 if i == j:
                     continue
 
-                # Skip invalid signals
+                # Skip invalid measurements
                 #
                 if y[i, f] == 0.0 or y[j, f] == 0.0:
                     continue

@@ -1132,7 +1132,8 @@ class biasdec():
 
     def getosb(self, sat, time, sig):
         """ retrieve OSB value based on satellite, epoch and signal code """
-        bias = None
+
+        bias = np.nan
 
         for osb in self.osb:
 
@@ -1147,7 +1148,8 @@ class biasdec():
 
     def getosbstd(self, sat, time, sig):
         """ retrieve OSB sigma based on satellite, epoch and signal code """
-        std = None
+
+        std = np.nan
 
         for osb in self.osb:
 
