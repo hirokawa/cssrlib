@@ -328,7 +328,7 @@ class rnxdec:
                             eph.tgd_c = float(self.flt(line, 3))  # tgd_B2ap
 
                     else:
-                        if self.mode_nav > 0:
+                        if self.mode_nav > 0 and sys != uGNSS.GAL:
                             eph.isc[0] = self.flt(line, 0)
                             eph.isc[1] = self.flt(line, 1)
                             eph.isc[2] = self.flt(line, 2)

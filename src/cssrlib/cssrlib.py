@@ -419,8 +419,8 @@ class cssr:
 
     def sval(self, u, n, scl):
         """ calculate signed value based on n-bit int, lsb """
-        invalid = -(2**(n-1)-1)
-        dnu = -(2**(n-1))
+        invalid = -2**(n-1)
+        dnu = 2**(n-1)-1
         y = np.nan if u == invalid or u == dnu else u*scl
         return y
 
@@ -595,8 +595,8 @@ class cssr:
         v = bs.unpack_from_dict('s'+str(self.cb_blen), ['cbias'], msg, i)
         self.lc[inet].cbias[k, j] = \
             self.sval(v['cbias'], self.cb_blen, self.cb_scl)
-        # if self.cssrmode == GAL_HAS_SIS:  # work-around for HAS
-        #    self.lc[inet].cbias[k, j] *= -1.0
+        if self.cssrmode == sCSSRTYPE.BDS_PPP:  # work-around for BDS
+            self.lc[inet].cbias[k, j] *= -1.0
         i += self.cb_blen
         return i
 
@@ -606,8 +606,8 @@ class cssr:
                                 'u2', ['pbias', 'di'], msg, i)
         self.lc[inet].pbias[k, j] = \
             self.sval(v['pbias'], self.pb_blen, self.pb_scl)
-        # if self.cssrmode == GAL_HAS_SIS:  # work-around for HAS
-        #    self.lc[inet].pbias[k, j] *= -1.0
+        if self.cssrmode == sCSSRTYPE.BDS_PPP:  # work-around for BDS
+            self.lc[inet].pbias[k, j] *= -1.0
         self.lc[inet].di[k, j] = v['di']
         i += self.pb_blen + 2
         return i
@@ -1027,9 +1027,8 @@ class cssr:
                     print("tow={:6d} subtype={:2d} inet={:2d}".
                           format(self.tow, self.subtype, self.inet))
                 else:
-                    print("tow={:6d} subtype={:2d}".format(self.tow,
-                                                           self.subtype))
-
+                    print("tow={:6.0f} subtype={:2d}".format(self.tow,
+                                                             self.subtype))
             if self.monlevel > 0 and self.fh is not None:
                 self.out_log()
 
@@ -1047,17 +1046,22 @@ class cssr:
         return True
 
     def out_log(self):
+
+        if self.time == -1:
+            return
+        
         self.fh.write("{:4d}\t{:s}\n".format(self.msgtype,
                                              time2str(self.time)))
-
+        
         if (self.lc[0].cstat & (1 << sCType.MASK)) != (1 << sCType.MASK):
             return
 
         if self.subtype == sCSSR.CLOCK:
             self.fh.write(" {:s}\t{:s}\n".format("SatID", "dclk [m]"))
             for k, sat_ in enumerate(self.sat_n):
-                self.fh.write(" {:s}\t{:6.3f}\n".format(sat2id(sat_),
-                                                        self.lc[0].dclk[k]))
+                self.fh.write(" {:s}\t{:8.4f}\n"
+                              .format(sat2id(sat_),
+                                      self.lc[0].dclk[k]))
 
         elif self.subtype == sCSSR.ORBIT:
             self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\t{:s}\n"
@@ -1087,15 +1091,33 @@ class cssr:
 
         elif self.subtype == sCSSR.CBIAS:
             self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\n"
-                          .format("SatID", "SigID", "Bias[m]", "..."))
+                          .format("SatID", "SigID", "Code Bias[m]", "..."))
             for k, sat_ in enumerate(self.sat_n):
                 sys_, _ = sat2prn(sat_)
                 self.fh.write(" {:s}\t".format(sat2id(sat_)))
                 for j in range(self.nsig_n[k]):
+                    if self.sig_n[k][j] == -1:
+                        continue
                     sig_ = self.ssig2rsig(sys_, uTYP.C, self.sig_n[k][j])
                     self.fh.write("{:s}\t{:5.2f}\t"
                                   .format(sig_.str(), self.lc[0].cbias[k, j]))
                 self.fh.write("\n")
+
+        elif self.subtype == sCSSR.PBIAS:
+            self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\n"
+                          .format("SatID", "SigID", "Phase Bias[m]", "..."))
+            for k, sat_ in enumerate(self.sat_n):
+                sys_, _ = sat2prn(sat_)
+                self.fh.write(" {:s}\t".format(sat2id(sat_)))
+                for j in range(self.nsig_n[k]):
+                    if self.sig_n[k][j] == -1:
+                        continue
+                    sig_ = self.ssig2rsig(sys_, uTYP.L, self.sig_n[k][j])
+                    self.fh.write("{:s}\t{:5.2f}\t"
+                                  .format(sig_.str(), self.lc[0].pbias[k, j]))
+                self.fh.write("\n")
+
+        self.fh.flush()
 
     def read_griddef(self, file):
         """load grid coordinates from file """

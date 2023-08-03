@@ -64,7 +64,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.na = 3 if nav.pmode == 0 else 6
     nav.nq = 3 if nav.pmode == 0 else 6
 
-    nav.thresar = [2.0]
+    nav.thresar = 2.0
     nav.nx = nav.na+gn.uGNSS.MAXSAT*nav.nf
     nav.x = np.zeros(nav.nx)
     nav.P = np.zeros((nav.nx, nav.nx))

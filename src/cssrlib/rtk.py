@@ -24,7 +24,7 @@ def rtkinit(nav, pos0=np.zeros(3)):
     nav.na = 3 if nav.pmode == 0 else 6
     nav.nq = 3 if nav.pmode == 0 else 6
 
-    nav.thresar = [2]
+    nav.thresar = 2.0
     nav.nx = nav.na+gn.uGNSS.MAXSAT*nav.nf
     nav.x = np.zeros(nav.nx)
     nav.P = np.zeros((nav.nx, nav.nx))
@@ -304,7 +304,7 @@ def resamb_lambda(nav, sat):
 
     # MLAMBDA ILS
     b, s = mlambda(y, Qb)
-    if s[0] <= 0.0 or s[1]/s[0] >= nav.thresar[0]:
+    if s[0] <= 0.0 or s[1]/s[0] >= nav.thresar:
         nav.xa = nav.x[0:na].copy()
         nav.Pa = nav.P[0:na, 0:na].copy()
         bias = b[:, 0]
