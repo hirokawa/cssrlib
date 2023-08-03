@@ -52,7 +52,7 @@ class peph:
         self.nmax = 24*12
 
     def parse_satlist(self, line):
-        n = len(line[9:])//3
+        n = len(line[9:60])//3
         for k in range(n):
             svid = line[9+3*k:12+3*k]
             if int(svid[1:]) > 0:
@@ -60,7 +60,7 @@ class peph:
                 self.cnt += 1
 
     def parse_acclist(self, line):
-        n = len(line[9:])//3
+        n = len(line[9:60])//3
         for k in range(n):
             acc = int(line[9+3*k:12+3*k])
             if self.cnt < self.nsat:
