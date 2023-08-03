@@ -49,7 +49,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.na = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
     nav.nq = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
 
-    nav.thresar = [2.0]
+    nav.thresar = 2.0
 
     # State vector dimensions (inlcuding slat iono delay and ambiguities)
     #

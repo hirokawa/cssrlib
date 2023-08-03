@@ -47,7 +47,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.na = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
     nav.nq = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
 
-    nav.thresar = [2.0]
+    nav.thresar = 2.0
 
     # State vector dimensions (inlcuding slat iono delay and ambiguities)
     #
@@ -71,10 +71,10 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
 
     # Initial sigma for state covariance
     #
-    nav.sig_p0 = 100.0
-    nav.sig_v0 = 1.0
-    nav.sig_ztd0 = 0.25
-    nav.sig_ion0 = 10.0
+    nav.sig_p0 = 100.0  # [m]
+    nav.sig_v0 = 1.0  # [m/s]
+    nav.sig_ztd0 = 0.25  # [m]
+    nav.sig_ion0 = 10.0  # [m]
     nav.sig_n0 = 30.0
 
     # Process noise sigma
