@@ -7,6 +7,7 @@ import numpy as np
 import cssrlib.gnss as gn
 from cssrlib.ephemeris import satposs
 from cssrlib.gnss import sat2id, sat2prn, uTYP
+from cssrlib.gnss import uTropoModel
 from cssrlib.gnss import time2str
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.peph import antModelRx, antModelTx
@@ -41,12 +42,14 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.nf = 2  # TODO: make obsolete if possible
     nav.ephopt = 4  # IGS
 
+    # Select tropospheric model
+    #
+    nav.trpModel = uTropoModel.SAAST
+
     # Position (+ optional velocity), zenith tropo delay and slant ionospheric delay states
     #
     nav.na = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
     nav.nq = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
-
-    nav.thresar = 2.0
 
     # State vector dimensions (inlcuding slat iono delay and ambiguities)
     #
@@ -88,6 +91,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.sig_qion = 10.0  # [m]
 
     nav.tidecorr = True
+    nav.thresar = 2.0
     nav.armode = 3  # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
     nav.elmin = np.deg2rad(10.0)
@@ -165,8 +169,8 @@ def udstate(nav, obs):
     # pos,vel,ztd,ion,amb
     #
     nx = nav.nx
-    ni = nav.na-gn.uGNSS.MAXSAT
     Phi = np.eye(nx)
+    ni = nav.na-gn.uGNSS.MAXSAT
     Phi[ni:nav.na, ni:nav.na] = np.zeros((gn.uGNSS.MAXSAT, gn.uGNSS.MAXSAT))
     if nav.pmode > 0:
         nav.x[0:3] += nav.x[3:6]*tt
@@ -339,7 +343,7 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
 
     # Zenith tropospheric dry and wet delays at user position
     #
-    trop_hs, trop_wet, _ = gn.tropmodel(obs.t, pos)
+    trop_hs, trop_wet, _ = gn.tropmodel(obs.t, pos, model=nav.trpModel)
 
     cpc = np.zeros((n, nf))
     prc = np.zeros((n, nf))
@@ -408,7 +412,7 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
 
         # Tropospheric delay mapping functions
         #
-        mapfh, mapfw = gn.tropmapf(obs.t, pos, el[i])
+        mapfh, mapfw = gn.tropmapf(obs.t, pos, el[i], model=nav.trpModel)
 
         # Tropospheric delay
         #
@@ -556,8 +560,8 @@ def sdres(nav, obs, x, y, e, sat, el):
 
                 # SD troposphere
                 #
-                _, mapfwi = gn.tropmapf(obs.t, pos, el[i])
-                _, mapfwj = gn.tropmapf(obs.t, pos, el[j])
+                _, mapfwi = gn.tropmapf(obs.t, pos, el[i], model=nav.trpModel)
+                _, mapfwj = gn.tropmapf(obs.t, pos, el[j], model=nav.trpModel)
 
                 idx_i = IT(nav.na)
                 H[nv, idx_i] = mapfwi - mapfwj

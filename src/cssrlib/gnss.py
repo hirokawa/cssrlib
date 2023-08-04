@@ -1196,13 +1196,57 @@ def interpc(coef, lat):
     return coef[:, i-1]*(1.0-d)+coef[:, i]*d
 
 
+class uTropoModel(IntEnum):
+    """
+    Enumeration for tropo model selection
+    """
+
+    NONE = -1
+    SAAST = 0
+    HOPF = 1
+
+
+def tropmapf(t, pos, el, model=uTropoModel.SAAST):
+    """
+    Tropo mapping function
+    """
+
+    if model == uTropoModel.SAAST:
+        return tropmapfNiell(t, pos, el)
+    elif model == uTropoModel.HOPF:
+        return tropmapfHpf(el)
+    else:
+        return 0
+
+
+def tropmodel(t, pos, el=np.pi/2, humi=0.7, model=uTropoModel.SAAST):
+    """
+    Tropospheric delay model
+    """
+
+    if model == uTropoModel.SAAST:
+        return tropmodelSaast(t, pos, el, humi)
+    elif model == uTropoModel.HOPF:
+        return tropmodelHpf()
+    else:
+        return 0
+
+
+def meteo(hgt, humi):
+    """ standard atmosphere model """
+    pres = 1013.25*np.power(1-2.2557e-5*hgt, 5.2568)
+    temp = 15.0-6.5e-3*hgt+273.16
+    e = 6.108*humi*np.exp((17.15*temp-4684.0)/(temp-38.45))
+    return pres, temp, e
+
+
 def mapf(el, a, b, c):
     """ simple tropospheric mapping function """
     sinel = np.sin(el)
     return (1.0+a/(1.0+b/(1.0+c)))/(sinel+(a/(sinel+b/(sinel+c))))
 
 
-def tropmapf(t, pos, el):
+def tropmapfNiell(t, pos, el):
     """ tropospheric mapping function by Niell (NMF) """
     if pos[2] < -1e3 or pos[2] > 20e3 or el <= 0.0:
         return 0.0, 0.0
@@ -1234,15 +1278,7 @@ def tropmapf(t, pos, el):
     return mapfh, mapfw
 
 
-def meteo(hgt, humi):
-    """ standard atmosphere model """
-    pres = 1013.25*np.power(1-2.2557e-5*hgt, 5.2568)
-    temp = 15.0-6.5e-3*hgt+273.16
-    e = 6.108*humi*np.exp((17.15*temp-4684.0)/(temp-38.45))
-    return pres, temp, e
-
-
-def tropmodel(t, pos, el=np.pi/2, humi=0.7):
+def tropmodelSaast(t, pos, el=np.pi/2, humi=0.7):
     """ saastamoinen tropospheric delay model """
     hgt = pos[2]
     # standard atmosphere
@@ -1272,7 +1308,7 @@ def tropmapfHpf(el):
     mapfh = 1.0/(np.sin(np.sqrt(el**2+(np.pi/72.0)**2)))
     mapfw = 1.0/(np.sin(np.sqrt(el**2+(np.pi/120.0)**2)))
 
-    return mapfh, mapfw
+    return mapfh, mapfw,
 
 
 def tropmodelHpf():
@@ -1285,4 +1321,4 @@ def tropmodelHpf():
     trop_dry = (77.6e-6 * (-613.3768/temp+148.98)*pres)/5.0
     trop_wet = (77.6e-6 * 11000.0 * 4810.0 * e/temp**2)/5.0
 
-    return trop_dry, trop_wet
+    return trop_dry, trop_wet, None
