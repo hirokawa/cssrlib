@@ -640,6 +640,7 @@ class Nav():
         self.ion = np.array([
             [0.1118E-07, -0.7451E-08, -0.5961E-07, 0.1192E-06],
             [0.1167E+06, -0.2294E+06, -0.1311E+06, 0.1049E+07]])
+        self.ion_gim = np.zeros(9)
         self.ion_region = 0  # 0: wide-area, 1: Japan-aera (QZSS only)
         self.sto = np.zeros(3)
         self.sto_prm = np.zeros(4, dtype=int)
