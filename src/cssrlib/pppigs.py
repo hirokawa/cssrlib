@@ -44,8 +44,9 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     # Select tropospheric model
     #
     nav.trpModel = uTropoModel.SAAST
-
-    # Position (+ optional velocity), zenith tropo delay and slant ionospheric delay states
+    
+    # Position (+ optional velocity), zenith tropo delay and
+    # slant ionospheric delay states
     #
     nav.na = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
     nav.nq = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
