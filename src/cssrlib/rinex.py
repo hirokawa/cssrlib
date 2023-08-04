@@ -379,6 +379,7 @@ class rnxdec:
         """decode Clock-RINEX data from file """
 
         # Offset for Clock-RINEX v3.x data section
+        #
         offs = None
 
         nav.pclk = []
@@ -390,7 +391,7 @@ class rnxdec:
 
             if 'RINEX VERSION / TYPE' in line:
                 ver = float(line[0:20])
-                offs = 0 if ver < 3 else 5
+                offs = 0 if ver < 3.04 else 5
 
             if 'END OF HEADER' in line:
                 break

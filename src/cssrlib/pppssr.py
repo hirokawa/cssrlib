@@ -359,7 +359,7 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
 
         # Check for valid orbit and clock offset
         #
-        if np.isnan(rs[i, :].any()) or np.isnan(dts[i]):
+        if np.isnan(rs[i, :]).any() or np.isnan(dts[i]):
             continue
 
         # Pseudorange, carrier-phase and C/N0 signals
@@ -431,6 +431,11 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
 
             if np.all(cs.lc[0].dorb[idx_n] == np.array([0.0, 0.0, 0.0])):
                 continue
+
+        # Check for invalid biases
+        #
+        if np.isnan(cbias).any() or np.isnan(pbias).any():
+            continue
 
         # Geometric distance corrected for Earth rotation during flight time
         #
@@ -597,7 +602,7 @@ def sdres(nav, obs, x, y, e, sat, el):
                 if i == j:
                     continue
 
-                # Skip invalid signals
+                # Skip invalid measurements
                 #
                 if y[i, f] == 0.0 or y[j, f] == 0.0:
                     continue

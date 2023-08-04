@@ -52,7 +52,7 @@ class peph:
         self.nmax = 24*12
 
     def parse_satlist(self, line):
-        n = len(line[9:])//3
+        n = len(line[9:60])//3
         for k in range(n):
             svid = line[9+3*k:12+3*k]
             if int(svid[1:]) > 0:
@@ -60,7 +60,7 @@ class peph:
                 self.cnt += 1
 
     def parse_acclist(self, line):
-        n = len(line[9:])//3
+        n = len(line[9:60])//3
         for k in range(n):
             acc = int(line[9+3*k:12+3*k])
             if self.cnt < self.nsat:
@@ -584,7 +584,7 @@ def substSigRx(pcv, sig):
                 sig.sig == uSIG.L7 or sig.sig == uSIG.L8:
             sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L2)
     elif sig.sys == uGNSS.BDS:
-        if sig.sig == uSIG.L1:
+        if sig.sig == uSIG.L1 or sig.sig == uSIG.L2:
             sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L1)
         elif sig.sig == uSIG.L5 or sig.sig == uSIG.L6 or \
                 sig.sig == uSIG.L7 or sig.sig == uSIG.L8:
@@ -1132,7 +1132,8 @@ class biasdec():
 
     def getosb(self, sat, time, sig):
         """ retrieve OSB value based on satellite, epoch and signal code """
-        bias = None
+
+        bias = np.nan
 
         for osb in self.osb:
 
@@ -1147,7 +1148,8 @@ class biasdec():
 
     def getosbstd(self, sat, time, sig):
         """ retrieve OSB sigma based on satellite, epoch and signal code """
-        std = None
+
+        std = np.nan
 
         for osb in self.osb:
 
