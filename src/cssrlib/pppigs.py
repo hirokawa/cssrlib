@@ -44,7 +44,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     # Select tropospheric model
     #
     nav.trpModel = uTropoModel.SAAST
-    
+
     # Position (+ optional velocity), zenith tropo delay and
     # slant ionospheric delay states
     #
@@ -524,7 +524,7 @@ def sdres(nav, obs, x, y, e, sat, el):
                 sig = obs.sig[sys][uTYP.L][f]
                 mu = -(freq0/sig.frequency())**2
             else:  # code
-                sig = obs.sig[sys][uTYP.C][f % 2]
+                sig = obs.sig[sys][uTYP.C][f % nf]
                 mu = +(freq0/sig.frequency())**2
 
             # Select satellites from one constellation only
