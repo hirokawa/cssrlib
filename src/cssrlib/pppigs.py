@@ -76,7 +76,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.sig_v0 = 1.0  # [m/s]
     nav.sig_ztd0 = 0.25  # [m]
     nav.sig_ion0 = 10.0  # [m]
-    nav.sig_n0 = 30.0
+    nav.sig_n0 = 30.0  # [cyc]
 
     # Process noise sigma
     #
@@ -228,6 +228,10 @@ def udstate(nav, obs):
             if obs.lli[i, f] & 1 == 0:
                 continue
             initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
+            if nav.monlevel > 0:
+                nav.fout.write("{}  {} - reset ambiguity  {} - LLI\n"
+                               .format(time2str(obs.t), sat2id(sat[i]),
+                                       obs.sig[sys[i]][uTYP.L][f]))
 
         # Ambiguity
         #
@@ -269,7 +273,7 @@ def udstate(nav, obs):
                 continue
 
             bias[i] = cp - pr/lam + \
-                2.0 * (sig1.frequency()**2/sig.frequency()**2)*ion[i]/lam
+                2.0*ion[i]/lam*(sig1.frequency()/sig.frequency())**2
 
             amb = nav.x[IB(sat[i], f, nav.na)]
             if amb != 0.0:
@@ -385,13 +389,6 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         if flg_m is False:
             continue
 
-        # Geometric distance corrected for Earth rotation during flight time
-        #
-        r, e[i, :] = gn.geodist(rs[i, :], rr_)
-        _, el[i] = gn.satazel(pos, e[i, :])
-        if el[i] < nav.elmin:
-            continue
-
         # Wavelength
         lam = np.array([s.wavelength() for s in sigsCP])
 
@@ -403,6 +400,13 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         # Check for invalid biases
         #
         if np.isnan(cbias).any() or np.isnan(pbias).any():
+            continue
+
+        # Geometric distance corrected for Earth rotation during flight time
+        #
+        r, e[i, :] = gn.geodist(rs[i, :], rr_)
+        _, el[i] = gn.satazel(pos, e[i, :])
+        if el[i] < nav.elmin:
             continue
 
         # Shapipo relativistic effect
@@ -567,10 +571,9 @@ def sdres(nav, obs, x, y, e, sat, el):
                 v[nv] -= (mapfwi - mapfwj)*x[idx_i]
 
                 if nav.monlevel > 2:
-                    nav.fout.write("{}         ztd ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f}\n"
+                    nav.fout.write("{}         ztd      ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f}\n"
                                    .format(time2str(obs.t),
-                                           idx_i, idx_i,
-                                           (mapfwi-mapfwj),
+                                           idx_i, idx_i, (mapfwi - mapfwj),
                                            x[IT(nav.na)],
                                            np.sqrt(nav.P[IT(nav.na),
                                                          IT(nav.na)])))
@@ -584,11 +587,10 @@ def sdres(nav, obs, x, y, e, sat, el):
                 v[nv] -= mu*(x[idx_i] - x[idx_j])
 
                 if nav.monlevel > 2:
-                    nav.fout.write("{} {}-{} ion ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
+                    nav.fout.write("{} {}-{} ion {} ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
                                    .format(time2str(obs.t),
                                            sat2id(sat[i]), sat2id(sat[j]),
-                                           idx_i, idx_j,
-                                           mu,
+                                           sig, idx_i, idx_j, mu,
                                            x[idx_i], x[idx_j],
                                            np.sqrt(nav.P[idx_i, idx_i]),
                                            np.sqrt(nav.P[idx_j, idx_j])))
@@ -602,7 +604,7 @@ def sdres(nav, obs, x, y, e, sat, el):
 
                     lami = sig.wavelength()
 
-                    v[nv] -= lami*(x[idx_i]-x[idx_j])
+                    v[nv] -= lami*(x[idx_i] - x[idx_j])
 
                     H[nv, idx_i] = +lami
                     H[nv, idx_j] = -lami
@@ -614,11 +616,10 @@ def sdres(nav, obs, x, y, e, sat, el):
                     nav.vsat[sat[j]-1, f] = 1
 
                     if nav.monlevel > 2:
-                        nav.fout.write("{} {}-{} amb ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
+                        nav.fout.write("{} {}-{} amb {} ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
                                        .format(time2str(obs.t),
                                                sat2id(sat[i]), sat2id(sat[j]),
-                                               idx_i, idx_j,
-                                               lami,
+                                               sig, idx_i, idx_j, lami,
                                                x[idx_i], x[idx_j],
                                                np.sqrt(nav.P[idx_i, idx_i]),
                                                np.sqrt(nav.P[idx_j, idx_j])))
@@ -629,10 +630,10 @@ def sdres(nav, obs, x, y, e, sat, el):
                     Rj[nv] = varerr(nav, el[j], f)  # measurement variance
 
                 if nav.monlevel > 1:
-                    nav.fout.write("{} {}-{} ({:2d}) {} res {:10.3f} sig_i {:10.3f} sig_j {:10.3f}\n"
+                    nav.fout.write("{} {}-{} res {} ({:3d}) {:10.3f} sig_i {:10.3f} sig_j {:10.3f}\n"
                                    .format(time2str(obs.t),
-                                           sat2id(sat[i]), sat2id(sat[j]),
-                                           nv, sig.str(), v[nv],
+                                           sat2id(sat[i]), sat2id(sat[j]), sig,
+                                           nv, v[nv],
                                            np.sqrt(Ri[nv]), np.sqrt(Rj[nv])))
 
                 nb[b] += 1
