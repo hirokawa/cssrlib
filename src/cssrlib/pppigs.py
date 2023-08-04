@@ -410,7 +410,7 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         if el[i] < nav.elmin:
             continue
 
-        # Shapipo relativistic effect
+        # Shapiro relativistic effect
         #
         relatv = shapiro(rs[i, :], rr_)
 
