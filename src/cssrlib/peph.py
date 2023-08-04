@@ -584,7 +584,7 @@ def substSigRx(pcv, sig):
                 sig.sig == uSIG.L7 or sig.sig == uSIG.L8:
             sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L2)
     elif sig.sys == uGNSS.BDS:
-        if sig.sig == uSIG.L1:
+        if sig.sig == uSIG.L1 or sig.sig == uSIG.L2:
             sig = rSigRnx(uGNSS.GPS, sig.typ, uSIG.L1)
         elif sig.sig == uSIG.L5 or sig.sig == uSIG.L6 or \
                 sig.sig == uSIG.L7 or sig.sig == uSIG.L8:
