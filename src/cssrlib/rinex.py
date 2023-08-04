@@ -139,7 +139,9 @@ class rnxdec:
                             nav.ion[1, k] = self.flt(line[5+k*12:5+(k+1)*12])
 
             for line in fnav:
+
                 if self.ver >= 4.0:
+
                     if line[0:5] == '> STO':  # system time offset (TBD)
                         ofst_src = {'GP': uGNSS.GPS, 'GL': uGNSS.GLO,
                                     'GA': uGNSS.GAL, 'BD': uGNSS.BDS,
@@ -158,6 +160,7 @@ class rnxdec:
                         ttm = self.flt(line, 0)
                         for k in range(3):
                             nav.sto[k] = self.flt(line, k+1)
+                        continue
 
                     elif line[0:5] == '> EOP':  # earth orientation param
                         sys = char2sys(line[6])
@@ -173,6 +176,7 @@ class rnxdec:
                         ttm = self.flt(line, 0)
                         for k in range(3):
                             nav.eop[k+6] = self.flt(line, k+1)
+                        continue
 
                     elif line[0:5] == '> ION':  # iono (TBD)
                         sys = char2sys(line[6])
@@ -207,6 +211,7 @@ class rnxdec:
                             nav.ion[1, 3] = self.flt(line, 0)
                             if len(line) >= 42:
                                 nav.ion_region = int(self.flt(line, 1))
+                        continue
 
                     elif line[0:5] == '> EPH':
                         sys = char2sys(line[6])
@@ -222,9 +227,10 @@ class rnxdec:
                             self.mode_nav = 4
                         elif m == 'SBAS':
                             self.mode_nav = 5
-
-                    line = fnav.readline()
-
+                        line = fnav.readline()
+                        
+                # Process ephemeris information
+                #
                 sys = char2sys(line[0])
 
                 # Skip undesired constellations
