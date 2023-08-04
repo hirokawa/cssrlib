@@ -57,7 +57,7 @@ def logmon(nav, t, sat, cs, iu=None):
 
 def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     """ initialize variables for RTK """
-    nav.nf = 2
+
     nav.pmode = 1  # 0:static, 1:kinematic
     nav.monlevel = 1
 

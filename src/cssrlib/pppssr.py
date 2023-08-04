@@ -40,7 +40,6 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
 
     # Number of frequencies (actually signals!)
     #
-    nav.nf = 2  # TODO: make obsolete if possible
     nav.ephopt = 2  # SSR-APC
 
     # Position (+ optional velocity), zenith tropo delay and

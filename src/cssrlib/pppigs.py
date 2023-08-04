@@ -39,7 +39,6 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
 
     # Number of frequencies (actually signals!)
     #
-    nav.nf = 2  # TODO: make obsolete if possible
     nav.ephopt = 4  # IGS
 
     # Select tropospheric model
@@ -269,8 +268,8 @@ def udstate(nav, obs):
             if cp == 0.0 or pr == 0.0 or lam is None:
                 continue
 
-            bias[i] = cp - pr/lam + 2.0 * \
-                (sig1.frequency()**2/sig.frequency()**2)*ion[i]/lam
+            bias[i] = cp - pr/lam + \
+                2.0 * (sig1.frequency()**2/sig.frequency()**2)*ion[i]/lam
 
             amb = nav.x[IB(sat[i], f, nav.na)]
             if amb != 0.0:
