@@ -54,6 +54,8 @@ class rnxdec:
                 self.sig_tab[sig.sys].update({sig.typ: []})
             if sig not in self.sig_tab[sig.sys][sig.typ]:
                 self.sig_tab[sig.sys][sig.typ].append(sig)
+            else:
+                raise ValueError("duplicate signal {} specified!".format(sig))
 
         for _, sigs in self.sig_tab.items():
             for typ, sig in sigs.items():
