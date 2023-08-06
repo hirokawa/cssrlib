@@ -555,13 +555,6 @@ def sdres(nav, obs, x, y, e, sat, el):
                 H[nv, idx_i] = +mu
                 H[nv, idx_j] = -mu
                 v[nv] -= mu*(x[idx_i] - x[idx_j])
-                
-                """
-                idx_i = II(sat[i], nav.na)
-                idx_j = II(sat[j], nav.na)
-                H[nv, idx_i] = mu
-                v[nv] -= mu*x[idx_i]
-                """
 
                 if nav.monlevel > 2:
                     nav.fout.write("{} {}-{} ion {} ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
@@ -584,11 +577,6 @@ def sdres(nav, obs, x, y, e, sat, el):
                     H[nv, idx_i] = +lami
                     H[nv, idx_j] = -lami
                     v[nv] -= lami*(x[idx_i] - x[idx_j])
-                    
-                    """
-                    H[nv, idx_i] = lami
-                    v[nv] -= lami*x[idx_i]
-                    """
 
                     Ri[nv] = varerr(nav, el[i], f)  # measurement variance
                     Rj[nv] = varerr(nav, el[j], f)  # measurement variance
@@ -781,7 +769,8 @@ def ppppos(nav, obs, orb, bsx):
     if len(obs.sat) == 0:
         return
 
-    # GNSS satellite positions, velocities and clock offsets
+    # GNSS satellite positions, velocities and clock offsets for all satellites
+    # in RINEX observations
     #
     rs, vs, dts, svh = satposs(obs, nav, cs=None, orb=orb)
 
@@ -789,7 +778,7 @@ def ppppos(nav, obs, orb, bsx):
     # NOTE: using previous position here!
     #
     xp = nav.x.copy()
-    sat = qcedit(nav, obs, rs, dts, svh, xp[0:3])
+    sat_ed = qcedit(nav, obs, rs, dts, svh, xp[0:3])
 
     # Kalman filter time propagation, initialization of ambiguities and iono
     #
@@ -804,11 +793,13 @@ def ppppos(nav, obs, orb, bsx):
 
     # Select satellites having passed quality control
     #
-    iu = np.where(np.isin(obs.sat, sat))[0]  # index of valid sats in obs.sat
+    # index of valid sats in obs.sat
+    iu = np.where(np.isin(obs.sat, sat_ed))[0]
+    sat = obs.sat[iu]
     y = yu[iu, :]
     e = eu[iu, :]
     el = elu[iu]
-    print(iu, y, e, el)
+
     # Store reduced satellite list
     # NOTE: where are working on a reduced list of observations from here on
     #
