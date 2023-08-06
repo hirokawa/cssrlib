@@ -538,10 +538,6 @@ def sdres(nav, obs, x, y, e, sat, el):
             if len(idx) > 0:
                 i = idx[np.argmax(el[idx])]
 
-                if nav.monlevel > 3:
-                    nav.fout.write("{} prn0 {:3s}\n"
-                                   .format(time2str(obs.t), sat2id(sat[i])))
-
             # Loop over satellites
             #
             for j in idx:
