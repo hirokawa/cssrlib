@@ -173,6 +173,9 @@ def satposs(obs, nav, cs=None, orb=None):
 
         sat = obs.sat[i]
         sys, _ = sat2prn(sat)
+
+        # Skip undesired constellations
+        #
         if sys not in obs.sig.keys():
             continue
 
