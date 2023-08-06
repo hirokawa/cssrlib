@@ -487,10 +487,11 @@ def sdres(nav, obs, x, y, e, sat, el):
         Covariance matrix of single-difference measurements
     """
 
-    nf = nav.nf
-    ns = len(el)
+    nf = nav.nf  # number of frequencies (or signals)
+    ns = len(el)  # number of satellites
+    nc = len(obs.sig.keys())  # number of constellations
 
-    nb = np.zeros(2*len(obs.sig.keys())*nf, dtype=int)
+    nb = np.zeros(2*nc*nf, dtype=int)
 
     Ri = np.zeros(ns*nf*2)
     Rj = np.zeros(ns*nf*2)
