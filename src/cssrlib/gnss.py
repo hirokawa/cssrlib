@@ -672,7 +672,7 @@ class Nav():
         self.dsis = np.zeros(uGNSS.MAXSAT)
         self.sis = np.zeros(uGNSS.MAXSAT)
 
-        # satellite observation status
+        # Satellite observation status
         self.fix = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
         # Measurement outage indicator
         self.outc = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)

@@ -232,7 +232,7 @@ def ddidx(nav, sat):
             for i in range(k, k+n):
                 sat_i = i-k+1
                 sys, _ = gn.sat2prn(sat_i)
-                if (sys != m):  # or sys not in nav.gnss_t:
+                if (sys != m):
                     continue
                 if sat_i not in sat or nav.x[i] == 0.0 \
                    or nav.vsat[sat_i-1, f] == 0:
@@ -245,7 +245,7 @@ def ddidx(nav, sat):
             for j in range(k, k+n):
                 sat_j = j-k+1
                 sys, _ = gn.sat2prn(sat_j)
-                if (sys != m):  # or sys not in nav.gnss_t:
+                if (sys != m):
                     continue
                 if i == j or sat_j not in sat or nav.x[j] == 0.0 \
                    or nav.vsat[sat_j-1, f] == 0:

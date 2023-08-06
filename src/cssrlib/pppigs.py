@@ -391,6 +391,7 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
             continue
 
         # Wavelength
+        #
         lam = np.array([s.wavelength() for s in sigsCP])
 
         # Code and phase signal bias, converted from [ns] to [m]
@@ -637,10 +638,10 @@ def sdres(nav, obs, x, y, e, sat, el):
                                            nv, v[nv],
                                            np.sqrt(Ri[nv]), np.sqrt(Rj[nv])))
 
-                nb[b] += 1
+                nb[b] += 1  # counter for single-differences per signal
                 nv += 1  # counter for single-difference observations
 
-            b += 1  # counter for satellite
+            b += 1  # counter for signal (pseudrange+carrier-phase)
 
     v = np.resize(v, nv)
     H = np.resize(H, (nv, nav.nx))
