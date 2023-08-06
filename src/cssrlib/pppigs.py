@@ -426,7 +426,7 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
     return y, e, el
 
 
-def sdres(nav, obs, x, y, e, sat, el, log=False):
+def sdres(nav, obs, x, y, e, sat, el):
     """
     SD phase/code residuals
 
@@ -555,6 +555,7 @@ def sdres(nav, obs, x, y, e, sat, el, log=False):
                 H[nv, idx_i] = +mu
                 H[nv, idx_j] = -mu
                 v[nv] -= mu*(x[idx_i] - x[idx_j])
+                
                 """
                 idx_i = II(sat[i], nav.na)
                 idx_j = II(sat[j], nav.na)
@@ -583,6 +584,7 @@ def sdres(nav, obs, x, y, e, sat, el, log=False):
                     H[nv, idx_i] = +lami
                     H[nv, idx_j] = -lami
                     v[nv] -= lami*(x[idx_i] - x[idx_j])
+                    
                     """
                     H[nv, idx_i] = lami
                     v[nv] -= lami*x[idx_i]
@@ -826,7 +828,7 @@ def ppppos(nav, obs, orb, bsx):
 
     # SD residuals
     #
-    v, H, R = sdres(nav, obs, xp, y, e, sat, el, log=True)
+    v, H, R = sdres(nav, obs, xp, y, e, sat, el)
     Pp = nav.P.copy()
 
     # Kalman filter measurement update
@@ -875,7 +877,7 @@ def ppppos(nav, obs, orb, bsx):
                     holdamb(nav, xa)    # hold fixed ambiguity
                 nav.smode = 4           # fix
 
-    # Store epoch and residuals for solution
+    # Store epoch for solution
     #
     nav.t = obs.t
 
