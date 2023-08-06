@@ -607,10 +607,9 @@ def sdres(nav, obs, x, y, e, sat, el):
 
                     lami = sig.wavelength()
 
-                    v[nv] -= lami*(x[idx_i] - x[idx_j])
-
                     H[nv, idx_i] = +lami
                     H[nv, idx_j] = -lami
+                    v[nv] -= lami*(x[idx_i] - x[idx_j])
 
                     Ri[nv] = varerr(nav, el[i], f)  # measurement variance
                     Rj[nv] = varerr(nav, el[j], f)  # measurement variance
