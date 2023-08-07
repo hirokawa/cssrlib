@@ -577,7 +577,7 @@ def sdres(nav, obs, x, y, e, sat, el):
 
                 # Skip edited observations
                 #
-                if np.any(nav.edt[sat[i]-1, :] > 0):
+                if np.any(nav.edt[sat[j]-1, :] > 0):
                     continue
 
                 # Skip reference satellite i
