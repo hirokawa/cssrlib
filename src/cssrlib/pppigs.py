@@ -91,7 +91,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.sig_qion = 10.0  # [m]
 
     nav.tidecorr = True
-    nav.thresar = 2.0
+    nav.thresar = 3.0  # AR acceptance threshold
     nav.armode = 3  # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
     nav.elmin = np.deg2rad(10.0)
@@ -746,7 +746,7 @@ def qcedit(nav, obs, rs, dts, svh, rr):
             cnr_min = nav.cnr_min_gpy if sigsCN[f].isGPS_PY() else nav.cnr_min
             if obs.S[j, f] < cnr_min:
                 nav.edt[i, f] = 1
-                nav.fout.write("{}  {} - edit {:4s} - low C/N0 {:4.1f}dB-Hz\n"
+                nav.fout.write("{}  {} - edit {:4s} - low C/N0 {:4.1f} dB-Hz\n"
                                .format(time2str(obs.t), sat2id(sat_i),
                                        sigsCN[f].str(), obs.S[j, f]))
                 continue
