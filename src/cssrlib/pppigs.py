@@ -238,9 +238,11 @@ def udstate(nav, obs):
         #
         bias = np.zeros(ns)
         ion = np.zeros(ns)
-
+        
+        """
         offset = 0
         na = 0
+        """
         for i in range(ns):
 
             if sys[i] not in obs.sig.keys():
@@ -276,11 +278,13 @@ def udstate(nav, obs):
             bias[i] = cp - pr/lam + \
                 2.0*ion[i]/lam*(sig1.frequency()/sig.frequency())**2
 
+            """
             amb = nav.x[IB(sat[i], f, nav.na)]
             if amb != 0.0:
                 offset += bias[i] - amb
                 na += 1
-
+            """
+        """
         # Adjust phase-code coherency
         #
         if na > 0:
@@ -288,6 +292,7 @@ def udstate(nav, obs):
             for i in range(gn.uGNSS.MAXSAT):
                 if nav.x[IB(i+1, f, nav.na)] != 0.0:
                     nav.x[IB(i+1, f, nav.na)] += db
+        """
 
         # Initialize ambiguity
         #
