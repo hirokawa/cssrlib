@@ -93,7 +93,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.sig_qion = 10.0  # [m]
 
     nav.tidecorr = True
-    nav.thresar = 2.0
+    nav.thresar = 3.0  # AR acceptance threshold
     nav.armode = 0  # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
     nav.elmin = np.deg2rad(10.0)
@@ -269,6 +269,7 @@ def udstate(nav, obs):
 
             bias[i] = cp - pr/lam + \
                 2.0*ion[i]/lam*(sig1.frequency()/sig.frequency())**2
+
             """
             amb = nav.x[IB(sat[i], f, nav.na)]
             if amb != 0.0:
@@ -570,22 +571,18 @@ def sdres(nav, obs, x, y, e, sat, el):
             if len(idx) > 0:
                 i = idx[np.argmax(el[idx])]
 
-                if nav.monlevel > 3:
-                    nav.fout.write("{} prn0 {:3s}\n"
-                                   .format(time2str(obs.t), sat2id(sat[i])))
-
             # Loop over satellites
             #
             for j in idx:
 
+                # Skip edited observations
+                #
+                if np.any(nav.edt[sat[i]-1, :] > 0):
+                    continue
+
                 # Skip reference satellite i
                 #
                 if i == j:
-                    continue
-
-                # Skip invalid measurements
-                #
-                if y[i, f] == 0.0 or y[j, f] == 0.0:
                     continue
 
                 #  Single-difference measurement
@@ -693,14 +690,20 @@ def kfupdate(x, P, H, v, R):
     return x, P, S
 
 
-def qcedit(nav, obs, rs, dts, svh, rr):
+def qcedit(nav, obs, rs, dts, svh, xp):
     """ Coarse quality control and editing of observations """
+
+    # Predicted position at next epoch
+    #
+    tt = gn.timediff(obs.t, nav.t)
+    rr_ = xp[0:3].copy()
+    if nav.pmode > 0:
+        rr_ += nav.x[3:6]*tt
 
     # Solid Earth tide corrections
     #
     # TODO: add solid earth tide displacements
     #
-    rr_ = rr.copy()
     if nav.tidecorr:
         pos = gn.ecef2pos(rr_)
         disp = tidedisp(gn.gpst2utc(obs.t), pos)
@@ -736,8 +739,8 @@ def qcedit(nav, obs, rs, dts, svh, rr):
         #
         if sat_i in nav.excl_sat:
             nav.edt[i, :] = 1
-            nav.fout.write("{}  {} - edt  {:4s} - excluded\n"
-                           .format(time2str(obs.t), sat2id(sat_i), ""))
+            nav.fout.write("{}  {} - edit - satellite excluded\n"
+                           .format(time2str(obs.t), sat2id(sat_i)))
             continue
 
         j = np.where(obs.sat == sat_i)[0][0]
@@ -746,16 +749,16 @@ def qcedit(nav, obs, rs, dts, svh, rr):
         #
         if np.isnan(rs[j, :]).any() or np.isnan(dts[j]):
             nav.edt[i, :] = 1
-            nav.fout.write("{}  {} - edt  {:4s} - invalid eph\n"
-                           .format(time2str(obs.t), sat2id(sat_i), ""))
+            nav.fout.write("{}  {} - edit - invalid eph\n"
+                           .format(time2str(obs.t), sat2id(sat_i)))
             continue
 
         # Check satellite health
         #
         if svh[j] > 0:
             nav.edt[i, :] = 1
-            nav.fout.write("{}  {} - edt  {:4s} - unhealthy\n"
-                           .format(time2str(obs.t), sat2id(sat_i), ""))
+            nav.fout.write("{}  {} - edit - satellite unhealthy\n"
+                           .format(time2str(obs.t), sat2id(sat_i)))
             continue
 
         # Check elevation angle
@@ -764,9 +767,9 @@ def qcedit(nav, obs, rs, dts, svh, rr):
         _, el = gn.satazel(pos, e)
         if el < nav.elmin:
             nav.edt[i][:] = 1
-            nav.fout.write("{}  {} - edt  {:4s} - low elevation {:3.1f}deg\n"
-                           .format(time2str(obs.t), "",
-                                   sat2id(sat_i), np.rad2deg(el)))
+            nav.fout.write("{}  {} - edit - low elevation {:3.1f} deg\n"
+                           .format(time2str(obs.t), sat2id(sat_i),
+                                   np.rad2deg(el)))
             continue
 
         # Pseudorange, carrier-phase and C/N0 signals
@@ -784,7 +787,7 @@ def qcedit(nav, obs, rs, dts, svh, rr):
             if obs.lli[j, f] == 1:
                 nav.edt[i, f] = 1
                 if nav.monlevel > 0:
-                    nav.fout.write("{}  {} - edt  {:4s} - LLI\n"
+                    nav.fout.write("{}  {} - edit {:4s} - LLI\n"
                                    .format(time2str(obs.t), sat2id(sat_i),
                                            sigsCP[f].str()))
                 continue
@@ -793,14 +796,14 @@ def qcedit(nav, obs, rs, dts, svh, rr):
             #
             if obs.P[j, f] == 0.0:
                 nav.edt[i, f] = 1
-                nav.fout.write("{}  {} - edt  {:4s} - invalid PR obs\n"
+                nav.fout.write("{}  {} - edit {:4s} - invalid PR obs\n"
                                .format(time2str(obs.t), sat2id(sat_i),
                                        sigsPR[f].str()))
                 continue
 
             if obs.L[j, f] == 0.0:
                 nav.edt[i, f] = 1
-                nav.fout.write("{}  {} - edt  {:4s} - invalid CP obs\n"
+                nav.fout.write("{}  {} - edit {:4s} - invalid CP obs\n"
                                .format(time2str(obs.t), sat2id(sat_i),
                                        sigsCP[f].str()))
                 continue
@@ -810,7 +813,7 @@ def qcedit(nav, obs, rs, dts, svh, rr):
             cnr_min = nav.cnr_min_gpy if sigsCN[f].isGPS_PY() else nav.cnr_min
             if obs.S[j, f] < cnr_min:
                 nav.edt[i, f] = 1
-                nav.fout.write("{}  {} - edt  {:4s} - low C/N0 {:4.1f}dB-Hz\n"
+                nav.fout.write("{}  {} - edit {:4s} - low C/N0 {:4.1f} dB-Hz\n"
                                .format(time2str(obs.t), sat2id(sat_i),
                                        sigsCN[f].str(), obs.S[j, f]))
                 continue
@@ -819,6 +822,7 @@ def qcedit(nav, obs, rs, dts, svh, rr):
         #
         if np.any(nav.edt[i, :] > 0):
             continue
+
         sat.append(sat_i)
 
     return np.array(sat, dtype=int)
@@ -840,10 +844,9 @@ def ppppos(nav, obs, cs=None, orb=None, bsx=None):
     rs, vs, dts, svh = satposs(obs, nav, cs=None, orb=orb)
 
     # Editing of observations
-    # NOTE: using previous position here!
     #
     xp = nav.x.copy()
-    sat_ed = qcedit(nav, obs, rs, dts, svh, xp[0:3])
+    sat_ed = qcedit(nav, obs, rs, dts, svh, xp.copy())
 
     # Kalman filter time propagation, initialization of ambiguities and iono
     #

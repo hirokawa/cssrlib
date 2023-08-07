@@ -508,18 +508,18 @@ def sdres(nav, obs, x, y, e, sat, el):
             # Select reference satellite with highest elevation
             #
             if len(idx) > 0:
-                j = idx[np.argmax(el[idx])]
+                i = idx[np.argmax(el[idx])]
 
             # Loop over satellites
             #
-            for i in idx:
+            for j in idx:
 
                 # Skip edited observations
                 #
                 if np.any(nav.edt[sat[i]-1, :] > 0):
                     continue
 
-                # Skip reference satellite j
+                # Skip reference satellite i
                 #
                 if i == j:
                     continue
@@ -613,7 +613,7 @@ def sdres(nav, obs, x, y, e, sat, el):
 
     v = np.resize(v, nv)
     H = np.resize(H, (nv, nav.nx))
-    R = ddcov(nb, b, Rj, Ri, nv)
+    R = ddcov(nb, b, Ri, Rj, nv)
 
     return v, H, R
 
@@ -629,14 +629,20 @@ def kfupdate(x, P, H, v, R):
     return x, P, S
 
 
-def qcedit(nav, obs, rs, dts, svh, rr):
+def qcedit(nav, obs, rs, dts, svh, xp):
     """ Coarse quality control and editing of observations """
+
+    # Predicted position at next epoch
+    #
+    tt = gn.timediff(obs.t, nav.t)
+    rr_ = xp[0:3].copy()
+    if nav.pmode > 0:
+        rr_ += nav.x[3:6]*tt
 
     # Solid Earth tide corrections
     #
     # TODO: add solid earth tide displacements
     #
-    rr_ = rr.copy()
     if nav.tidecorr:
         pos = gn.ecef2pos(rr_)
         disp = tidedisp(gn.gpst2utc(obs.t), pos)
@@ -777,10 +783,9 @@ def ppppos(nav, obs, orb, bsx):
     rs, vs, dts, svh = satposs(obs, nav, cs=None, orb=orb)
 
     # Editing of observations
-    # NOTE: using previous position here!
     #
     xp = nav.x.copy()
-    sat_ed = qcedit(nav, obs, rs, dts, svh, xp[0:3])
+    sat_ed = qcedit(nav, obs, rs, dts, svh, xp.copy())
 
     # Kalman filter time propagation, initialization of ambiguities and iono
     #
