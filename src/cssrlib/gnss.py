@@ -634,7 +634,7 @@ class Seph():
 class Nav():
     """ class to define the navigation message """
 
-    def __init__(self):
+    def __init__(self, nf=2):
         self.eph = []
         self.peph = []
         self.ion = np.array([
@@ -647,7 +647,7 @@ class Nav():
         self.eop = np.zeros(9)
         self.elmin = np.deg2rad(15.0)
         self.tidecorr = False
-        self.nf = 2  # TODO: make this obsolete if possible
+        self.nf = nf
         self.ne = 0
         self.nc = 0
         self.excl_sat = []  # Excluded satellites

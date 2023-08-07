@@ -7,6 +7,7 @@ import numpy as np
 import cssrlib.gnss as gn
 from cssrlib.ephemeris import satposs
 from cssrlib.gnss import sat2id, sat2prn, rSigRnx, uTYP, uGNSS
+from cssrlib.gnss import uTropoModel
 from cssrlib.gnss import time2str
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.peph import antModelRx, antModelTx
@@ -40,16 +41,17 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
 
     # Number of frequencies (actually signals!)
     #
-    nav.nf = 2  # TODO: make obsolete if possible
     nav.ephopt = 2  # SSR-APC
 
+    # Select tropospheric model
+    #
+    nav.trpModel = uTropoModel.SAAST
+    
     # Position (+ optional velocity), zenith tropo delay and
     # slant ionospheric delay states
     #
     nav.na = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
     nav.nq = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
-
-    nav.thresar = 2.0
 
     # State vector dimensions (inlcuding slat iono delay and ambiguities)
     #
@@ -73,11 +75,11 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
 
     # Initial sigma for state covariance
     #
-    nav.sig_p0 = 100.0
-    nav.sig_v0 = 1.0
-    nav.sig_ztd0 = 0.25
-    nav.sig_ion0 = 10.0
-    nav.sig_n0 = 30.0
+    nav.sig_p0 = 100.0  # [m]
+    nav.sig_v0 = 1.0  # [m/s]
+    nav.sig_ztd0 = 0.25  # [m]
+    nav.sig_ion0 = 10.0  # [m]
+    nav.sig_n0 = 30.0  # [cyc]
 
     # Process noise sigma
     #
@@ -91,6 +93,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.sig_qion = 10.0  # [m]
 
     nav.tidecorr = True
+    nav.thresar = 2.0
     nav.armode = 0  # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
     nav.elmin = np.deg2rad(10.0)
@@ -168,8 +171,8 @@ def udstate(nav, obs):
     # pos,vel,ztd,ion,amb
     #
     nx = nav.nx
-    ni = nav.na-gn.uGNSS.MAXSAT
     Phi = np.eye(nx)
+    ni = nav.na-gn.uGNSS.MAXSAT
     Phi[ni:nav.na, ni:nav.na] = np.zeros((gn.uGNSS.MAXSAT, gn.uGNSS.MAXSAT))
     if nav.pmode > 0:
         nav.x[0:3] += nav.x[3:6]*tt
@@ -228,6 +231,10 @@ def udstate(nav, obs):
             if obs.lli[i, f] & 1 == 0:
                 continue
             initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
+            if nav.monlevel > 0:
+                nav.fout.write("{}  {} - reset ambiguity  {} - LLI\n"
+                               .format(time2str(obs.t), sat2id(sat[i]),
+                                       obs.sig[sys[i]][uTYP.L][f]))
 
         # Ambiguity
         #
@@ -268,8 +275,8 @@ def udstate(nav, obs):
             if cp == 0.0 or pr == 0.0 or lam is None:
                 continue
 
-            bias[i] = cp - pr/lam + 2.0 * \
-                (sig1.frequency()**2/sig.frequency()**2)*ion[i]/lam
+            bias[i] = cp - pr/lam + \
+                2.0*ion[i]/lam*(sig1.frequency()/sig.frequency())**2
 
             amb = nav.x[IB(sat[i], f, nav.na)]
             if amb != 0.0:
@@ -344,7 +351,7 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
 
     # Zenith tropospheric dry and wet delays at user position
     #
-    trop_hs, trop_wet, _ = gn.tropmodel(obs.t, pos)
+    trop_hs, trop_wet, _ = gn.tropmodel(obs.t, pos, model=nav.trpModel)
 
     cpc = np.zeros((n, nf))
     prc = np.zeros((n, nf))
@@ -444,13 +451,13 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
         if el[i] < nav.elmin:
             continue
 
-        # Shapipo relativistic effect
+        # Shapiro relativistic effect
         #
         relatv = shapiro(rs[i, :], rr_)
 
         # Tropospheric delay mapping functions
         #
-        mapfh, mapfw = gn.tropmapf(obs.t, pos, el[i])
+        mapfh, mapfw = gn.tropmapf(obs.t, pos, el[i], model=nav.trpModel)
 
         # Tropospheric delay
         #
@@ -617,8 +624,8 @@ def sdres(nav, obs, x, y, e, sat, el):
 
                 # SD troposphere
                 #
-                _, mapfwi = gn.tropmapf(obs.t, pos, el[i])
-                _, mapfwj = gn.tropmapf(obs.t, pos, el[j])
+                _, mapfwi = gn.tropmapf(obs.t, pos, el[i], model=nav.trpModel)
+                _, mapfwj = gn.tropmapf(obs.t, pos, el[j], model=nav.trpModel)
 
                 idx_i = IT(nav.na)
                 H[nv, idx_i] = mapfwi - mapfwj
@@ -690,9 +697,8 @@ def sdres(nav, obs, x, y, e, sat, el):
                     nav.fout.write("{} {}-{} ({:2d}) {} res {:10.3f} sig_i {:10.3f} sig_j {:10.3f}\n"
                                    .format(time2str(obs.t),
                                            sat2id(sat[i]), sat2id(sat[j]),
-                                           nv, sig.str(),
-                                           v[nv], np.sqrt(Ri[nv]),
-                                           np.sqrt(Rj[nv])))
+                                           nv, sig.str(), v[nv],
+                                           np.sqrt(Ri[nv]), np.sqrt(Rj[nv])))
 
                 nb[b] += 1
                 nv += 1  # counter for single-difference observations

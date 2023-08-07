@@ -54,6 +54,8 @@ class rnxdec:
                 self.sig_tab[sig.sys].update({sig.typ: []})
             if sig not in self.sig_tab[sig.sys][sig.typ]:
                 self.sig_tab[sig.sys][sig.typ].append(sig)
+            else:
+                raise ValueError("duplicate signal {} specified!".format(sig))
 
         for _, sigs in self.sig_tab.items():
             for typ, sig in sigs.items():
@@ -75,17 +77,18 @@ class rnxdec:
             for typ, sigs in tmp.items():
                 for i, sig in enumerate(sigs):
 
-                    # Skip unavailable systems and signals
+                    # Skip unavailable systems or available signals
                     #
-                    if sys not in self.sig_map.keys() or \
-                            sig in self.sig_map[sys].values():
+                    if sys not in self.sig_map.keys():
+                        continue
+                    if sig in self.sig_map[sys].values():
                         continue
 
                     # Not found try to replace
                     #
                     if sys == uGNSS.GPS and sig.str()[1] in '12':
                         atts = 'SLX'
-                    if sys == uGNSS.GPS and sig.str()[1] in '5':
+                    elif sys == uGNSS.GPS and sig.str()[1] in '5':
                         atts = 'IQX'
                     elif sys == uGNSS.GAL and sig.str()[1] in '578':
                         atts = 'IQX'
@@ -228,7 +231,7 @@ class rnxdec:
                         elif m == 'SBAS':
                             self.mode_nav = 5
                         line = fnav.readline()
-                        
+
                 # Process ephemeris information
                 #
                 sys = char2sys(line[0])

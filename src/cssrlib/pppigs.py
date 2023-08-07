@@ -39,14 +39,14 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
 
     # Number of frequencies (actually signals!)
     #
-    nav.nf = 2  # TODO: make obsolete if possible
     nav.ephopt = 4  # IGS
 
     # Select tropospheric model
     #
     nav.trpModel = uTropoModel.SAAST
 
-    # Position (+ optional velocity), zenith tropo delay and slant ionospheric delay states
+    # Position (+ optional velocity), zenith tropo delay and
+    # slant ionospheric delay states
     #
     nav.na = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
     nav.nq = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
@@ -77,7 +77,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.sig_v0 = 1.0  # [m/s]
     nav.sig_ztd0 = 0.25  # [m]
     nav.sig_ion0 = 10.0  # [m]
-    nav.sig_n0 = 30.0
+    nav.sig_n0 = 30.0  # [cyc]
 
     # Process noise sigma
     #
@@ -229,14 +229,20 @@ def udstate(nav, obs):
             if obs.lli[i, f] & 1 == 0:
                 continue
             initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
+            if nav.monlevel > 0:
+                nav.fout.write("{}  {} - reset ambiguity  {} - LLI\n"
+                               .format(time2str(obs.t), sat2id(sat[i]),
+                                       obs.sig[sys[i]][uTYP.L][f]))
 
         # Ambiguity
         #
         bias = np.zeros(ns)
         ion = np.zeros(ns)
-
+        
+        """
         offset = 0
         na = 0
+        """
         for i in range(ns):
 
             if sys[i] not in obs.sig.keys():
@@ -269,14 +275,16 @@ def udstate(nav, obs):
             if cp == 0.0 or pr == 0.0 or lam is None:
                 continue
 
-            bias[i] = cp - pr/lam + 2.0 * \
-                (sig1.frequency()**2/sig.frequency()**2)*ion[i]/lam
+            bias[i] = cp - pr/lam + \
+                2.0*ion[i]/lam*(sig1.frequency()/sig.frequency())**2
 
+            """
             amb = nav.x[IB(sat[i], f, nav.na)]
             if amb != 0.0:
                 offset += bias[i] - amb
                 na += 1
-
+            """
+        """
         # Adjust phase-code coherency
         #
         if na > 0:
@@ -284,6 +292,7 @@ def udstate(nav, obs):
             for i in range(gn.uGNSS.MAXSAT):
                 if nav.x[IB(i+1, f, nav.na)] != 0.0:
                     nav.x[IB(i+1, f, nav.na)] += db
+        """
 
         # Initialize ambiguity
         #
@@ -386,13 +395,6 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         if flg_m is False:
             continue
 
-        # Geometric distance corrected for Earth rotation during flight time
-        #
-        r, e[i, :] = gn.geodist(rs[i, :], rr_)
-        _, el[i] = gn.satazel(pos, e[i, :])
-        if el[i] < nav.elmin:
-            continue
-
         # Wavelength
         lam = np.array([s.wavelength() for s in sigsCP])
 
@@ -406,7 +408,14 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         if np.isnan(cbias).any() or np.isnan(pbias).any():
             continue
 
-        # Shapipo relativistic effect
+        # Geometric distance corrected for Earth rotation during flight time
+        #
+        r, e[i, :] = gn.geodist(rs[i, :], rr_)
+        _, el[i] = gn.satazel(pos, e[i, :])
+        if el[i] < nav.elmin:
+            continue
+
+        # Shapiro relativistic effect
         #
         relatv = shapiro(rs[i, :], rr_)
 
@@ -520,7 +529,7 @@ def sdres(nav, obs, x, y, e, sat, el):
                 sig = obs.sig[sys][uTYP.L][f]
                 mu = -(freq0/sig.frequency())**2
             else:  # code
-                sig = obs.sig[sys][uTYP.C][f % 2]
+                sig = obs.sig[sys][uTYP.C][f % nf]
                 mu = +(freq0/sig.frequency())**2
 
             # Select satellites from one constellation only
@@ -568,10 +577,9 @@ def sdres(nav, obs, x, y, e, sat, el):
                 v[nv] -= (mapfwi - mapfwj)*x[idx_i]
 
                 if nav.monlevel > 2:
-                    nav.fout.write("{}         ztd ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f}\n"
+                    nav.fout.write("{}         ztd      ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f}\n"
                                    .format(time2str(obs.t),
-                                           idx_i, idx_i,
-                                           (mapfwi-mapfwj),
+                                           idx_i, idx_i, (mapfwi - mapfwj),
                                            x[IT(nav.na)],
                                            np.sqrt(nav.P[IT(nav.na),
                                                          IT(nav.na)])))
@@ -585,11 +593,10 @@ def sdres(nav, obs, x, y, e, sat, el):
                 v[nv] -= mu*(x[idx_i] - x[idx_j])
 
                 if nav.monlevel > 2:
-                    nav.fout.write("{} {}-{} ion ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
+                    nav.fout.write("{} {}-{} ion {} ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
                                    .format(time2str(obs.t),
                                            sat2id(sat[i]), sat2id(sat[j]),
-                                           idx_i, idx_j,
-                                           mu,
+                                           sig, idx_i, idx_j, mu,
                                            x[idx_i], x[idx_j],
                                            np.sqrt(nav.P[idx_i, idx_i]),
                                            np.sqrt(nav.P[idx_j, idx_j])))
@@ -603,7 +610,7 @@ def sdres(nav, obs, x, y, e, sat, el):
 
                     lami = sig.wavelength()
 
-                    v[nv] -= lami*(x[idx_i]-x[idx_j])
+                    v[nv] -= lami*(x[idx_i] - x[idx_j])
 
                     H[nv, idx_i] = +lami
                     H[nv, idx_j] = -lami
@@ -615,11 +622,10 @@ def sdres(nav, obs, x, y, e, sat, el):
                     nav.vsat[sat[j]-1, f] = 1
 
                     if nav.monlevel > 2:
-                        nav.fout.write("{} {}-{} amb ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
+                        nav.fout.write("{} {}-{} amb {} ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
                                        .format(time2str(obs.t),
                                                sat2id(sat[i]), sat2id(sat[j]),
-                                               idx_i, idx_j,
-                                               lami,
+                                               sig, idx_i, idx_j, lami,
                                                x[idx_i], x[idx_j],
                                                np.sqrt(nav.P[idx_i, idx_i]),
                                                np.sqrt(nav.P[idx_j, idx_j])))
@@ -630,10 +636,10 @@ def sdres(nav, obs, x, y, e, sat, el):
                     Rj[nv] = varerr(nav, el[j], f)  # measurement variance
 
                 if nav.monlevel > 1:
-                    nav.fout.write("{} {}-{} ({:2d}) {} res {:10.3f} sig_i {:10.3f} sig_j {:10.3f}\n"
+                    nav.fout.write("{} {}-{} res {} ({:3d}) {:10.3f} sig_i {:10.3f} sig_j {:10.3f}\n"
                                    .format(time2str(obs.t),
-                                           sat2id(sat[i]), sat2id(sat[j]),
-                                           nv, sig.str(), v[nv],
+                                           sat2id(sat[i]), sat2id(sat[j]), sig,
+                                           nv, v[nv],
                                            np.sqrt(Ri[nv]), np.sqrt(Rj[nv])))
 
                 nb[b] += 1
