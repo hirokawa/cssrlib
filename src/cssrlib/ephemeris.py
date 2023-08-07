@@ -176,7 +176,7 @@ def satposs(obs, nav, cs=None, orb=None):
         if sys not in obs.sig.keys():
             continue
 
-        pr = obs.P[i, 0]
+        pr = obs.P[i, 0] # TODO: catch invalid observation!
         t = timeadd(obs.t, -pr/rCST.CLIGHT)
 
         if nav.ephopt == 4:
