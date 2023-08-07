@@ -267,6 +267,7 @@ def udstate(nav, obs):
 
             bias[i] = cp - pr/lam + \
                 2.0*ion[i]/lam*(sig1.frequency()/sig.frequency())**2
+
             """
             amb = nav.x[IB(sat[i], f, nav.na)]
             if amb != 0.0:
