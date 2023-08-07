@@ -580,6 +580,14 @@ def sdres(nav, obs, x, y, e, sat, el):
                 if np.any(nav.edt[sat[j]-1, :] > 0):
                     continue
 
+                # Skip invalid measurements
+                # NOTE: this additional test is included here, since biases or
+                #       antenna offsets may not be available and this zdres()
+                #       returns zero observation residuals!
+                #
+                if y[i, f] == 0.0 or y[j, f] == 0.0:
+                    continue
+
                 # Skip reference satellite i
                 #
                 if i == j:
