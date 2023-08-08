@@ -91,7 +91,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.sig_qion = 10.0  # [m]
 
     nav.tidecorr = True
-    nav.thresar = 2.0
+    nav.thresar = 3.0  # AR acceptance threshold
     nav.armode = 3  # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
     nav.elmin = np.deg2rad(10.0)
@@ -193,9 +193,10 @@ def udstate(nav, obs):
         for i in range(gn.uGNSS.MAXSAT):
 
             sat_ = i+1
-            nav.outc[i, f] += 1
-            reset = (nav.outc[i, f] > nav.maxout)
             sys_i, _ = gn.sat2prn(sat_)
+
+            nav.outc[i, f] += 1
+            reset = (nav.outc[i, f] > nav.maxout or np.any(nav.edt[i, :] > 0))
             if sys_i not in obs.sig.keys():
                 continue
 
@@ -221,19 +222,6 @@ def udstate(nav, obs):
                     nav.fout.write("{}  {} - reset ionosphere\n"
                                    .format(time2str(obs.t), sat2id(sat_)))
 
-        # Cycle  slip check by LLI
-        #
-        for i in range(ns):
-            if sys[i] not in obs.sig.keys():
-                continue
-            if obs.lli[i, f] & 1 == 0:
-                continue
-            initx(nav, 0.0, 0.0, IB(sat[i], f, nav.na))
-            if nav.monlevel > 0:
-                nav.fout.write("{}  {} - reset ambiguity  {} - LLI\n"
-                               .format(time2str(obs.t), sat2id(sat[i]),
-                                       obs.sig[sys[i]][uTYP.L][f]))
-
         # Ambiguity
         #
         bias = np.zeros(ns)
@@ -245,7 +233,9 @@ def udstate(nav, obs):
         """
         for i in range(ns):
 
-            if sys[i] not in obs.sig.keys():
+            # Do not initialize invalid observations
+            #
+            if np.any(nav.edt[sat[i]-1, :] > 0):
                 continue
 
             # Get dual-frequency pseudoranges for this constellation
@@ -277,6 +267,7 @@ def udstate(nav, obs):
 
             bias[i] = cp - pr/lam + \
                 2.0*ion[i]/lam*(sig1.frequency()/sig.frequency())**2
+
             """
             amb = nav.x[IB(sat[i], f, nav.na)]
             if amb != 0.0:
@@ -361,38 +352,15 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         sat = obs.sat[i]
         sys, _ = gn.sat2prn(sat)
 
-        if svh[i] > 0 or sys not in obs.sig.keys() or sat in nav.excl_sat:
-            continue
-
-        # Check for valid orbit and clock offset
+        # Skip edited observations
         #
-        if np.isnan(rs[i, :]).any() or np.isnan(dts[i]):
+        if np.any(nav.edt[sat-1, :] > 0):
             continue
 
         # Pseudorange, carrier-phase and C/N0 signals
         #
         sigsPR = obs.sig[sys][gn.uTYP.C]
         sigsCP = obs.sig[sys][gn.uTYP.L]
-        sigsCN = obs.sig[sys][gn.uTYP.S]
-
-        # Check for measurement consistency
-        #
-        flg_m = True
-        for f in range(nav.nf):
-
-            if obs.P[i, f] == 0.0 or obs.L[i, f] == 0.0 or obs.lli[i, f] == 1:
-                flg_m = False
-
-            # Check C/N0
-            #
-            cnr_min = nav.cnr_min_gpy if sigsCN[f].isGPS_PY() else nav.cnr_min
-            if obs.S[i, f] < cnr_min:
-                flg_m = False
-
-        # Skip flagged satellites
-        #
-        if flg_m is False:
-            continue
 
         # Wavelength
         #
@@ -546,14 +514,22 @@ def sdres(nav, obs, x, y, e, sat, el):
             #
             for j in idx:
 
-                # Skip reference satellite i
+                # Skip edited observations
                 #
-                if i == j:
+                if np.any(nav.edt[sat[j]-1, :] > 0):
                     continue
 
                 # Skip invalid measurements
+                # NOTE: this additional test is included here, since biases or
+                #       antenna offsets may not be available and this zdres()
+                #       returns zero observation residuals!
                 #
                 if y[i, f] == 0.0 or y[j, f] == 0.0:
+                    continue
+
+                # Skip reference satellite i
+                #
+                if i == j:
                     continue
 
                 #  Single-difference measurement
@@ -661,6 +637,144 @@ def kfupdate(x, P, H, v, R):
     return x, P, S
 
 
+def qcedit(nav, obs, rs, dts, svh, xp):
+    """ Coarse quality control and editing of observations """
+
+    # Predicted position at next epoch
+    #
+    tt = gn.timediff(obs.t, nav.t)
+    rr_ = xp[0:3].copy()
+    if nav.pmode > 0:
+        rr_ += nav.x[3:6]*tt
+
+    # Solid Earth tide corrections
+    #
+    # TODO: add solid earth tide displacements
+    #
+    if nav.tidecorr:
+        pos = gn.ecef2pos(rr_)
+        disp = tidedisp(gn.gpst2utc(obs.t), pos)
+    else:
+        disp = np.zeros(3)
+    rr_ += disp
+
+    # Geodetic position
+    #
+    pos = gn.ecef2pos(rr_)
+
+    # Total number of satellites
+    #
+    ns = gn.uGNSS.MAXSAT
+
+    # Reset previous editing results
+    #
+    nav.edt = np.zeros((ns, nav.nf), dtype=int)
+
+    # Loop over all satellites
+    #
+    sat = []
+    for i in range(ns):
+
+        sat_i = i+1
+        sys_i, _ = sat2prn(sat_i)
+
+        if sat_i not in obs.sat:
+            nav.edt[i, :] = 1
+            continue
+
+        # Check satellite exclusion
+        #
+        if sat_i in nav.excl_sat:
+            nav.edt[i, :] = 1
+            nav.fout.write("{}  {} - edit - satellite excluded\n"
+                           .format(time2str(obs.t), sat2id(sat_i)))
+            continue
+
+        j = np.where(obs.sat == sat_i)[0][0]
+
+        # Check for valid orbit and clock offset
+        #
+        if np.isnan(rs[j, :]).any() or np.isnan(dts[j]):
+            nav.edt[i, :] = 1
+            nav.fout.write("{}  {} - edit - invalid eph\n"
+                           .format(time2str(obs.t), sat2id(sat_i)))
+            continue
+
+        # Check satellite health
+        #
+        if svh[j] > 0:
+            nav.edt[i, :] = 1
+            nav.fout.write("{}  {} - edit - satellite unhealthy\n"
+                           .format(time2str(obs.t), sat2id(sat_i)))
+            continue
+
+        # Check elevation angle
+        #
+        _, e = gn.geodist(rs[j, :], rr_)
+        _, el = gn.satazel(pos, e)
+        if el < nav.elmin:
+            nav.edt[i][:] = 1
+            nav.fout.write("{}  {} - edit - low elevation {:3.1f} deg\n"
+                           .format(time2str(obs.t), sat2id(sat_i),
+                                   np.rad2deg(el)))
+            continue
+
+        # Pseudorange, carrier-phase and C/N0 signals
+        #
+        sigsPR = obs.sig[sys_i][gn.uTYP.C]
+        sigsCP = obs.sig[sys_i][gn.uTYP.L]
+        sigsCN = obs.sig[sys_i][gn.uTYP.S]
+
+        # Loop over signals
+        #
+        for f in range(nav.nf):
+
+            # Cycle  slip check by LLI
+            #
+            if obs.lli[j, f] == 1:
+                nav.edt[i, f] = 1
+                if nav.monlevel > 0:
+                    nav.fout.write("{}  {} - edit {:4s} - LLI\n"
+                                   .format(time2str(obs.t), sat2id(sat_i),
+                                           sigsCP[f].str()))
+                continue
+
+            # Check for measurement consistency
+            #
+            if obs.P[j, f] == 0.0:
+                nav.edt[i, f] = 1
+                nav.fout.write("{}  {} - edit {:4s} - invalid PR obs\n"
+                               .format(time2str(obs.t), sat2id(sat_i),
+                                       sigsPR[f].str()))
+                continue
+
+            if obs.L[j, f] == 0.0:
+                nav.edt[i, f] = 1
+                nav.fout.write("{}  {} - edit {:4s} - invalid CP obs\n"
+                               .format(time2str(obs.t), sat2id(sat_i),
+                                       sigsCP[f].str()))
+                continue
+
+            # Check C/N0
+            #
+            cnr_min = nav.cnr_min_gpy if sigsCN[f].isGPS_PY() else nav.cnr_min
+            if obs.S[j, f] < cnr_min:
+                nav.edt[i, f] = 1
+                nav.fout.write("{}  {} - edit {:4s} - low C/N0 {:4.1f} dB-Hz\n"
+                               .format(time2str(obs.t), sat2id(sat_i),
+                                       sigsCN[f].str(), obs.S[j, f]))
+                continue
+
+        # Store satellite which have passed all tests
+        #
+        if np.any(nav.edt[i, :] > 0):
+            continue
+
+        sat.append(sat_i)
+
+    return np.array(sat, dtype=int)
+
+
 def ppppos(nav, obs, orb, bsx):
     """
     PPP positioning with IGS files and conventions
@@ -671,33 +785,41 @@ def ppppos(nav, obs, orb, bsx):
     if len(obs.sat) == 0:
         return
 
-    # GNSS satellite positions, velocities and clock offsets
+    # GNSS satellite positions, velocities and clock offsets for all satellites
+    # in RINEX observations
     #
     rs, vs, dts, svh = satposs(obs, nav, cs=None, orb=orb)
+
+    # Editing of observations
+    #
+    xp = nav.x.copy()
+    sat_ed = qcedit(nav, obs, rs, dts, svh, xp.copy())
 
     # Kalman filter time propagation, initialization of ambiguities and iono
     #
     udstate(nav, obs)
 
-    # xa = np.zeros(nav.nx)
+    xa = np.zeros(nav.nx)
     xp = nav.x.copy()
 
     # Non-differential residuals
     #
     yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, svh, xp[0:3])
 
-    # Select satellites above minimum elevation
+    # Select satellites having passed quality control
     #
-    iu = np.where(elu >= nav.elmin)[0]
+    # index of valid sats in obs.sat
+    iu = np.where(np.isin(obs.sat, sat_ed))[0]
     sat = obs.sat[iu]
     y = yu[iu, :]
     e = eu[iu, :]
     el = elu[iu]
 
     # Store reduced satellite list
+    # NOTE: where are working on a reduced list of observations from here on
     #
     nav.sat = sat
-    nav.el[sat-1] = el
+    nav.el[sat-1] = el  # needed in rtk.ddidx()
     nav.y = y
     ns = len(sat)
 
@@ -711,8 +833,6 @@ def ppppos(nav, obs, orb, bsx):
         return -1
 
     # SD residuals
-    #
-    # NOTE: where are working on a reduced list of observations from here on
     #
     v, H, R = sdres(nav, obs, xp, y, e, sat, el)
     Pp = nav.P.copy()

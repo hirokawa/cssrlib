@@ -123,7 +123,13 @@ class rnxdec:
         return t
 
     def decode_nav(self, navfile, nav):
-        """decode RINEX Navigation message from file """
+        """
+        Decode RINEX Navigation message from file
+
+        NOTE: system time epochs are converted into GPST on reading!
+        
+        """
+
         nav.eph = []
         with open(navfile, 'rt') as fnav:
             for line in fnav:
