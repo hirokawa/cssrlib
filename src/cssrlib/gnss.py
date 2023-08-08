@@ -420,7 +420,7 @@ class rSigRnx():
         else:
             return '???'
 
-        s += '{}'.format(int(self.sig/100))
+        s += '{}'.format(int(self.sig / 100))
 
         if self.sig % 100 == 0:
             s += ' '
@@ -428,6 +428,12 @@ class rSigRnx():
             s += '{}'.format(chr(self.sig % 100+ord('A')-1))
 
         return s
+
+    def band(self):
+        """
+        Retrieve signal band
+        """
+        return uSIG((self.sig//100)*100)
 
     def frequency(self, k=None):
         """ frequency in Hz """
