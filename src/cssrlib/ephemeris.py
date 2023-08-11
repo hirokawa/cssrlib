@@ -133,11 +133,11 @@ def satposs(obs, nav, cs=None, orb=None):
     Calculate pos/vel/clk for observed satellites
 
     The satellite position, velocity and clock offset are computed at
-    transmission epoch. The signal time-of-flight is computed from a pseudorange
-    measurement corrected by the satellite clock offset, hence the observations
-    are required at this stage. The satellite clock is already corrected for the
-    relativistic effects. The satellite health indicator is extracted from the
-    broadcast navigation message.
+    transmission epoch. The signal time-of-flight is computed from
+    a pseudorange measurement corrected by the satellite clock offset,
+    hence the observations are required at this stage. The satellite clock
+    is already corrected for the relativistic effects. The satellite health
+    indicator is extracted from the broadcast navigation message.
 
     Parameters
     ----------
@@ -208,6 +208,10 @@ def satposs(obs, nav, cs=None, orb=None):
                 idx = cs.sat_n.index(sat)
                 iode = cs.lc[0].iode[idx]
                 dorb = cs.lc[0].dorb[idx, :]  # radial,along-track,cross-track
+
+                if cs.cssrmode == sc.BDS_PPP:  # consitency check for IOD corr
+                    if cs.lc[0].iodc[idx] != cs.lc[0].iodc_c[idx]:
+                        continue
 
                 if cs.cssrmode == sc.GAL_HAS_SIS:  # HAS only
                     if cs.mask_id != cs.mask_id_clk:  # mask has changed
