@@ -328,7 +328,7 @@ def initx(nav, x0, v0, i):
 
 
 def kfupdate(x, P, H, v, R):
-    """ kalmanf filter measurement update """
+    """ Kalman filter measurement update """
     PHt = P@H.T
     S = H@PHt+R
     K = PHt@np.linalg.inv(S)
