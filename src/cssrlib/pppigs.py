@@ -51,7 +51,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.na = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
     nav.nq = (4 if nav.pmode == 0 else 7) + gn.uGNSS.MAXSAT
 
-    # State vector dimensions (inlcuding slat iono delay and ambiguities)
+    # State vector dimensions (including slant iono delay and ambiguities)
     #
     nav.nx = nav.na+gn.uGNSS.MAXSAT*nav.nf
 
@@ -410,7 +410,8 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         antsPR = antModelTx(nav, e[i, :], sigsPR, sat, obs.t, rs[i, :])
         antsCP = antModelTx(nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
 
-        if antrPR is None or antrCP is None or antsPR is None or antsCP is None:
+        if antrPR is None or antrCP is None or \
+           antsPR is None or antsCP is None:
             continue
 
         # Range correction
@@ -788,7 +789,11 @@ def ppppos(nav, obs, orb, bsx):
     # GNSS satellite positions, velocities and clock offsets for all satellites
     # in RINEX observations
     #
-    rs, vs, dts, svh = satposs(obs, nav, cs=None, orb=orb)
+    rs, vs, dts, svh, nsat = satposs(obs, nav, cs=None, orb=orb)
+
+    if nsat < 6:
+        print("too few satellites: {:d}".format(nsat))
+        return
 
     # Editing of observations
     #

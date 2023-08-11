@@ -127,7 +127,7 @@ class rnxdec:
         Decode RINEX Navigation message from file
 
         NOTE: system time epochs are converted into GPST on reading!
-        
+
         """
 
         nav.eph = []
