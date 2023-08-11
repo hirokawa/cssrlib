@@ -420,8 +420,7 @@ class cssr:
     def sval(self, u, n, scl):
         """ calculate signed value based on n-bit int, lsb """
         invalid = -2**(n-1)
-        dnu = 2**(n-1)-1
-        y = np.nan if u == invalid or u == dnu else u*scl
+        y = np.nan if u == invalid else u*scl
         return y
 
     def isset(self, mask, nbit, k):
@@ -1049,16 +1048,17 @@ class cssr:
 
         if self.time == -1:
             return
-        
+
         self.fh.write("{:4d}\t{:s}\n".format(self.msgtype,
                                              time2str(self.time)))
-        
         if (self.lc[0].cstat & (1 << sCType.MASK)) != (1 << sCType.MASK):
             return
 
         if self.subtype == sCSSR.CLOCK:
             self.fh.write(" {:s}\t{:s}\n".format("SatID", "dclk [m]"))
             for k, sat_ in enumerate(self.sat_n):
+                if np.isnan(self.lc[0].dclk[k]):
+                    continue
                 self.fh.write(" {:s}\t{:8.4f}\n"
                               .format(sat2id(sat_),
                                       self.lc[0].dclk[k]))
@@ -1068,6 +1068,8 @@ class cssr:
                           .format("SatID", "IODE", "Radial[m]",
                                   "Along[m]", "Cross[m]"))
             for k, sat_ in enumerate(self.sat_n):
+                if np.isnan(self.lc[0].dorb[k][0]):
+                    continue
                 self.fh.write(" {:s}\t{:3d}\t{:6.3f}\t{:6.3f}\t{:6.3f}\n"
                               .format(sat2id(sat_),
                                       self.lc[0].iode[k],
@@ -1080,6 +1082,9 @@ class cssr:
                           .format("SatID", "IODE", "Radial[m]",
                                   "Along[m]", "Cross[m]", "dclk[m]"))
             for k, sat_ in enumerate(self.sat_n):
+                if np.isnan(self.lc[0].dorb[k][0]) or \
+                   np.isnan(self.lc[0].dclk[k]):
+                    continue
                 self.fh.write(
                     " {:s}\t{:3d}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\n"
                     .format(sat2id(sat_),

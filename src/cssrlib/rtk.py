@@ -475,8 +475,8 @@ def relpos(nav, obs, obsb):
     if gn.timediff(obs.t, obsb.t) != 0:
         return -1
 
-    rs, _, dts, svh = satposs(obs, nav)
-    rsb, _, dtsb, svhb = satposs(obsb, nav)
+    rs, _, dts, svh, _ = satposs(obs, nav)
+    rsb, _, dtsb, svhb, _ = satposs(obsb, nav)
 
     # non-differencial residual for base
     yr, er, elr = zdres(nav, obsb, rsb, dtsb, svhb, nav.rb, 0)
