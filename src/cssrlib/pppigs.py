@@ -312,7 +312,7 @@ def udstate(nav, obs):
     return 0
 
 
-def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
+def zdres(nav, obs, bsx, rs, vs, dts, rr):
     """ non-differential residual """
 
     _c = gn.rCST.CLIGHT
@@ -638,13 +638,13 @@ def kfupdate(x, P, H, v, R):
     return x, P, S
 
 
-def qcedit(nav, obs, rs, dts, svh, xp):
+def qcedit(nav, obs, rs, dts, svh):
     """ Coarse quality control and editing of observations """
 
     # Predicted position at next epoch
     #
     tt = gn.timediff(obs.t, nav.t)
-    rr_ = xp[0:3].copy()
+    rr_ = nav.x[0:3].copy()
     if nav.pmode > 0:
         rr_ += nav.x[3:6]*tt
 
@@ -797,8 +797,7 @@ def ppppos(nav, obs, orb, bsx):
 
     # Editing of observations
     #
-    xp = nav.x.copy()
-    sat_ed = qcedit(nav, obs, rs, dts, svh, xp.copy())
+    sat_ed = qcedit(nav, obs, rs, dts, svh)
 
     # Kalman filter time propagation, initialization of ambiguities and iono
     #
@@ -809,7 +808,7 @@ def ppppos(nav, obs, orb, bsx):
 
     # Non-differential residuals
     #
-    yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, svh, xp[0:3])
+    yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, xp[0:3])
 
     # Select satellites having passed quality control
     #
@@ -848,7 +847,7 @@ def ppppos(nav, obs, orb, bsx):
 
     # Non-differential residuals after measurement update
     #
-    yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, svh, xp[0:3])
+    yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, xp[0:3])
     y = yu[iu, :]
     e = eu[iu, :]
     ny = y.shape[0]
@@ -878,7 +877,7 @@ def ppppos(nav, obs, orb, bsx):
     if nav.armode > 0:
         nb, xa = resamb_lambda(nav, sat)
         if nb > 0:
-            yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, svh, xa[0:3])
+            yu, eu, elu = zdres(nav, obs, bsx, rs, vs, dts, xa[0:3])
             y = yu[iu, :]
             e = eu[iu, :]
             v, H, R = sdres(nav, obs, xa, y, e, sat, el)
