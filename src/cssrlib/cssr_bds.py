@@ -159,6 +159,7 @@ class cssr_bds(cssr):
             self.lc[inet].dorb = np.ones((self.nsat_n, 3))*np.nan
             self.lc[inet].iode = np.zeros(self.nsat_n, dtype=int)
             self.lc[inet].iodc = np.zeros(self.nsat_n, dtype=int)
+            self.lc[inet].iodc_c = np.zeros(self.nsat_n, dtype=int)
             self.lc[inet].cbias = np.ones((self.nsat_n, self.nsig_max))*np.nan
             self.nsig_n = np.ones(self.nsat_n, dtype=int)*self.nsig_max
             self.sig_n = -1*np.ones((self.nsat_n, self.nsig_max), dtype=int)
@@ -240,6 +241,7 @@ class cssr_bds(cssr):
     def decode_cssr_clk_sat(self, msg, i, inet, idx):
         iodc, dclk = bs.unpack_from('u3s15', msg, i)
         i += 18
+        self.lc[inet].iodc_c[idx] = iodc
         self.lc[inet].dclk[idx] = self.sval(dclk, 15, self.dclk_scl)
         return i
 
@@ -252,7 +254,7 @@ class cssr_bds(cssr):
         iodp, st1 = bs.unpack_from('u4u5', msg, i)
         i += 9
         if iodp != self.iodp:
-            i += 23*18
+            i += 23*18+10
             return i
         for k in range(23):
             idx = st1*23+k
@@ -261,6 +263,7 @@ class cssr_bds(cssr):
 
         self.lc[inet].cstat |= (1 << sCType.CLOCK)
         self.lc[inet].t0[sCType.CLOCK] = self.time
+        i += 10
         return i
 
     def decode_cssr_ura(self, msg, i):
