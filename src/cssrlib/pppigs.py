@@ -410,7 +410,8 @@ def zdres(nav, obs, bsx, rs, vs, dts, svh, rr):
         antsPR = antModelTx(nav, e[i, :], sigsPR, sat, obs.t, rs[i, :])
         antsCP = antModelTx(nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
 
-        if antrPR is None or antrCP is None or antsPR is None or antsCP is None:
+        if antrPR is None or antrCP is None or \
+           antsPR is None or antsCP is None:
             continue
 
         # Range correction
@@ -788,7 +789,11 @@ def ppppos(nav, obs, orb, bsx):
     # GNSS satellite positions, velocities and clock offsets for all satellites
     # in RINEX observations
     #
-    rs, vs, dts, svh = satposs(obs, nav, cs=None, orb=orb)
+    rs, vs, dts, svh, nsat = satposs(obs, nav, cs=None, orb=orb)
+
+    if nsat < 6:
+        print("too few satellites: {:d}".format(nsat))
+        return
 
     # Editing of observations
     #
