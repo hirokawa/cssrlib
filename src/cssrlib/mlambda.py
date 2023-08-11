@@ -21,8 +21,7 @@ def ldldecom(Q):
     for i in range(n-1, -1, -1):
         d[i] = A[i, i]
         if d[i] <= 0.0:
-            print("Error: Qah should be positive definite.")
-            raise SystemExit
+            raise SystemExit("Qah should be positive definite.")
         L[i, :i+1] = A[i, :i+1]/np.sqrt(d[i])
         for j in range(i):
             A[j, :j+1] -= L[i, :j+1]*L[i, j]
