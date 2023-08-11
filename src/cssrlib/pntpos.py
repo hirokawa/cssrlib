@@ -108,7 +108,7 @@ def rescode(obs, nav, rs, dts, svh, x):
 
 def pntpos(obs, nav):
     """ calculate point positioning """
-    rs, _, dts, svh = satposs(obs, nav)
+    rs, _, dts, svh, _ = satposs(obs, nav)
     x = nav.x.copy()
     P = nav.P.copy()
     x = nav.Phi@x

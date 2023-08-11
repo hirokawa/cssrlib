@@ -341,10 +341,10 @@ def kfupdate(x, P, H, v, R):
 
 def ppprtkpos(nav, obs, cs):
     """ PPP-RTK positioning """
-    rs, vs, dts, svh = satposs(obs, nav, cs)
+    rs, vs, dts, svh, _ = satposs(obs, nav, cs)
     # Kalman filter time propagation
     udstate(nav, obs, cs)
-    #xa = np.zeros(nav.nx)
+    # xa = np.zeros(nav.nx)
     xp = nav.x.copy()
 
     # non-differential residuals for rover

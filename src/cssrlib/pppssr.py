@@ -854,7 +854,11 @@ def ppppos(nav, obs, cs=None, orb=None, bsx=None):
     # GNSS satellite positions, velocities and clock offsets for all satellites
     # in RINEX observations
     #
-    rs, vs, dts, svh = satposs(obs, nav, cs=cs, orb=orb)
+    rs, vs, dts, svh, nsat = satposs(obs, nav, cs=cs, orb=orb)
+   
+    if nsat < 6:
+        print("too few satellites: {:d}".format(nsat))
+        return
 
     # Editing of observations
     #
