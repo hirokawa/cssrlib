@@ -12,7 +12,6 @@ from cssrlib.gnss import time2str
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
 from cssrlib.peph import antModelRx, antModelTx
 from cssrlib.rtk import IB, ddcov, resamb_lambda, valpos, holdamb, initx
-from cssrlib.rtk import varerr
 
 
 def IT(na):
@@ -23,6 +22,15 @@ def IT(na):
 def II(s, na):
     """ return index of slant ionospheric delay estimate """
     return na-gn.uGNSS.MAXSAT+s-1
+
+
+def varerr(nav, el, f):
+    """ variation of measurement """
+    s_el = np.sin(el) if el > np.deg2rad(0.1) else np.sin(np.deg2rad(0.1))
+    fact = nav.eratio[f-nav.nf] if f >= nav.nf else 1
+    a = fact*nav.err[1]
+    b = fact*nav.err[2]
+    return (a**2+(b/s_el)**2)
 
 
 def ionoDelay(sig1, sig2, pr1, pr2):
