@@ -160,6 +160,8 @@ def satposs(obs, nav, cs=None, orb=None):
         satellite clock offsets [s]
     svh : np.array() of int
         satellite health code [-]
+    nsat : int
+        number of effective satellite
     """
 
     n = obs.sat.shape[0]
@@ -168,6 +170,7 @@ def satposs(obs, nav, cs=None, orb=None):
     dts = np.zeros(n)
     svh = np.zeros(n, dtype=int)
     iode = -1
+    nsat = 0
 
     for i in range(n):
 
@@ -229,13 +232,13 @@ def satposs(obs, nav, cs=None, orb=None):
 
         t = timeadd(t, -dt)
 
-        if nav.ephopt == 4:
+        if nav.ephopt == 4:  # precise ephemeris
 
             rs_, dts_, _ = orb.peph2pos(t, sat, nav)
             rs[i, :] = rs_[0:3]
             vs[i, :] = rs_[3:6]
             dts[i] = dts_[0]
-
+            nsat += 1
         else:
 
             rs[i, :], vs[i, :], dts[i] = eph2pos(t, eph, True)
@@ -249,13 +252,13 @@ def satposs(obs, nav, cs=None, orb=None):
                     rc = np.cross(rs[i, :], vs[i, :])
                     ec = vnorm(rc)
                     ea = np.cross(ec, er)
-                    A = [er, ea, ec]
+                    A = np.array([er, ea, ec])
                 else:
                     ea = vnorm(vs[i, :])
                     rc = np.cross(rs[i, :], vs[i, :])
                     ec = vnorm(rc)
                     er = np.cross(ea, ec)
-                    A = [er, ea, ec]
+                    A = np.array([er, ea, ec])
 
                 dorb_e = dorb@A
 
@@ -273,8 +276,9 @@ def satposs(obs, nav, cs=None, orb=None):
 
                 nav.dorb[sat] = dorb_
                 nav.dclk[sat] = dclk
+                nsat += 1
 
     if cs is not None:
         nav.time_p = cs.lc[0].t0[1]
 
-    return rs, vs, dts, svh
+    return rs, vs, dts, svh, nsat
