@@ -70,6 +70,13 @@ class cssr_bds(cssr):
         usig_tbl = usig_tbl_[sys]
         return rSigRnx(sys, utyp, usig_tbl[ssig])
 
+    def sval(self, u, n, scl):
+        """ calculate signed value based on n-bit int, lsb """
+        invalid = -2**(n-1)
+        dnu = -(2**(n-1)-1)  # this value seems to be invalid
+        y = np.nan if u == invalid or u == dnu else u*scl
+        return y
+
     def slot2prn(self, slot):
         prn = 0
         sys = uGNSS.NONE
@@ -148,11 +155,11 @@ class cssr_bds(cssr):
             self.add_gnss(mask_glo, 37, sGNSS.GLO)
 
             inet = 0
-            self.lc[inet].dclk = np.zeros(self.nsat_n)
-            self.lc[inet].dorb = np.zeros((self.nsat_n, 3))
+            self.lc[inet].dclk = np.ones(self.nsat_n)*np.nan
+            self.lc[inet].dorb = np.ones((self.nsat_n, 3))*np.nan
             self.lc[inet].iode = np.zeros(self.nsat_n, dtype=int)
             self.lc[inet].iodc = np.zeros(self.nsat_n, dtype=int)
-            self.lc[inet].cbias = np.zeros((self.nsat_n, self.nsig_max))
+            self.lc[inet].cbias = np.ones((self.nsat_n, self.nsig_max))*np.nan
             self.nsig_n = np.ones(self.nsat_n, dtype=int)*self.nsig_max
             self.sig_n = -1*np.ones((self.nsat_n, self.nsig_max), dtype=int)
             self.ura = np.zeros(self.nsat_n)
@@ -169,7 +176,12 @@ class cssr_bds(cssr):
         if sys == uGNSS.NONE:
             return i
         sat = prn2sat(sys, prn)
-        idx = np.where(sat == sat_n)[0]
+        if sat not in sat_n:
+            return i
+        idx = np.where(sat == sat_n)[0][0]
+
+        if (sys == uGNSS.GPS) or (sys == uGNSS.BDS):
+            iodn = iodn & 0xff  # IODC -> IODE
 
         self.lc[inet].iode[idx] = iodn
         self.lc[inet].iodc[idx] = iodc
@@ -347,4 +359,4 @@ class cssr_bds(cssr):
             i = self.decode_cssr_comb2(msg, i)
 
         if self.monlevel > 0:
-            print("mt={:2d} tow={:6.1f}".format(mt, self.tow))
+            print(" mt={:2d} tow={:6.1f}".format(mt, self.tow))

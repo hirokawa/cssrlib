@@ -70,7 +70,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     #
     # Observation noise parameters
     #
-    nav.eratio = [100, 100, 100]  # [-] factor
+    nav.eratio = [300, 300, 300]  # [-] factor
     nav.err = [0, 0.003, 0.003]  # [m] sigma
 
     # Initial sigma for state covariance
@@ -444,9 +444,9 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
 
         # Select APC reference signals
         #
-        if cs.cssrmode == sc.GAL_HAS_SIS or \
-                cs.cssrmode == sc.GAL_HAS_IDD or \
-                cs.cssrmode == sc.QZS_MADOCA:
+        if cs is not None and (cs.cssrmode == sc.GAL_HAS_SIS or
+                               cs.cssrmode == sc.GAL_HAS_IDD or
+                               cs.cssrmode == sc.QZS_MADOCA):
             if sys == uGNSS.GPS:
                 sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
             elif sys == uGNSS.GAL:
@@ -462,7 +462,11 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
         #
         antrPR = antModelRx(nav, pos, e[i, :], sigsPR)
         antrCP = antModelRx(nav, pos, e[i, :], sigsCP)
-        if cs.cssrmode == sc.GAL_HAS_SIS or cs.cssrmode == sc.GAL_HAS_IDD:
+        if nav.ephopt == 4:
+            antsPR = antModelTx(nav, e[i, :], sigsPR, sat, obs.t, rs[i, :])
+            antsCP = antModelTx(nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
+        elif cs is not None and (cs.cssrmode == sc.GAL_HAS_SIS or
+                                 cs.cssrmode == sc.GAL_HAS_IDD):
             antsPR = antModelTx(nav, e[i, :], sigsPR,
                                 sat, obs.t, rs[i, :], sig0)
             antsCP = antModelTx(nav, e[i, :], sigsCP,
@@ -471,7 +475,8 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, svh, rr):
             antsPR = [0 for sig in sigsPR]
             antsCP = [0 for sig in sigsCP]
 
-        if antrPR is None or antrCP is None or antsPR is None or antsCP is None:
+        if antrPR is None or antrCP is None or \
+           antsPR is None or antsCP is None:
             continue
 
         # Range correction
@@ -849,7 +854,11 @@ def ppppos(nav, obs, cs=None, orb=None, bsx=None):
     # GNSS satellite positions, velocities and clock offsets for all satellites
     # in RINEX observations
     #
-    rs, vs, dts, svh = satposs(obs, nav, cs=None, orb=orb)
+    rs, vs, dts, svh, nsat = satposs(obs, nav, cs=cs, orb=orb)
+   
+    if nsat < 6:
+        print("too few satellites: {:d}".format(nsat))
+        return
 
     # Editing of observations
     #
