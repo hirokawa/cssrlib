@@ -33,6 +33,7 @@ class sRTCM(IntEnum):
     IRN_EPH = 1016
     SBS_EPH = 1016
 
+
 class rtcm(cssr):
     def __init__(self, foutname=None):
         super().__init__(foutname)
@@ -52,26 +53,6 @@ class rtcm(cssr):
             uGNSS.GPS: 1057, uGNSS.GLO: 1063, uGNSS.GAL: 1240,
             uGNSS.QZS: 1246, uGNSS.SBS: 1252, uGNSS.BDS: 1258
         }
-
-        self.P2_11 = 4.882812500000000E-04
-        self.P2_19 = 1.907348632812500E-06
-        self.P2_20 = 9.536743164062500E-07
-        self.P2_28 = 3.725290298461914E-09
-        self.P2_29 = 1.862645149230957E-09
-        self.P2_30 = 9.313225746154785E-10
-        self.P2_31 = 4.656612873077393E-10
-        self.P2_32 = 2.328306436538696E-10
-        self.P2_33 = 1.164153218269348E-10
-        self.P2_34 = 5.820766091346740E-11
-        self.P2_40 = 9.094947017729280E-13
-        self.P2_41 = 4.547473508864641E-13
-        self.P2_43 = 1.136868377216160E-13
-        self.P2_46 = 1.421085471520200E-14
-        self.P2_50 = 8.881784197001252E-16
-        self.P2_55 = 2.775557561562891E-17
-        self.P2_59 = 1.734723475976810E-18
-        self.P2_66 = 1.355252715606880E-20
-        self.SC2RAD = 3.1415926535898
 
     def is_msmtype(self, msgtype):
         for sys_ in self.msm_t.keys():
@@ -535,7 +516,8 @@ class rtcm(cssr):
                 i += 19
 
                 self.lc[0].cbias[sat_][sig] = self.sval(cb, 14, 0.01)
-                # if self.cssrmode == sCSSRTYPE.GAL_HAS_IDD:  # work-around for HAS IDD
+                # if self.cssrmode == sCSSRTYPE.GAL_HAS_IDD:
+                # work-around for HAS IDD
                 #    self.lc[0].cbias[sat_][sig] *= -1.0
 
         self.lc[0].cstat |= (1 << sCType.CBIAS)
@@ -573,7 +555,8 @@ class rtcm(cssr):
                 i += 32
 
                 self.lc[0].pbias[sat_][sig] = self.sval(pb, 20, 1e-4)
-                # if self.cssrmode == sCSSRTYPE.GAL_HAS_IDD:  # work-around for HAS IDD
+                # if self.cssrmode == sCSSRTYPE.GAL_HAS_IDD:
+                # work-around for HAS IDD
                 #    self.lc[0].pbias[sat_][sig] *= -1.0
 
         self.lc[0].cstat |= (1 << sCType.PBIAS)
@@ -930,7 +913,7 @@ class rtcm(cssr):
 
         elif self.subtype == sRTCM.MSM:
             sys, msm = self.msmtype(self.msgtype)
-            self.fh.write(" {:20s}{:6d} ({:s})\n".format("MSM:", msm, 
+            self.fh.write(" {:20s}{:6d} ({:s})\n".format("MSM:", msm,
                                                          self.sys2str(sys)))
             self.fh.write(" {:20s}{:6d}\n".format("StationID:", self.refid))
             self.fh.write(" {:20s}{:6.1f}\n".format("GNSS Time of Week [s]:",
@@ -971,9 +954,8 @@ class rtcm(cssr):
             time = utc2gpst(timeadd(time, -10800.0))
         else:
             tow = t*1e-3
-            time = gpst2time(week, tow)            
+            time = gpst2time(week, tow)
         return time, tow
-        
 
     def decode_msm(self, msg, i):
         sys, msm = self.msmtype(self.msgtype)
@@ -1233,29 +1215,29 @@ class rtcm(cssr):
         eph.week = week
         eph.sva = sva
         eph.code = code
-        eph.idot = idot*self.P2_43*self.SC2RAD
+        eph.idot = idot*rCST.P2_43*rCST.SC2RAD
         eph.iode = iode
         toc *= 16.0
-        eph.af2 = af0*self.P2_55
-        eph.af1 = af1*self.P2_43
-        eph.af0 = af0*self.P2_31
+        eph.af2 = af0*rCST.P2_55
+        eph.af1 = af1*rCST.P2_43
+        eph.af0 = af0*rCST.P2_31
         eph.iodc = iodc
-        eph.crs = crs*0.03125
-        eph.deln = deln*self.P2_43*self.SC2RAD
-        eph.M0 = M0*self.P2_31*self.SC2RAD
-        eph.cuc = cuc*self.P2_29
-        eph.e = e*self.P2_33
-        eph.cus = cus*self.P2_29
-        sqrtA = Asq*self.P2_19
+        eph.crs = crs*rCST.P2_5
+        eph.deln = deln*rCST.P2_43*rCST.SC2RAD
+        eph.M0 = M0*rCST.P2_31*rCST.SC2RAD
+        eph.cuc = cuc*rCST.P2_29
+        eph.e = e*rCST.P2_33
+        eph.cus = cus*rCST.P2_29
+        sqrtA = Asq*rCST.P2_19
         eph.toes = toe*60.0
-        eph.cic = cic*self.P2_29
-        eph.OMG0 = Omg0*self.P2_31*self.SC2RAD
-        eph.cis = cis*self.P2_29
-        eph.i0 = i0*self.P2_31*self.SC2RAD
-        eph.crc = crc*0.03125
-        eph.omg = omg*self.P2_31*self.SC2RAD
-        eph.OMGd = OMGd*self.P2_43*self.SC2RAD
-        eph.tgd = tgd*self.P2_31
+        eph.cic = cic*rCST.P2_29
+        eph.OMG0 = Omg0*rCST.P2_31*rCST.SC2RAD
+        eph.cis = cis*rCST.P2_29
+        eph.i0 = i0*rCST.P2_31*rCST.SC2RAD
+        eph.crc = crc*rCST.P2_5
+        eph.omg = omg*rCST.P2_31*rCST.SC2RAD
+        eph.OMGd = OMGd*rCST.P2_43*rCST.SC2RAD
+        eph.tgd = tgd*rCST.P2_31
         eph.svh = svh
         eph.flag = flag
         eph.fit = fit
@@ -1291,18 +1273,18 @@ class rtcm(cssr):
         geph = Geph()
         geph.frq = frq-7
         tk_s *= 30.0
-        geph.vel[0] = xd*self.P2_20*1e3
-        geph.pos[0] = x*self.P2_11*1e3
-        geph.acc[0] = xdd*self.P2_30*1e3
-        geph.vel[1] = xd*self.P2_20*1e3
-        geph.pos[1] = x*self.P2_11*1e3
-        geph.acc[1] = xdd*self.P2_30*1e3
-        geph.vel[2] = xd*self.P2_20*1e3
-        geph.pos[2] = x*self.P2_11*1e3
-        geph.acc[2] = xdd*self.P2_30*1e3
-        geph.gamn = gamn*self.P2_40
-        geph.taun = taun*self.P2_30
-        geph.dtaun = dtaun*self.P2_30
+        geph.vel[0] = xd*rCST.P2_20*1e3
+        geph.pos[0] = x*rCST.P2_11*1e3
+        geph.acc[0] = xdd*rCST.P2_30*1e3
+        geph.vel[1] = xd*rCST.P2_20*1e3
+        geph.pos[1] = x*rCST.P2_11*1e3
+        geph.acc[1] = xdd*rCST.P2_30*1e3
+        geph.vel[2] = xd*rCST.P2_20*1e3
+        geph.pos[2] = x*rCST.P2_11*1e3
+        geph.acc[2] = xdd*rCST.P2_30*1e3
+        geph.gamn = gamn*rCST.P2_40
+        geph.taun = taun*rCST.P2_30
+        geph.dtaun = dtaun*rCST.P2_30
         geph.age = En
 
         geph.sat = prn2sat(uGNSS.GLO, prn)
@@ -1354,30 +1336,30 @@ class rtcm(cssr):
         eph.week = week
         eph.iode = iodnav
         eph.sva = sisa
-        eph.idot = idot*self.P2_43*self.SC2RAD
+        eph.idot = idot*rCST.P2_43*rCST.SC2RAD
         toc *= 60.0
 
-        eph.af2 = af0*self.P2_59
-        eph.af1 = af1*self.P2_46
-        eph.af0 = af0*self.P2_34
-        eph.crs = crs*0.03125
-        eph.deln = deln*self.P2_43*self.SC2RAD
-        eph.M0 = M0*self.P2_31*self.SC2RAD
-        eph.cuc = cuc*self.P2_29
-        eph.e = e*self.P2_33
-        eph.cus = cus*self.P2_29
-        sqrtA = Asq*self.P2_19
+        eph.af2 = af0*rCST.P2_59
+        eph.af1 = af1*rCST.P2_46
+        eph.af0 = af0*rCST.P2_34
+        eph.crs = crs*rCST.P2_5
+        eph.deln = deln*rCST.P2_43*rCST.SC2RAD
+        eph.M0 = M0*rCST.P2_31*rCST.SC2RAD
+        eph.cuc = cuc*rCST.P2_29
+        eph.e = e*rCST.P2_33
+        eph.cus = cus*rCST.P2_29
+        sqrtA = Asq*rCST.P2_19
         eph.toes = toe*60.0
-        eph.cic = cic*self.P2_29
-        eph.OMG0 = Omg0*self.P2_31*self.SC2RAD
-        eph.cis = cis*self.P2_29
-        eph.i0 = i0*self.P2_31*self.SC2RAD
-        eph.crc = crc*0.03125
-        eph.omg = omg*self.P2_31*self.SC2RAD
-        eph.OMGd = OMGd*self.P2_43*self.SC2RAD
-        eph.tgd = tgd*self.P2_32
+        eph.cic = cic*rCST.P2_29
+        eph.OMG0 = Omg0*rCST.P2_31*rCST.SC2RAD
+        eph.cis = cis*rCST.P2_29
+        eph.i0 = i0*rCST.P2_31*rCST.SC2RAD
+        eph.crc = crc*rCST.P2_5
+        eph.omg = omg*rCST.P2_31*rCST.SC2RAD
+        eph.OMGd = OMGd*rCST.P2_43*rCST.SC2RAD
+        eph.tgd = tgd*rCST.P2_32
         if self.msgtype == 1046:
-            eph.tgd_b = tgd2*self.P2_32
+            eph.tgd_b = tgd2*rCST.P2_32
 
         eph.toe = gpst2time(eph.week, eph.toes)
         eph.toc = gpst2time(eph.week, toc)
@@ -1411,26 +1393,26 @@ class rtcm(cssr):
         eph = Eph()
         eph.sat = prn2sat(uGNSS.QZS, prn+192)
         toc *= 16.0
-        eph.af2 = af0*self.P2_55
-        eph.af1 = af1*self.P2_43
-        eph.af0 = af0*self.P2_31
+        eph.af2 = af0*rCST.P2_55
+        eph.af1 = af1*rCST.P2_43
+        eph.af0 = af0*rCST.P2_31
         eph.iode = iode
-        eph.crs = crs*0.03125
-        eph.deln = deln*self.P2_43*self.SC2RAD
-        eph.M0 = M0*self.P2_31*self.SC2RAD
-        eph.cuc = cuc*self.P2_29
-        eph.e = e*self.P2_33
-        eph.cus = cus*self.P2_29
-        sqrtA = Asq*self.P2_19
+        eph.crs = crs*rCST.P2_5
+        eph.deln = deln*rCST.P2_43*rCST.SC2RAD
+        eph.M0 = M0*rCST.P2_31*rCST.SC2RAD
+        eph.cuc = cuc*rCST.P2_29
+        eph.e = e*rCST.P2_33
+        eph.cus = cus*rCST.P2_29
+        sqrtA = Asq*rCST.P2_19
         eph.toes = toe*16.0
-        eph.cic = cic*self.P2_29
-        eph.OMG0 = Omg0*self.P2_31*self.SC2RAD
-        eph.cis = cis*self.P2_29
-        eph.i0 = i0*self.P2_31*self.SC2RAD
-        eph.crc = crc*0.03125
-        eph.omg = omg*self.P2_31*self.SC2RAD
-        eph.OMGd = OMGd*self.P2_43*self.SC2RAD
-        eph.idot = idot*self.P2_43*self.SC2RAD
+        eph.cic = cic*rCST.P2_29
+        eph.OMG0 = Omg0*rCST.P2_31*rCST.SC2RAD
+        eph.cis = cis*rCST.P2_29
+        eph.i0 = i0*rCST.P2_31*rCST.SC2RAD
+        eph.crc = crc*rCST.P2_5
+        eph.omg = omg*rCST.P2_31*rCST.SC2RAD
+        eph.OMGd = OMGd*rCST.P2_43*rCST.SC2RAD
+        eph.idot = idot*rCST.P2_43*rCST.SC2RAD
         eph.code = l2c
 
         eph.week = week
@@ -1468,28 +1450,28 @@ class rtcm(cssr):
         eph.sat = prn2sat(uGNSS.BDS, prn)
         eph.week = week
         eph.sva = ura
-        eph.idot = idot*self.P2_43*self.SC2RAD
+        eph.idot = idot*rCST.P2_43*rCST.SC2RAD
         eph.iode = aode
         toc *= 8.0
-        eph.af2 = af0*self.P2_66
-        eph.af1 = af1*self.P2_50
-        eph.af0 = af0*self.P2_33
+        eph.af2 = af0*rCST.P2_66
+        eph.af1 = af1*rCST.P2_50
+        eph.af0 = af0*rCST.P2_33
         eph.iodc = aodc
-        eph.crs = crs*0.015625
-        eph.deln = deln*self.P2_43*self.SC2RAD
-        eph.M0 = M0*self.P2_31*self.SC2RAD
-        eph.cuc = cuc*self.P2_31
-        eph.e = e*self.P2_33
-        eph.cus = cus*self.P2_31
-        sqrtA = Asq*self.P2_19
+        eph.crs = crs*rCST.P2_6
+        eph.deln = deln*rCST.P2_43*rCST.SC2RAD
+        eph.M0 = M0*rCST.P2_31*rCST.SC2RAD
+        eph.cuc = cuc*rCST.P2_31
+        eph.e = e*rCST.P2_33
+        eph.cus = cus*rCST.P2_31
+        sqrtA = Asq*rCST.P2_19
         eph.toes = toe*8.0
-        eph.cic = cic*self.P2_31
-        eph.OMG0 = Omg0*self.P2_31*self.SC2RAD
-        eph.cis = cis*self.P2_31
-        eph.i0 = i0*self.P2_31*self.SC2RAD
-        eph.crc = crc*0.015625
-        eph.omg = omg*self.P2_31*self.SC2RAD
-        eph.OMGd = OMGd*self.P2_43*self.SC2RAD
+        eph.cic = cic*rCST.P2_31
+        eph.OMG0 = Omg0*rCST.P2_31*rCST.SC2RAD
+        eph.cis = cis*rCST.P2_31
+        eph.i0 = i0*rCST.P2_31*rCST.SC2RAD
+        eph.crc = crc*rCST.P2_6
+        eph.omg = omg*rCST.P2_31*rCST.SC2RAD
+        eph.OMGd = OMGd*rCST.P2_43*rCST.SC2RAD
         eph.tgd = tgd1*1e-10
         eph.tgd_b = tgd2*1e-10
         eph.svh = svh
@@ -1520,30 +1502,30 @@ class rtcm(cssr):
         eph = Eph()
         eph.sat = prn2sat(uGNSS.IRN, prn)
         eph.week = week
-        eph.af0 = af0*self.P2_31
-        eph.af1 = af1*self.P2_43
-        eph.af2 = af0*self.P2_55
+        eph.af0 = af0*rCST.P2_31
+        eph.af1 = af1*rCST.P2_43
+        eph.af2 = af0*rCST.P2_55
         eph.sva = ura
         toc *= 16.0
-        eph.tgd = tgd*self.P2_31
-        eph.deln = deln*self.P2_41*self.SC2RAD
+        eph.tgd = tgd*rCST.P2_31
+        eph.deln = deln*rCST.P2_41*rCST.SC2RAD
         eph.iode = iode
         eph.svh = svh
-        eph.cuc = cuc*self.P2_28
-        eph.cus = cus*self.P2_28
-        eph.cic = cic*self.P2_28
-        eph.cis = cis*self.P2_28
+        eph.cuc = cuc*rCST.P2_28
+        eph.cus = cus*rCST.P2_28
+        eph.cic = cic*rCST.P2_28
+        eph.cis = cis*rCST.P2_28
         eph.crc = crc*0.0625
         eph.crs = crs*0.0625
-        eph.idot = idot*self.P2_43*self.SC2RAD
-        eph.M0 = M0*self.P2_31*self.SC2RAD
+        eph.idot = idot*rCST.P2_43*rCST.SC2RAD
+        eph.M0 = M0*rCST.P2_31*rCST.SC2RAD
         eph.toes = toe*16.0
-        eph.e = e*self.P2_33
-        sqrtA = Asq*self.P2_19
-        eph.OMG0 = Omg0*self.P2_31*self.SC2RAD
-        eph.omg = omg*self.P2_31*self.SC2RAD
-        eph.OMGd = OMGd*self.P2_41*self.SC2RAD
-        eph.i0 = i0*self.P2_31*self.SC2RAD
+        eph.e = e*rCST.P2_33
+        sqrtA = Asq*rCST.P2_19
+        eph.OMG0 = Omg0*rCST.P2_31*rCST.SC2RAD
+        eph.omg = omg*rCST.P2_31*rCST.SC2RAD
+        eph.OMGd = OMGd*rCST.P2_41*rCST.SC2RAD
+        eph.i0 = i0*rCST.P2_31*rCST.SC2RAD
 
         eph.toe = gpst2time(eph.week, eph.toes)
         eph.toc = gpst2time(eph.week, toc)
@@ -1602,7 +1584,7 @@ class rtcm(cssr):
         eph = None
         geph = None
         seph = None
-        
+
         # Network RTK residual messages
         if self.msgtype in (1057, 1063, 1240, 1246, 1252, 1258):
             self.subtype = sCSSR.ORBIT
