@@ -294,6 +294,8 @@ class cssr:
         self.cb_scl = 0.02
         self.pb_blen = 15
         self.pb_scl = 0.001  # m
+        self.iodssr_p = -1
+        self.iodssr_c = np.ones(16, dtype=np.int32)*-1
 
         # default navigation message mode: 0:LNAV/INAV, 1: CNAV/CNAV1
         self.nav_mode = {uGNSS.GPS: 0, uGNSS.QZS: 0,
@@ -493,9 +495,12 @@ class cssr:
         self.ngnss = bs.unpack_from('u4', msg, i)[0]
         self.flg_net = False
         i += 4
-        self.iodssr = head['iodssr']
-        self.sat_n_p = self.sat_n
 
+        self.sat_n_p = self.sat_n
+        self.iodssr_p = self.iodssr
+        self.sig_n_p = self.sig_n
+        self.iodssr = head['iodssr']
+        
         self.nsat_n = 0
         self.nsig_n = []
         self.sys_n = []
@@ -615,8 +620,8 @@ class cssr:
         """decode MT4073,2 Orbit Correction message """
         head, i = self.decode_head(msg, i)
         self.flg_net = False
-        if self.iodssr != head['iodssr']:
-            return -1
+        #if self.iodssr != head['iodssr']:
+        #    return -1
         dorb_p = self.lc[inet].dorb
         self.lc[inet].dorb = np.zeros((self.nsat_n, 3))
         self.lc[inet].iode = np.zeros(self.nsat_n, dtype=int)
@@ -628,6 +633,7 @@ class cssr:
                 self.lc[inet].dorb_d[k, :] = self.lc[inet].dorb[k, :] \
                     - dorb_p[j, :]
 
+        self.iodssr_c[sCType.ORBIT] = head['iodssr']
         self.lc[inet].cstat |= (1 << sCType.ORBIT)
         self.lc[inet].t0[sCType.ORBIT] = self.time
         return i
@@ -636,8 +642,8 @@ class cssr:
         """decode MT4073,3 Clock Correction message """
         head, i = self.decode_head(msg, i)
         self.flg_net = False
-        if self.iodssr != head['iodssr']:
-            return -1
+        #if self.iodssr != head['iodssr']:
+        #    return -1
 
         if (self.lc[0].cstat & (1 << sCType.MASK)) != (1 << sCType.MASK):
             return -1
@@ -653,12 +659,13 @@ class cssr:
         self.lc[inet].dclk_d = np.ones(self.nsat_n)*np.nan
         for k in range(0, self.nsat_n):
             i = self.decode_clk_sat(msg, i, k, inet)
-            if self.sat_n[k] in self.sat_n_p:
-                j = self.sat_n_p.index(self.sat_n[k])
-                self.lc[inet].dclk_d[k] = self.lc[inet].dclk[k]-dclk_p[j]
+            # if self.sat_n[k] in self.sat_n_p:
+            #    j = self.sat_n_p.index(self.sat_n[k])
+            #    self.lc[inet].dclk_d[k] = self.lc[inet].dclk[k]-dclk_p[j]
 
         if self.cssrmode == sCSSRTYPE.GAL_HAS_SIS:  # HAS only
             self.sat_n_p = self.sat_n
+        self.iodssr_c[sCType.CLOCK] = head['iodssr']
         self.lc[inet].cstat |= (1 << sCType.CLOCK)
         self.lc[inet].t0[sCType.CLOCK] = self.time
         return i
@@ -668,13 +675,14 @@ class cssr:
         head, i = self.decode_head(msg, i)
         nsat = self.nsat_n
         self.flg_net = False
-        if self.iodssr != head['iodssr']:
-            return -1
+        #if self.iodssr != head['iodssr']:
+        #    return -1
         self.lc[inet].cbias = np.zeros((nsat, self.nsig_max))
         for k in range(nsat):
             for j in range(0, self.nsig_n[k]):
                 i = self.decode_cbias_sat(msg, i, k, j, inet)
 
+        self.iodssr_c[sCType.CBIAS] = head['iodssr']
         self.lc[inet].cstat |= (1 << sCType.CBIAS)
         self.lc[inet].t0[sCType.CBIAS] = self.time
         return i
@@ -684,14 +692,15 @@ class cssr:
         head, i = self.decode_head(msg, i)
         nsat = self.nsat_n
         self.flg_net = False
-        if self.iodssr != head['iodssr']:
-            return -1
+        #if self.iodssr != head['iodssr']:
+        #    return -1
         self.lc[inet].pbias = np.zeros((nsat, self.nsig_max))
         self.lc[inet].di = np.zeros((nsat, self.nsig_max), dtype=int)
         for k in range(nsat):
             for j in range(0, self.nsig_n[k]):
                 i = self.decode_pbias_sat(msg, i, k, j, inet)
 
+        self.iodssr_c[sCType.PBIAS] = head['iodssr']
         self.lc[inet].cstat |= (1 << sCType.PBIAS)
         self.lc[inet].t0[sCType.PBIAS] = self.time
         return i
@@ -700,8 +709,8 @@ class cssr:
         """decode MT4073,6 Bias Correction message """
         nsat = self.nsat_n
         head, i = self.decode_head(msg, i)
-        if self.iodssr != head['iodssr']:
-            return -1
+        #if self.iodssr != head['iodssr']:
+        #    return -1
         dfm = bs.unpack_from_dict('b1b1b1', ['cb', 'pb', 'net'], msg, i)
         self.flg_net = dfm['net']
         i += 3
@@ -730,9 +739,11 @@ class cssr:
             ki += 1
 
         if dfm['cb']:
+            self.iodssr_c[sCType.CBIAS] = head['iodssr']
             self.lc[inet].cstat |= (1 << sCType.CBIAS)
             self.lc[inet].t0[sCType.CBIAS] = self.time
         if dfm['pb']:
+            self.iodssr_c[sCType.PBIAS] = head['iodssr']
             self.lc[inet].cstat |= (1 << sCType.PBIAS)
             self.lc[inet].t0[sCType.PBIAS] = self.time
         return i
@@ -862,8 +873,8 @@ class cssr:
     def decode_cssr_comb(self, msg, i, inet=0):
         """decode MT4073,11 Orbit,Clock Combined Correction message """
         head, i = self.decode_head(msg, i)
-        if self.iodssr != head['iodssr']:
-            return -1
+        #if self.iodssr != head['iodssr']:
+        #    return -1
         dfm = bs.unpack_from_dict('b1b1b1', ['orb', 'clk', 'net'], msg, i)
         i += 3
         self.flg_net = dfm['net']
@@ -888,9 +899,11 @@ class cssr:
             if dfm['clk']:
                 i = self.decode_clk_sat(msg, i, k, inet)
         if dfm['clk']:
+            # self.iodssr_c[sCType.CLOCK] = head['iodssr']
             self.lc[inet].cstat |= (1 << sCType.CLOCK)
             self.lc[inet].t0[sCType.CLOCK] = self.time
         if dfm['orb']:
+            # self.iodssr_c[sCType.ORBIT] = head['iodssr']
             self.lc[inet].cstat |= (1 << sCType.ORBIT)
             self.lc[inet].t0[sCType.ORBIT] = self.time
         return i

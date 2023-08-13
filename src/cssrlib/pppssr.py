@@ -322,6 +322,51 @@ def udstate(nav, obs):
     return 0
 
 
+def find_corr_idx(cs, nf, ctype, sigref, sat):
+    nsig = 0
+    kidx = [-1]*nf
+    idx_n = []
+
+    sys, _ = sat2prn(sat)
+
+    if cs.iodssr_c[ctype] == cs.iodssr:
+        idx_n_ = np.where(cs.sat_n == sat)[0]
+    else:  # work-around for mask change case
+        if cs.iodssr_c[ctype] == cs.iodssr_p:
+            idx_n_ = np.where(cs.sat_n_p == sat)[0]
+        else:
+            return nsig, idx_n, kidx
+
+    if len(idx_n_) == 0:
+        return nsig, idx_n, kidx
+    idx_n = idx_n_[0]
+
+    if cs.iodssr_c[ctype] == cs.iodssr:
+        sig_n = cs.sig_n[idx_n]
+    elif cs.iodssr_c[ctype] == cs.iodssr_p:
+        sig_n = cs.sig_n_p[idx_n]
+    else:
+        return nsig, idx_n, kidx
+
+    utype = uTYP.C if ctype == sCType.CBIAS else uTYP.L
+
+    for k, sig in enumerate(sig_n):
+        if sig < 0:
+            continue
+        for f in range(nf):
+            if cs.cssrmode == sc.GAL_HAS_SIS and \
+               sys == uGNSS.GPS and sig == sSigGPS.L2P:
+                sig = sSigGPS.L2W  # work-around
+            if cs.ssig2rsig(sys, utype, sig) == sigref[f]:
+                kidx[f] = k
+                nsig += 1
+            elif cs.ssig2rsig(sys, utype, sig) == sigref[f].toAtt('X'):
+                kidx[f] = k
+                nsig += 1
+
+    return nsig, idx_n, kidx
+
+
 def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
     """ non-differential residual """
 
@@ -385,38 +430,29 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
             cbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
             pbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
         else:  # from CSSR
-            idx_n_ = np.where(cs.sat_n == sat)[0]
-            if len(idx_n_) == 0:
-                continue
-            idx_n = idx_n_[0]
+            if cs.lc[0].cstat & (1 << sCType.CBIAS) == (1 << sCType.CBIAS):
+                nsig, idx_n, kidx = find_corr_idx(cs, nav.nf, sCType.CBIAS,
+                                                  sigsPR, sat)
 
-            kidx = [-1]*nav.nf
-            nsig = 0
-            for k, sig in enumerate(cs.sig_n[idx_n]):
-                if sig < 0:
-                    continue
-                for f in range(nav.nf):
-                    if cs.cssrmode == sc.GAL_HAS_SIS and sys == uGNSS.GPS and \
-                            sig == sSigGPS.L2P:
-                        sig = sSigGPS.L2W  # work-around
-                    if cs.ssig2rsig(sys, uTYP.C, sig) == sigsPR[f]:
-                        kidx[f] = k
-                        nsig += 1
-                    elif cs.ssig2rsig(sys, uTYP.C, sig) == \
-                            sigsPR[f].toAtt('X'):
-                        kidx[f] = k
-                        nsig += 1
-            if nsig >= nav.nf:
-                if cs.lc[0].cstat & (1 << sCType.CBIAS) == (1 << sCType.CBIAS):
+                if nsig >= nav.nf:
                     cbias = cs.lc[0].cbias[idx_n][kidx]
-                if cs.lc[0].cstat & (1 << sCType.PBIAS) == (1 << sCType.PBIAS):
+                else:
+                    print("skip cbias")
+
+            if cs.lc[0].cstat & (1 << sCType.PBIAS) == (1 << sCType.PBIAS):
+                nsig, idx_n, kidx = find_corr_idx(cs, nav.nf, sCType.PBIAS,
+                                                  sigsCP, sat)
+
+                if nsig >= nav.nf:
                     pbias = cs.lc[0].pbias[idx_n][kidx]
                     # for Gal HAS (cycle -> m)
                     if cs.cssrmode == sc.GAL_HAS_SIS:
                         pbias *= lam
+                else:
+                    print("skip pbias")
 
-            if np.all(cs.lc[0].dorb[idx_n] == np.array([0.0, 0.0, 0.0])):
-                continue
+            #if np.all(cs.lc[0].dorb[idx_n] == np.array([0.0, 0.0, 0.0])):
+            #    continue
 
         # Check for invalid biases
         #

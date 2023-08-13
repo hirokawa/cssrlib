@@ -5,6 +5,7 @@ module for ephemeris processing
 import numpy as np
 from cssrlib.gnss import uGNSS, rCST, sat2prn, timediff, timeadd, vnorm
 from cssrlib.cssrlib import sCSSRTYPE as sc
+from cssrlib.cssrlib import sCType
 
 MAX_ITER_KEPLER = 30
 RTOL_KEPLER = 1e-13
@@ -202,24 +203,56 @@ def satposs(obs, nav, cs=None, orb=None):
 
             if cs is not None:
 
-                if sat not in cs.sat_n:
-                    continue
+                if cs.iodssr_c[sCType.ORBIT] == cs.iodssr:
+                    if sat not in cs.sat_n:
+                        continue
+                    idx = cs.sat_n.index(sat)
+                else:
+                    if cs.iodssr_c[sCType.ORBIT] == cs.iodssr_p:
+                        if sat not in cs.sat_n_p:
+                            continue
+                        idx = cs.sat_n_p.index(sat)
+                    else:
+                        continue
 
-                idx = cs.sat_n.index(sat)
                 iode = cs.lc[0].iode[idx]
                 dorb = cs.lc[0].dorb[idx, :]  # radial,along-track,cross-track
 
                 if cs.cssrmode == sc.BDS_PPP:  # consitency check for IOD corr
-                    if cs.lc[0].iodc[idx] != cs.lc[0].iodc_c[idx]:
-                        continue
-
-                if cs.cssrmode == sc.GAL_HAS_SIS:  # HAS only
-                    if cs.mask_id != cs.mask_id_clk:  # mask has changed
-                        if sat not in cs.sat_n_p:
+                    if cs.lc[0].iodc[idx] == cs.lc[0].iodc_c[idx]:
+                        dclk = cs.lc[0].dclk[idx]
+                    else:
+                        if cs.lc[0].iodc[idx] == cs.lc[0].iodc_c_p[idx]:
+                            dclk = cs.lc[0].dclk_p[idx]
+                        else:
                             continue
-                        idx = cs.sat_n_p.index(sat)
 
-                dclk = cs.lc[0].dclk[idx]
+                else:
+                    if cs.cssrmode == sc.GAL_HAS_SIS:  # HAS only
+
+                        if cs.mask_id != cs.mask_id_clk:  # mask has changed
+                            if sat not in cs.sat_n_p:
+                                continue
+                            idx = cs.sat_n_p.index(sat)
+
+                    else:
+                        if cs.iodssr_c[sCType.CLOCK] == cs.iodssr:
+                            if sat not in cs.sat_n:
+                                continue
+                            idx = cs.sat_n.index(sat)
+                        else:
+                            if cs.iodssr_c[sCType.CLOCK] == cs.iodssr_p:
+                                if sat not in cs.sat_n_p:
+                                    continue
+                                idx = cs.sat_n_p.index(sat)
+                            else:
+                                continue
+
+                    dclk = cs.lc[0].dclk[idx]
+
+                if np.isnan(dclk) or np.isnan(dorb@dorb):
+                    continue
+
                 mode = cs.nav_mode[sys]
 
             else:
@@ -268,7 +301,7 @@ def satposs(obs, nav, cs=None, orb=None):
 
                 rs[i, :] -= dorb_e
                 dts[i] += dclk/rCST.CLIGHT
-
+                
                 ers = vnorm(rs[i, :]-nav.x[0:3])
                 dorb_ = -ers@dorb_e
                 sis = dclk-dorb_
