@@ -195,9 +195,9 @@ class cssr_bds(cssr):
 
         self.lc[inet].iode[idx] = iodn
         self.lc[inet].iodc[idx] = iodc
-        self.lc[inet].dorb[idx, 0] = self.sval(dx, 15, self.dorb_scl[0])
-        self.lc[inet].dorb[idx, 1] = self.sval(dy, 13, self.dorb_scl[1])
-        self.lc[inet].dorb[idx, 2] = self.sval(dz, 13, self.dorb_scl[2])
+        self.lc[inet].dorb[idx, 0] = -self.sval(dx, 15, self.dorb_scl[0])
+        self.lc[inet].dorb[idx, 1] = -self.sval(dy, 13, self.dorb_scl[1])
+        self.lc[inet].dorb[idx, 2] = -self.sval(dz, 13, self.dorb_scl[2])
         self.ura[idx] = self.quality_idx(ucls, uval)
         return i
 
@@ -242,7 +242,7 @@ class cssr_bds(cssr):
                 sig, cb = bs.unpack_from('u4s12', msg, i)
                 i += 16
                 self.sig_n[idx, j] = sig
-                self.lc[inet].cbias[idx, j] = self.sval(cb, 12, self.cb_scl)
+                self.lc[inet].cbias[idx, j] = -self.sval(cb, 12, self.cb_scl)
 
         self.iodssr_c[sCType.CBIAS] = head['iodssr']
         self.lc[inet].cstat |= (1 << sCType.CBIAS)
@@ -256,7 +256,7 @@ class cssr_bds(cssr):
             self.lc[inet].iodc_c_p[idx] = self.lc[inet].iodc_c[idx]
             self.lc[inet].dclk_p[idx] = self.lc[inet].dclk[idx]
         self.lc[inet].iodc_c[idx] = iodc
-        self.lc[inet].dclk[idx] = self.sval(dclk, 15, self.dclk_scl)
+        self.lc[inet].dclk[idx] = -self.sval(dclk, 15, self.dclk_scl)
         return i
 
     def decode_cssr_clk(self, msg, i, inet=0):
