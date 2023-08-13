@@ -427,8 +427,8 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
         if nav.ephopt == 4:
             # Code and phase signal bias, converted from [ns] to [m]
             #
-            cbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
-            pbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
+            cbias = np.array([-bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
+            pbias = np.array([-bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
         else:  # from CSSR
             if cs.lc[0].cstat & (1 << sCType.CBIAS) == (1 << sCType.CBIAS):
                 nsig, idx_n, kidx = find_corr_idx(cs, nav.nf, sCType.CBIAS,
@@ -436,8 +436,8 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
 
                 if nsig >= nav.nf:
                     cbias = cs.lc[0].cbias[idx_n][kidx]
-                else:
-                    print("skip cbias")
+                elif nav.monlevel > 1:
+                    print("skip cbias for sat={:d}".format(sat))
 
             if cs.lc[0].cstat & (1 << sCType.PBIAS) == (1 << sCType.PBIAS):
                 nsig, idx_n, kidx = find_corr_idx(cs, nav.nf, sCType.PBIAS,
@@ -448,15 +448,14 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
                     # for Gal HAS (cycle -> m)
                     if cs.cssrmode == sc.GAL_HAS_SIS:
                         pbias *= lam
-                else:
-                    print("skip pbias")
-
-            #if np.all(cs.lc[0].dorb[idx_n] == np.array([0.0, 0.0, 0.0])):
-            #    continue
+                elif nav.monlevel > 1:
+                    print("skip pbias for sat={:d}".format(sat))
 
         # Check for invalid biases
         #
         if np.isnan(cbias).any() or np.isnan(pbias).any():
+            if nav.monlevel > 0:
+                print("skip invalid cbias/pbias for sat={:d}".format(sat))
             continue
 
         # Geometric distance corrected for Earth rotation during flight time
@@ -901,7 +900,7 @@ def ppppos(nav, obs, cs=None, orb=None, bsx=None):
     rs, vs, dts, svh, nsat = satposs(obs, nav, cs=cs, orb=orb)
 
     if nsat < 6:
-        print("too few satellites: {:d}".format(nsat))
+        print(" too few satellites < 6: nsat={:d}".format(nsat))
         return
 
     # Editing of observations
