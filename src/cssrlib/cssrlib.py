@@ -296,6 +296,7 @@ class cssr:
         self.pb_scl = 0.001  # m
         self.iodssr_p = -1
         self.iodssr_c = np.ones(16, dtype=np.int32)*-1
+        self.sig_n_p = []
 
         # default navigation message mode: 0:LNAV/INAV, 1: CNAV/CNAV1
         self.nav_mode = {uGNSS.GPS: 0, uGNSS.QZS: 0,
@@ -496,11 +497,12 @@ class cssr:
         self.flg_net = False
         i += 4
 
-        self.sat_n_p = self.sat_n
-        self.iodssr_p = self.iodssr
-        self.sig_n_p = self.sig_n
+        if self.iodssr != head['iodssr']:
+            self.sat_n_p = self.sat_n
+            self.iodssr_p = self.iodssr
+            self.sig_n_p = self.sig_n
         self.iodssr = head['iodssr']
-        
+
         self.nsat_n = 0
         self.nsig_n = []
         self.sys_n = []
@@ -599,8 +601,8 @@ class cssr:
         v = bs.unpack_from_dict('s'+str(self.cb_blen), ['cbias'], msg, i)
         self.lc[inet].cbias[k, j] = \
             self.sval(v['cbias'], self.cb_blen, self.cb_scl)
-        if self.cssrmode == sCSSRTYPE.BDS_PPP:  # work-around for BDS
-            self.lc[inet].cbias[k, j] *= -1.0
+        #if self.cssrmode == sCSSRTYPE.BDS_PPP:  # work-around for BDS
+        #    self.lc[inet].cbias[k, j] *= -1.0
         i += self.cb_blen
         return i
 
@@ -610,8 +612,8 @@ class cssr:
                                 'u2', ['pbias', 'di'], msg, i)
         self.lc[inet].pbias[k, j] = \
             self.sval(v['pbias'], self.pb_blen, self.pb_scl)
-        if self.cssrmode == sCSSRTYPE.BDS_PPP:  # work-around for BDS
-            self.lc[inet].pbias[k, j] *= -1.0
+        #if self.cssrmode == sCSSRTYPE.BDS_PPP:  # work-around for BDS
+        #    self.lc[inet].pbias[k, j] *= -1.0
         self.lc[inet].di[k, j] = v['di']
         i += self.pb_blen + 2
         return i
