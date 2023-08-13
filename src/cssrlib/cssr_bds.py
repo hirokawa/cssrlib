@@ -195,9 +195,9 @@ class cssr_bds(cssr):
 
         self.lc[inet].iode[idx] = iodn
         self.lc[inet].iodc[idx] = iodc
-        self.lc[inet].dorb[idx, 0] = -self.sval(dx, 15, self.dorb_scl[0])
-        self.lc[inet].dorb[idx, 1] = -self.sval(dy, 13, self.dorb_scl[1])
-        self.lc[inet].dorb[idx, 2] = -self.sval(dz, 13, self.dorb_scl[2])
+        self.lc[inet].dorb[idx, 0] = self.sval(dx, 15, self.dorb_scl[0])
+        self.lc[inet].dorb[idx, 1] = self.sval(dy, 13, self.dorb_scl[1])
+        self.lc[inet].dorb[idx, 2] = self.sval(dz, 13, self.dorb_scl[2])
         self.ura[idx] = self.quality_idx(ucls, uval)
         return i
 
