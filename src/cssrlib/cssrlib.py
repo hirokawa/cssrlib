@@ -2,7 +2,7 @@
 module for Compact SSR processing
 """
 
-import cbitstruct as bs
+import bitstruct.c as bs
 import numpy as np
 from enum import IntEnum
 from cssrlib.gnss import gpst2time, rCST, prn2sat, uGNSS, gtime_t, rSigRnx

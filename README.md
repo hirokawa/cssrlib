@@ -17,7 +17,7 @@ Prerequisites
 Additional python packages are required as prerequisites and can be installed via the following commands
 
 ```
-pip install bitstruct cbitstruct galois crccheck
+pip install bitstruct galois crccheck
 pip install notebook numpy matplotlib
 ```
 

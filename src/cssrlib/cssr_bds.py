@@ -6,7 +6,7 @@ Precise Point Positioning Service Signal PPP-B2b (Version 1.0), 2020
 """
 
 import numpy as np
-import bitstruct as bs
+import bitstruct.c as bs
 import galois
 from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE, sGNSS, prn2sat, sCType
 from cssrlib.gnss import gpst2time, uGNSS, uSIG, uTYP, rSigRnx
