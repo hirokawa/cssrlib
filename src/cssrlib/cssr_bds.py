@@ -6,7 +6,7 @@ Precise Point Positioning Service Signal PPP-B2b (Version 1.0), 2020
 """
 
 import numpy as np
-import bitstruct.c as bs
+import bitstruct as bs
 import galois
 from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE, sGNSS, prn2sat, sCType
 from cssrlib.gnss import gpst2time, uGNSS, uSIG, uTYP, rSigRnx
@@ -242,7 +242,7 @@ class cssr_bds(cssr):
                 sig, cb = bs.unpack_from('u4s12', msg, i)
                 i += 16
                 self.sig_n[idx, j] = sig
-                self.lc[inet].cbias[idx, j] = -self.sval(cb, 12, self.cb_scl)
+                self.lc[inet].cbias[idx, j] = self.sval(cb, 12, self.cb_scl)
 
         self.iodssr_c[sCType.CBIAS] = head['iodssr']
         self.lc[inet].cstat |= (1 << sCType.CBIAS)
@@ -250,12 +250,14 @@ class cssr_bds(cssr):
         return i
 
     def decode_cssr_clk_sat(self, msg, i, inet, idx):
+        """ decode clock correction for satellite """
         iodc, dclk = bs.unpack_from('u3s15', msg, i)
         i += 18
         if iodc != self.lc[inet].iodc_c[idx]:
             self.lc[inet].iodc_c_p[idx] = self.lc[inet].iodc_c[idx]
             self.lc[inet].dclk_p[idx] = self.lc[inet].dclk[idx]
         self.lc[inet].iodc_c[idx] = iodc
+        # note: the sign of the clock correction reversed
         self.lc[inet].dclk[idx] = -self.sval(dclk, 15, self.dclk_scl)
         return i
 

@@ -628,8 +628,8 @@ class cssr:
             i = self.decode_orb_sat(msg, i, k, self.sys_n[k], inet)
             if self.sat_n[k] in self.sat_n_p:
                 j = self.sat_n_p.index(self.sat_n[k])
-                self.lc[inet].dorb_d[k, :] = self.lc[inet].dorb[k, :] \
-                    - dorb_p[j, :]
+                #self.lc[inet].dorb_d[k, :] = self.lc[inet].dorb[k, :] \
+                #    - dorb_p[j, :]
 
         self.iodssr_c[sCType.ORBIT] = head['iodssr']
         self.lc[inet].cstat |= (1 << sCType.ORBIT)

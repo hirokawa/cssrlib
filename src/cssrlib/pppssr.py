@@ -427,8 +427,8 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
         if nav.ephopt == 4:
             # Code and phase signal bias, converted from [ns] to [m]
             #
-            cbias = np.array([-bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
-            pbias = np.array([-bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
+            cbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
+            pbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
         else:  # from CSSR
             if cs.lc[0].cstat & (1 << sCType.CBIAS) == (1 << sCType.CBIAS):
                 nsig, idx_n, kidx = find_corr_idx(cs, nav.nf, sCType.CBIAS,
@@ -438,6 +438,12 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
                     cbias = cs.lc[0].cbias[idx_n][kidx]
                 elif nav.monlevel > 1:
                     print("skip cbias for sat={:d}".format(sat))
+
+                # - IS-QZSS-MDC-001 sec 5.5.3.3
+                # - HAS SIS ICD sec 7.4, 7.5
+                # - HAS IDD ICD sec 3.3.4
+                if cs.cssrmode in [sc.GAL_HAS_IDD, sc.GAL_HAS_SIS, sc.QZS_MADOCA]:
+                    cbias = -cbias
 
             if cs.lc[0].cstat & (1 << sCType.PBIAS) == (1 << sCType.PBIAS):
                 nsig, idx_n, kidx = find_corr_idx(cs, nav.nf, sCType.PBIAS,
@@ -450,6 +456,11 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
                         pbias *= lam
                 elif nav.monlevel > 1:
                     print("skip pbias for sat={:d}".format(sat))
+
+                # - IS-QZSS-MDC-001 sec 5.5.3.3
+                # - HAS SIS ICD sec 7.4, 7.5
+                if cs.cssrmode in [sc.GAL_HAS_SIS, sc.QZS_MADOCA]:
+                    pbias = -pbias
 
         # Check for invalid biases
         #
@@ -524,8 +535,8 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
 
         # Range correction
         #
-        prc[i, :] = trop + antrPR + antsPR - cbias
-        cpc[i, :] = trop + antrCP + antsCP - pbias + phw
+        prc[i, :] = trop + antrPR + antsPR + cbias
+        cpc[i, :] = trop + antrCP + antsCP + pbias + phw
 
         r += relatv - _c*dts[i]
 
