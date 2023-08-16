@@ -20,6 +20,7 @@ class cssr_bds(cssr):
         self.GF = galois.GF(2**6)
         self.nsig_max = 8
         self.iodp = -1
+        self.iodp_p = -1
 
     def ssig2rsig(self, sys: sGNSS, utyp: uTYP, ssig):
         gps_tbl = {
@@ -126,9 +127,6 @@ class cssr_bds(cssr):
         """decode MT1 Mask message """
         head, i = self.decode_head(msg, i, sCSSR.MASK)
 
-        self.iodp_p = self.iodp
-        self.sat_n_p = self.sat_n
-
         self.iodp = bs.unpack_from('u4', msg, i)[0]
         i += 4
 
@@ -137,6 +135,11 @@ class cssr_bds(cssr):
         i += 174
 
         if self.iodp != self.iodp_p:
+            self.sat_n_p = self.sat_n
+            self.iodssr_p = self.iodssr
+            self.sig_n_p = self.sig_n
+            self.iodp_p = self.iodp
+
             self.nsat_n = 0
             self.nsig_n = []
             self.sys_n = []
@@ -164,6 +167,12 @@ class cssr_bds(cssr):
             self.nsig_n = np.ones(self.nsat_n, dtype=int)*self.nsig_max
             self.sig_n = -1*np.ones((self.nsat_n, self.nsig_max), dtype=int)
             self.ura = np.zeros(self.nsat_n)
+
+            # fallback for inconsistent clock update
+            self.lc[inet].dclk_p = np.ones(self.nsat_n)*np.nan
+            self.lc[inet].iodc_c_p = np.zeros(self.nsat_n, dtype=int)
+
+        self.iodssr = head['iodssr']
 
         self.lc[0].cstat |= (1 << sCType.MASK)
         self.lc[0].t0[sCType.MASK] = self.time
@@ -203,6 +212,7 @@ class cssr_bds(cssr):
         for k in range(6):
             i = self.decode_cssr_orb_sat(msg, i, inet, sat_n)
 
+        self.iodssr_c[sCType.ORBIT] = head['iodssr']
         self.lc[inet].cstat |= (1 << sCType.ORBIT)
         self.lc[inet].t0[sCType.ORBIT] = self.time
         i += 19
@@ -234,15 +244,21 @@ class cssr_bds(cssr):
                 self.sig_n[idx, j] = sig
                 self.lc[inet].cbias[idx, j] = self.sval(cb, 12, self.cb_scl)
 
+        self.iodssr_c[sCType.CBIAS] = head['iodssr']
         self.lc[inet].cstat |= (1 << sCType.CBIAS)
         self.lc[inet].t0[sCType.CBIAS] = self.time
         return i
 
     def decode_cssr_clk_sat(self, msg, i, inet, idx):
+        """ decode clock correction for satellite """
         iodc, dclk = bs.unpack_from('u3s15', msg, i)
         i += 18
+        if iodc != self.lc[inet].iodc_c[idx]:
+            self.lc[inet].iodc_c_p[idx] = self.lc[inet].iodc_c[idx]
+            self.lc[inet].dclk_p[idx] = self.lc[inet].dclk[idx]
         self.lc[inet].iodc_c[idx] = iodc
-        self.lc[inet].dclk[idx] = self.sval(dclk, 15, self.dclk_scl)
+        # note: the sign of the clock correction reversed
+        self.lc[inet].dclk[idx] = -self.sval(dclk, 15, self.dclk_scl)
         return i
 
     def decode_cssr_clk(self, msg, i, inet=0):
@@ -261,6 +277,7 @@ class cssr_bds(cssr):
             if idx < self.nsat_n:
                 i = self.decode_cssr_clk_sat(msg, i, inet, idx)
 
+        self.iodssr_c[sCType.CLOCK] = head['iodssr']
         self.lc[inet].cstat |= (1 << sCType.CLOCK)
         self.lc[inet].t0[sCType.CLOCK] = self.time
         i += 10

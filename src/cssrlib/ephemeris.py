@@ -5,6 +5,7 @@ module for ephemeris processing
 import numpy as np
 from cssrlib.gnss import uGNSS, rCST, sat2prn, timediff, timeadd, vnorm
 from cssrlib.cssrlib import sCSSRTYPE as sc
+from cssrlib.cssrlib import sCType
 
 MAX_ITER_KEPLER = 30
 RTOL_KEPLER = 1e-13
@@ -42,10 +43,13 @@ def dtadjust(t1, t2, tw=604800):
 
 def eph2pos(t, eph, flg_v=False):
     """ calculate satellite position based on ephemeris """
-    sys, _ = sat2prn(eph.sat)
+    sys, prn = sat2prn(eph.sat)
     if sys == uGNSS.GAL:
         mu = rCST.MU_GAL
         omge = rCST.OMGE_GAL
+    elif sys == uGNSS.BDS:
+        mu = rCST.MU_BDS
+        omge = rCST.OMGE_BDS
     else:  # GPS,QZS
         mu = rCST.MU_GPS
         omge = rCST.OMGE
@@ -67,7 +71,7 @@ def eph2pos(t, eph, flg_v=False):
             break
     cE = np.cos(E)
     dtc = dtadjust(t, eph.toc)
-    dtrel = -2.0*np.sqrt(mu)*eph.e*np.sqrt(eph.A)*sE/rCST.CLIGHT**2
+    dtrel = -2.0*np.sqrt(mu*eph.A)*eph.e*sE/rCST.CLIGHT**2
     dts = eph.af0+eph.af1*dtc+eph.af2*dtc**2 + dtrel
 
     nus = np.sqrt(1.0-eph.e**2)*sE
@@ -83,14 +87,29 @@ def eph2pos(t, eph, flg_v=False):
     xo = r*h
 
     inc = eph.i0+eph.idot*dt+np.array([eph.cic, eph.cis])@h2
-    Omg = eph.OMG0+eph.OMGd*dt-omge*(eph.toes+dt)
-    sOmg = np.sin(Omg)
-    cOmg = np.cos(Omg)
     si = np.sin(inc)
     ci = np.cos(inc)
-    p = np.array([cOmg, sOmg, 0])
-    q = np.array([-ci*sOmg, ci*cOmg, si])
-    rs = xo@np.array([p, q])
+
+    if sys == uGNSS.BDS and (prn <= 5 or prn >= 59):  # BDS GEO
+        Omg = eph.OMG0+eph.OMGd*dt-omge*eph.toes
+        sOmg = np.sin(Omg)
+        cOmg = np.cos(Omg)
+        p = np.array([cOmg, sOmg, 0])
+        q = np.array([-ci*sOmg, ci*cOmg, si])
+        rg = xo@np.array([p, q])
+        so = np.sin(omge*dt)
+        co = np.cos(omge*dt)
+        Mo = np.array([[co, so*rCST.COS_5, so*rCST.SIN_5],
+                       [-so, co*rCST.COS_5, co*rCST.SIN_5],
+                       [0.0,   -rCST.SIN_5,    rCST.COS_5]])
+        rs = Mo@rg
+    else:
+        Omg = eph.OMG0+eph.OMGd*dt-omge*(eph.toes+dt)
+        sOmg = np.sin(Omg)
+        cOmg = np.cos(Omg)
+        p = np.array([cOmg, sOmg, 0])
+        q = np.array([-ci*sOmg, ci*cOmg, si])
+        rs = xo@np.array([p, q])
 
     if flg_v:  # satellite velocity
         qq = np.array([si*sOmg, -si*cOmg, ci])
@@ -202,24 +221,56 @@ def satposs(obs, nav, cs=None, orb=None):
 
             if cs is not None:
 
-                if sat not in cs.sat_n:
-                    continue
+                if cs.iodssr_c[sCType.ORBIT] == cs.iodssr:
+                    if sat not in cs.sat_n:
+                        continue
+                    idx = cs.sat_n.index(sat)
+                else:
+                    if cs.iodssr_c[sCType.ORBIT] == cs.iodssr_p:
+                        if sat not in cs.sat_n_p:
+                            continue
+                        idx = cs.sat_n_p.index(sat)
+                    else:
+                        continue
 
-                idx = cs.sat_n.index(sat)
                 iode = cs.lc[0].iode[idx]
                 dorb = cs.lc[0].dorb[idx, :]  # radial,along-track,cross-track
 
                 if cs.cssrmode == sc.BDS_PPP:  # consitency check for IOD corr
-                    if cs.lc[0].iodc[idx] != cs.lc[0].iodc_c[idx]:
-                        continue
-
-                if cs.cssrmode == sc.GAL_HAS_SIS:  # HAS only
-                    if cs.mask_id != cs.mask_id_clk:  # mask has changed
-                        if sat not in cs.sat_n_p:
+                    if cs.lc[0].iodc[idx] == cs.lc[0].iodc_c[idx]:
+                        dclk = cs.lc[0].dclk[idx]
+                    else:
+                        if cs.lc[0].iodc[idx] == cs.lc[0].iodc_c_p[idx]:
+                            dclk = cs.lc[0].dclk_p[idx]
+                        else:
                             continue
-                        idx = cs.sat_n_p.index(sat)
 
-                dclk = cs.lc[0].dclk[idx]
+                else:
+                    if cs.cssrmode == sc.GAL_HAS_SIS:  # HAS only
+
+                        if cs.mask_id != cs.mask_id_clk:  # mask has changed
+                            if sat not in cs.sat_n_p:
+                                continue
+                            idx = cs.sat_n_p.index(sat)
+
+                    else:
+                        if cs.iodssr_c[sCType.CLOCK] == cs.iodssr:
+                            if sat not in cs.sat_n:
+                                continue
+                            idx = cs.sat_n.index(sat)
+                        else:
+                            if cs.iodssr_c[sCType.CLOCK] == cs.iodssr_p:
+                                if sat not in cs.sat_n_p:
+                                    continue
+                                idx = cs.sat_n_p.index(sat)
+                            else:
+                                continue
+
+                    dclk = cs.lc[0].dclk[idx]
+
+                if np.isnan(dclk) or np.isnan(dorb@dorb):
+                    continue
+
                 mode = cs.nav_mode[sys]
 
             else:

@@ -54,7 +54,6 @@ def rescode(obs, nav, rs, dts, svh, x):
     azv = np.zeros(n)
     elv = np.zeros(n)
     nv = 0
-
     for i in range(n):
 
         # Check for valid satellite positions and health
@@ -73,36 +72,36 @@ def rescode(obs, nav, rs, dts, svh, x):
         eph = findeph(nav.eph, obs.t, obs.sat[i])
 
         # Use first pseudorange in the dictionary (must be on L1/E1!)
-        #        
+        #
         if obs.P[i, 0] == 0:
             continue
 
         # Apply group delay correction
-        #        
+        #
         P = obs.P[i, 0]-eph.tgd*rCST.CLIGHT
-        
+
         # Apply ionospheric delay correction for L1/E1
         #
         dion = ionmodel(obs.t, pos, az, el, nav.ion)
 
         # Apply tropospheric correction
-        #        
+        #
         trop_hs, trop_wet, _ = tropmodel(obs.t, pos, el)
         mapfh, mapfw = tropmapf(obs.t, pos, el)
         dtrp = mapfh*trop_hs+mapfw*trop_wet
-        
+
         v[nv] = P-(r+dtr-rCST.CLIGHT*dts[i]+dion+dtrp)
         H[nv, 0:3] = -e
         H[nv, nav.na] = 1
         azv[nv] = az
         elv[nv] = el
         nv += 1
-        
+
     v = v[0:nv]
     H = H[0:nv, :]
     azv = azv[0:nv]
     elv = elv[0:nv]
-    
+
     return v, H, nv, azv, elv
 
 

@@ -325,22 +325,22 @@ class rnxdec:
                         else:
                             eph.iodc = int(self.flt(line, 3))
                     elif sys == uGNSS.BDS:
-                        eph.tgd_b = float(self.flt(line, 3))
+                        eph.tgd_b = float(self.flt(line, 3))  # tgd2 B2/B3
 
                 if self.mode_nav < 3:
                     line = fnav.readline()  # line #7
                     if sys == uGNSS.BDS:
                         if self.mode_nav == 0:
-                            eph.tot = self.flt(line, 0)
+                            tot = self.flt(line, 0)
                             eph.iodc = int(self.flt(line, 1))
                         else:
                             if self.mode_nav == 1:
-                                eph.isc[0] = float(self.flt(line, 0))
+                                eph.isc[0] = float(self.flt(line, 0))  # B1Cd
                             elif self.mode_nav == 2:
-                                eph.isc[1] = float(self.flt(line, 1))
+                                eph.isc[1] = float(self.flt(line, 1))  # B2ad
 
-                            eph.tgd_b = float(self.flt(line, 2))  # tgd_B1Cp
-                            eph.tgd_c = float(self.flt(line, 3))  # tgd_B2ap
+                            eph.tgd = float(self.flt(line, 2))    # tgd_B1Cp
+                            eph.tgd_b = float(self.flt(line, 3))  # tgd_B2ap
 
                     else:
                         if self.mode_nav > 0 and sys != uGNSS.GAL:
