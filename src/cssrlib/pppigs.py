@@ -800,7 +800,7 @@ def ppppos(nav, obs, orb, bsx):
     rs, vs, dts, svh, nsat = satposs(obs, nav, cs=None, orb=orb)
 
     if nsat < 6:
-        print("too few satellites: {:d}".format(nsat))
+        print(" too few satellites < 6: nsat={:d}".format(nsat))
         return
 
     # Editing of observations
