@@ -130,12 +130,12 @@ class cssr_has(cssr):
 
     def decode_has_page(self, idx, has_pages, gMat, ms):
         """ HPVRS decoding for RS(255,32,224) """
-        HASmsg = bytearray()
+        HASmsg = bytes()
         k = len(idx)
         if k >= ms:
             Wd = self.GF(has_pages[idx, :])  # kx53
             Dinv = np.linalg.inv(self.GF(gMat[idx, :k]))  # kxk
             Md = Dinv@Wd  # decoded message (kx53)
-            HASmsg = bytearray(np.array(Md).tobytes())
+            HASmsg = np.array(Md).tobytes()
 
         return HASmsg

@@ -723,7 +723,7 @@ def qcedit(nav, obs, rs, dts, svh):
         _, el = gn.satazel(pos, e)
         if el < nav.elmin:
             nav.edt[i][:] = 1
-            nav.fout.write("{}  {} - edit - low elevation {:3.1f} deg\n"
+            nav.fout.write("{}  {} - edit - low elevation {:5.1f} deg\n"
                            .format(time2str(obs.t), sat2id(sat_i),
                                    np.rad2deg(el)))
             continue
@@ -800,7 +800,7 @@ def ppppos(nav, obs, orb, bsx):
     rs, vs, dts, svh, nsat = satposs(obs, nav, cs=None, orb=orb)
 
     if nsat < 6:
-        print("too few satellites: {:d}".format(nsat))
+        print(" too few satellites < 6: nsat={:d}".format(nsat))
         return
 
     # Editing of observations
