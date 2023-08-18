@@ -8,7 +8,7 @@ RTCM 3 decoder
 
 import numpy as np
 import struct as st
-import bitstruct.c as bs
+import bitstruct as bs
 from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE, prn2sat, sCType
 from cssrlib.gnss import uGNSS, sat2id, gpst2time, timediff, time2str, sat2prn
 from cssrlib.gnss import uTYP, uSIG, rSigRnx, bdt2time, bdt2gpst, glo2time

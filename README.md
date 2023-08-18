@@ -4,13 +4,22 @@ CSSRlib - Toolkit for PPP-RTK/RTK in Python using Compact SSR
 
 # What is CSSRlib?
 
-CSSRLIB is a open toolkit in Python for high accuracy GNSS positioning. It supports SSR (State-Space Representation) based potitioning such as PPP (Precise Point Positioning) or PPP-RTK (Realtime Kinematic), but also supporting RTK. The goal of the CSSRlib toolkit is to provide an easy-to-understand open implementation to learn PPP/PPP-RTK positioning provided by satellite-based open PPP/PPP-RTK services such as QZSS CLAS, Galileo HAS, BeiDou 3 PPP. It also supports ground based open service by IGS. The code is based on RTKlib.
+CSSRLIB is a open toolkit in Python for high accuracy GNSS positioning. It supports SSR (State-Space Representation) based positioning for PPP (Precise Point Positioning) or PPP-RTK (Realtime Kinematic), while also supporting RTK. The goal of the CSSRlib toolkit is to provide an easy-to-understand open implementation to learn PPP/PPP-RTK positioning provided by satellite-based open PPP/PPP-RTK services such as QZSS CLAS, Galileo HAS, and BeiDou 3 PPP. It also supports ground based open service by IGS. The code is based on RTKlib.
 
 It supports the following open format:
 
-- The obserbation data and the ephemeis in RINEX
+- The observation data and ephemeris in RINEX
 - The PPP/PPP-RTK correction data in RTCM SSR, IGS SSR, Compact SSR, ...
 - The precise orbit/clock data in SP3 format.
+
+************************************************
+Click this button for a quick demo in Google Colab
+
+<a target="_blank" href="https://colab.research.google.com/github/rtklibexplorer/cssrlib/blob/new_sig/tutorial/cssrlib.ipynb">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
+
+************************************************     
 
 Prerequisites
 =============

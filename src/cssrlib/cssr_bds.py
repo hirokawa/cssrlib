@@ -7,7 +7,7 @@ Precise Point Positioning Service Signal PPP-B2b (Version 1.0), 2020
 
 import numpy as np
 import bitstruct as bs
-import galois
+#import galois
 from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE, sGNSS, prn2sat, sCType
 from cssrlib.gnss import gpst2time, uGNSS, uSIG, uTYP, rSigRnx
 
@@ -17,7 +17,7 @@ class cssr_bds(cssr):
         super().__init__(foutname)
         self.MAXNET = 1
         self.cssrmode = sCSSRTYPE.BDS_PPP
-        self.GF = galois.GF(2**6)
+        #self.GF = galois.GF(2**6)
         self.nsig_max = 8
         self.iodp = -1
         self.iodp_p = -1
