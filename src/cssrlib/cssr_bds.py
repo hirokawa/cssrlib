@@ -9,7 +9,7 @@ import numpy as np
 import bitstruct as bs
 #import galois
 from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE, sGNSS, prn2sat, sCType
-from cssrlib.gnss import gpst2time, uGNSS, uSIG, uTYP, rSigRnx
+from cssrlib.gnss import bdt2time, bdt2gpst, uGNSS, uSIG, uTYP, rSigRnx
 
 
 class cssr_bds(cssr):
@@ -105,7 +105,7 @@ class cssr_bds(cssr):
         if self.tow0 >= 0:
             self.tow = self.tow0+self.tod
             if self.week >= 0:
-                self.time = gpst2time(self.week, self.tow)
+                self.time = bdt2gpst(bdt2time(self.week, self.tow))
 
         head = {'uint': 0, 'mi': 0, 'iodssr': iodssr}
         return head, i

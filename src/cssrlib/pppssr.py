@@ -425,11 +425,14 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
         pbias = np.zeros(nav.nf)
 
         if nav.ephopt == 4:
+
             # Code and phase signal bias, converted from [ns] to [m]
             #
             cbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
             pbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
+
         else:  # from CSSR
+
             if cs.lc[0].cstat & (1 << sCType.CBIAS) == (1 << sCType.CBIAS):
                 nsig, idx_n, kidx = find_corr_idx(cs, nav.nf, sCType.CBIAS,
                                                   sigsPR, sat)
@@ -498,37 +501,54 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
 
         # Select APC reference signals
         #
-        if cs is not None and (cs.cssrmode == sc.GAL_HAS_SIS or
-                               cs.cssrmode == sc.GAL_HAS_IDD or
-                               cs.cssrmode == sc.QZS_MADOCA):
-            if sys == uGNSS.GPS:
-                sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
-            elif sys == uGNSS.GAL:
-                sig0 = (rSigRnx("EC1C"), rSigRnx("EC7Q"))
-            elif sys == uGNSS.QZS:
-                sig0 = (rSigRnx("JC1C"), rSigRnx("JC2S"))
-            else:
-                sig0 = None
-        else:
-            sig0 = None
+        sig0 = None
+        if cs is not None:
 
-        # Receiver antenna offset
+            if (cs.cssrmode == sc.GAL_HAS_SIS or
+                cs.cssrmode == sc.GAL_HAS_IDD or
+                    cs.cssrmode == sc.QZS_MADOCA):
+
+                if sys == uGNSS.GPS:
+                    sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
+                elif sys == uGNSS.GAL:
+                    sig0 = (rSigRnx("EC1C"), rSigRnx("EC7Q"))
+                elif sys == uGNSS.QZS:
+                    sig0 = (rSigRnx("JC1C"), rSigRnx("JC2S"))
+
+            elif cs.cssrmode == sc.BDS_PPP:
+
+                if sys == uGNSS.GPS:
+                    sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
+                elif sys == uGNSS.BDS:
+                    sig0 = (rSigRnx("CC6I"),)
+
+        # Receiver/satellite antenna offset
         #
         antrPR = antModelRx(nav, pos, e[i, :], sigsPR)
         antrCP = antModelRx(nav, pos, e[i, :], sigsCP)
+
         if nav.ephopt == 4:
+
             antsPR = antModelTx(nav, e[i, :], sigsPR, sat, obs.t, rs[i, :])
             antsCP = antModelTx(nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
+
         elif cs is not None and (cs.cssrmode == sc.GAL_HAS_SIS or
-                                 cs.cssrmode == sc.GAL_HAS_IDD):
+                                 cs.cssrmode == sc.GAL_HAS_IDD or
+                                 cs.cssrmode == sc.QZS_MADOCA or
+                                 cs.cssrmode == sc.BDS_PPP):
+
             antsPR = antModelTx(nav, e[i, :], sigsPR,
                                 sat, obs.t, rs[i, :], sig0)
             antsCP = antModelTx(nav, e[i, :], sigsCP,
                                 sat, obs.t, rs[i, :], sig0)
-        else:
-            antsPR = [0 for sig in sigsPR]
-            antsCP = [0 for sig in sigsCP]
 
+        else:
+
+            antsPR = [0.0 for _ in sigsPR]
+            antsCP = [0.0 for _ in sigsCP]
+
+        # Check for invalid values
+        #
         if antrPR is None or antrCP is None or \
            antsPR is None or antsCP is None:
             continue
