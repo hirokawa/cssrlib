@@ -7,7 +7,7 @@ Galileo HAS correction data decoder
 """
 
 import numpy as np
-import bitstruct.c as bs
+import bitstruct as bs
 import galois
 from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE
 from cssrlib.gnss import gpst2time
