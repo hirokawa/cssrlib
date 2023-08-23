@@ -142,11 +142,6 @@ def eph2clk(time, eph):
     return dts
 
 
-def ephclk(t, eph, sat):
-    dts = eph2clk(t, eph)
-    return dts
-
-
 def satposs(obs, nav, cs=None, orb=None):
     """
     Calculate pos/vel/clk for observed satellites
