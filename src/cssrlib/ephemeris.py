@@ -246,6 +246,7 @@ def satposs(obs, nav, cs=None, orb=None):
                             continue
 
                 else:
+
                     if cs.cssrmode == sc.GAL_HAS_SIS:  # HAS only
 
                         if cs.mask_id != cs.mask_id_clk:  # mask has changed
@@ -254,6 +255,7 @@ def satposs(obs, nav, cs=None, orb=None):
                             idx = cs.sat_n_p.index(sat)
 
                     else:
+
                         if cs.iodssr_c[sCType.CLOCK] == cs.iodssr:
                             if sat not in cs.sat_n:
                                 continue
@@ -294,6 +296,7 @@ def satposs(obs, nav, cs=None, orb=None):
             vs[i, :] = rs_[3:6]
             dts[i] = dts_[0]
             nsat += 1
+
         else:
 
             rs[i, :], vs[i, :], dts[i] = eph2pos(t, eph, True)
