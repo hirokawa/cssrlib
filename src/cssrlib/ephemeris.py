@@ -231,7 +231,7 @@ def satposs(obs, nav, cs=None, orb=None):
                 iode = cs.lc[0].iode[idx]
                 dorb = cs.lc[0].dorb[idx, :]  # radial,along-track,cross-track
 
-                if cs.cssrmode == sc.BDS_PPP:  # consitency check for IOD corr
+                if cs.cssrmode == sc.BDS_PPP:  # consistency check for IOD corr
                     if cs.lc[0].iodc[idx] == cs.lc[0].iodc_c[idx]:
                         dclk = cs.lc[0].dclk[idx]
                     else:
