@@ -15,7 +15,7 @@ from cssrlib.mlambda import mlambda
 VAR_HOLDAMB = 0.001
 
 
-def rtkinit(nav, pos0=np.zeros(3)):
+def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     """ initalize RTK-GNSS parameters """
     nav.pmode = 1  # 0:static, 1:kinematic
     nav.monlevel = 1
@@ -55,6 +55,14 @@ def rtkinit(nav, pos0=np.zeros(3)):
         nav.q[3:6] = nav.sig_qv**2
     else:
         nav.q[0:3] = nav.sig_qp**2
+
+    # Logging level
+    #
+    nav.fout = None
+    if logfile is None:
+        nav.monlevel = 0
+    else:
+        nav.fout = open(logfile, 'w')
 
 
 def zdres(nav, obs, rs, dts, svh, rr, rtype=1):

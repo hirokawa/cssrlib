@@ -87,7 +87,7 @@ class rnxdec:
                     # Not found try to replace
                     #
                     if sys == uGNSS.GPS and sig.str()[1] in '12':
-                        atts = 'SLX'
+                        atts = 'CW' if sig.str()[2] in 'CW' else 'SLX'
                     elif sys == uGNSS.GPS and sig.str()[1] in '5':
                         atts = 'IQX'
                     elif sys == uGNSS.GAL and sig.str()[1] in '578':
