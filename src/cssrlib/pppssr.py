@@ -330,10 +330,10 @@ def find_corr_idx(cs, nf, ctype, sigref, sat):
     sys, _ = sat2prn(sat)
 
     if cs.iodssr_c[ctype] == cs.iodssr:
-        idx_n_ = np.where(cs.sat_n == sat)[0]
+        idx_n_ = np.where(np.array(cs.sat_n) == sat)[0]
     else:  # work-around for mask change case
         if cs.iodssr_c[ctype] == cs.iodssr_p:
-            idx_n_ = np.where(cs.sat_n_p == sat)[0]
+            idx_n_ = np.where(np.array(cs.sat_n_p) == sat)[0]
         else:
             return nsig, idx_n, kidx
 
@@ -357,10 +357,8 @@ def find_corr_idx(cs, nf, ctype, sigref, sat):
             if cs.cssrmode == sc.GAL_HAS_SIS and \
                sys == uGNSS.GPS and sig == sSigGPS.L2P:
                 sig = sSigGPS.L2W  # work-around
-            if cs.ssig2rsig(sys, utype, sig) == sigref[f]:
-                kidx[f] = k
-                nsig += 1
-            elif cs.ssig2rsig(sys, utype, sig) == sigref[f].toAtt('X'):
+            sig_ = cs.ssig2rsig(sys, utype, sig)
+            if sig_ == sigref[f] or sig_ == sigref[f].toAtt('X'):
                 kidx[f] = k
                 nsig += 1
 
@@ -437,6 +435,7 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
                 nsig, idx_n, kidx = find_corr_idx(cs, nav.nf, sCType.CBIAS,
                                                   sigsPR, sat)
 
+                cbias = np.ones(nav.nf)*np.nan
                 if nsig >= nav.nf:
                     cbias = cs.lc[0].cbias[idx_n][kidx]
                 elif nav.monlevel > 1:
@@ -452,6 +451,7 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
                 nsig, idx_n, kidx = find_corr_idx(cs, nav.nf, sCType.PBIAS,
                                                   sigsCP, sat)
 
+                pbias = np.ones(nav.nf)*np.nan
                 if nsig >= nav.nf:
                     pbias = cs.lc[0].pbias[idx_n][kidx]
                     # for Gal HAS (cycle -> m)

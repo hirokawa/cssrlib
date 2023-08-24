@@ -239,8 +239,8 @@ def zdres(nav, obs, rs, vs, dts, svh, rr, cs):
             continue
         if sat not in cs.lc[inet].sat_n:
             continue
-        idx_n = np.where(cs.sat_n == sat)[0][0]  # global
-        idx_l = np.where(cs.lc[inet].sat_n == sat)[0][0]  # local
+        idx_n = np.where(np.array(cs.sat_n) == sat)[0][0]  # global
+        idx_l = np.where(np.array(cs.lc[inet].sat_n) == sat)[0][0]  # local
         kidx = [-1]*nav.nf
         nsig = 0
         for k, sig in enumerate(cs.sig_n[idx_n]):
