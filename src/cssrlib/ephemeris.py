@@ -15,19 +15,14 @@ def findeph(nav, t, sat, iode=-1, mode=0):
     """ find ephemeric for sat """
     dt_p = 3600*4
     eph = None
-    sys, _ = sat2prn(sat)
     for eph_ in nav:
         if eph_.sat != sat:
             continue
-        if sys == uGNSS.GAL and (eph_.code >> 9) & 1 == 0:   # I/NAV
-            continue
-        if eph_.iode == iode and eph_.mode == mode:
+        dt = timediff(t, eph_.toe)
+        if (iode < 0 or eph_.iode == iode) and eph_.mode == mode and \
+                abs(dt) < dt_p:
             eph = eph_
             break
-        dt = timediff(t, eph_.toe)
-        if iode < 0 and abs(dt) < dt_p and eph_.mode == mode:
-            dt_p = abs(dt)
-            eph = eph_
     return eph
 
 
