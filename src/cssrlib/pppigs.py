@@ -382,6 +382,8 @@ def zdres(nav, obs, bsx, rs, vs, dts, rr):
         # Check for invalid biases
         #
         if np.isnan(cbias).any() or np.isnan(pbias).any():
+            if nav.monlevel > 0:
+                print("skip invalid cbias/pbias for sat={:d}".format(sat))
             continue
 
         # Geometric distance corrected for Earth rotation during flight time
