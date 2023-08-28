@@ -435,7 +435,7 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
                 nsig, idx_n, kidx = find_corr_idx(cs, nav.nf, sCType.CBIAS,
                                                   sigsPR, sat)
 
-                cbias = np.ones(nav.nf)*np.nan
+                #cbias = np.ones(nav.nf)*np.nan
                 if nsig >= nav.nf:
                     cbias = cs.lc[0].cbias[idx_n][kidx]
                 elif nav.monlevel > 1:
@@ -468,7 +468,7 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
         # Check for invalid biases
         #
         if np.isnan(cbias).any() or np.isnan(pbias).any():
-            if nav.monlevel > 0:
+            if nav.monlevel > 3:
                 print("skip invalid cbias/pbias for sat={:d}".format(sat))
             continue
 
