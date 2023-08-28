@@ -79,30 +79,30 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     # Observation noise parameters
     #
     nav.eratio = np.ones(nav.nf)*100  # [-] factor
-    nav.err = [0, 0.000, 0.003]  # [m] sigma
+    nav.err = [0, 0.000, 0.003]       # [m] sigma
 
     # Initial sigma for state covariance
     #
-    nav.sig_p0 = 100.0  # [m]
-    nav.sig_v0 = 1.0  # [m/s]
+    nav.sig_p0 = 100.0   # [m]
+    nav.sig_v0 = 1.0     # [m/s]
     nav.sig_ztd0 = 0.25  # [m]
     nav.sig_ion0 = 10.0  # [m]
-    nav.sig_n0 = 30.0  # [cyc]
+    nav.sig_n0 = 30.0    # [cyc]
 
     # Process noise sigma
     #
     if nav.pmode == 0:
-        nav.sig_qp = 100.0/np.sqrt(1)  # [m/sqrt(s)]
+        nav.sig_qp = 100.0/np.sqrt(3600)  # [m/sqrt(s)]
         nav.sig_qv = None
     else:
-        nav.sig_qp = 0.01/np.sqrt(1)   # [m/sqrt(s)]
-        nav.sig_qv = 1.0/np.sqrt(1)    # [m/s/sqrt(s)]
-    nav.sig_qztd = 0.1/np.sqrt(3600)   # [m/sqrt(s)] -> 1 cm**2/h
-    nav.sig_qion = 10.0/np.sqrt(1)     # [m/s/sqrt(s)]
+        nav.sig_qp = 0.01/np.sqrt(1)      # [m/sqrt(s)]
+        nav.sig_qv = 1.0/np.sqrt(1)       # [m/s/sqrt(s)]
+    nav.sig_qztd = 0.1/np.sqrt(3600)      # [m/sqrt(s)]
+    nav.sig_qion = 10.0/np.sqrt(1)        # [m/s/sqrt(s)]
 
     nav.tidecorr = True
     nav.thresar = 3.0  # AR acceptance threshold
-    nav.armode = 0  # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
+    nav.armode = 0     # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
     nav.elmin = np.deg2rad(10.0)
 
@@ -193,7 +193,7 @@ def udstate(nav, obs):
     dP.flags['WRITEABLE'] = True
     dP[0:nav.nq] += nav.q[0:nav.nq]*tt
 
-    # Carrier-phase ambiguity
+    # Update Kalman filter state elements
     #
     for f in range(nav.nf):
 
@@ -826,8 +826,9 @@ def qcedit(nav, obs, rs, dts, svh):
         #
         if sat_i in nav.excl_sat:
             nav.edt[i, :] = 1
-            nav.fout.write("{}  {} - edit - satellite excluded\n"
-                           .format(time2str(obs.t), sat2id(sat_i)))
+            if nav.monlevel > 0:
+                nav.fout.write("{}  {} - edit - satellite excluded\n"
+                               .format(time2str(obs.t), sat2id(sat_i)))
             continue
 
         j = np.where(obs.sat == sat_i)[0][0]
@@ -836,16 +837,18 @@ def qcedit(nav, obs, rs, dts, svh):
         #
         if np.isnan(rs[j, :]).any() or np.isnan(dts[j]):
             nav.edt[i, :] = 1
-            nav.fout.write("{}  {} - edit - invalid eph\n"
-                           .format(time2str(obs.t), sat2id(sat_i)))
+            if nav.monlevel > 0:
+                nav.fout.write("{}  {} - edit - invalid eph\n"
+                               .format(time2str(obs.t), sat2id(sat_i)))
             continue
 
         # Check satellite health
         #
         if svh[j] > 0:
             nav.edt[i, :] = 1
-            nav.fout.write("{}  {} - edit - satellite unhealthy\n"
-                           .format(time2str(obs.t), sat2id(sat_i)))
+            if nav.monlevel > 0:
+                nav.fout.write("{}  {} - edit - satellite unhealthy\n"
+                               .format(time2str(obs.t), sat2id(sat_i)))
             continue
 
         # Check elevation angle
@@ -854,9 +857,10 @@ def qcedit(nav, obs, rs, dts, svh):
         _, el = gn.satazel(pos, e)
         if el < nav.elmin:
             nav.edt[i][:] = 1
-            nav.fout.write("{}  {} - edit - low elevation {:5.1f} deg\n"
-                           .format(time2str(obs.t), sat2id(sat_i),
-                                   np.rad2deg(el)))
+            if nav.monlevel > 0:
+                nav.fout.write("{}  {} - edit - low elevation {:5.1f} deg\n"
+                               .format(time2str(obs.t), sat2id(sat_i),
+                                       np.rad2deg(el)))
             continue
 
         # Pseudorange, carrier-phase and C/N0 signals
@@ -883,16 +887,18 @@ def qcedit(nav, obs, rs, dts, svh):
             #
             if obs.P[j, f] == 0.0:
                 nav.edt[i, f] = 1
-                nav.fout.write("{}  {} - edit {:4s} - invalid PR obs\n"
-                               .format(time2str(obs.t), sat2id(sat_i),
-                                       sigsPR[f].str()))
+                if nav.monlevel > 0:
+                    nav.fout.write("{}  {} - edit {:4s} - invalid PR obs\n"
+                                   .format(time2str(obs.t), sat2id(sat_i),
+                                           sigsPR[f].str()))
                 continue
 
             if obs.L[j, f] == 0.0:
                 nav.edt[i, f] = 1
-                nav.fout.write("{}  {} - edit {:4s} - invalid CP obs\n"
-                               .format(time2str(obs.t), sat2id(sat_i),
-                                       sigsCP[f].str()))
+                if nav.monlevel > 0:
+                    nav.fout.write("{}  {} - edit {:4s} - invalid CP obs\n"
+                                   .format(time2str(obs.t), sat2id(sat_i),
+                                           sigsCP[f].str()))
                 continue
 
             # Check C/N0
@@ -900,9 +906,10 @@ def qcedit(nav, obs, rs, dts, svh):
             cnr_min = nav.cnr_min_gpy if sigsCN[f].isGPS_PY() else nav.cnr_min
             if obs.S[j, f] < cnr_min:
                 nav.edt[i, f] = 1
-                nav.fout.write("{}  {} - edit {:4s} - low C/N0 {:4.1f} dB-Hz\n"
-                               .format(time2str(obs.t), sat2id(sat_i),
-                                       sigsCN[f].str(), obs.S[j, f]))
+                if nav.monlevel > 0:
+                    nav.fout.write("{}  {} - edit {:4s} - low C/N0 {:4.1f} dB-Hz\n"
+                                   .format(time2str(obs.t), sat2id(sat_i),
+                                           sigsCN[f].str(), obs.S[j, f]))
                 continue
 
         # Store satellite which have passed all tests
@@ -1016,6 +1023,7 @@ def ppppos(nav, obs, cs=None, orb=None, bsx=None):
     if nav.armode > 0:
         nb, xa = resamb_lambda(nav, sat)
         if nb > 0:
+            # Use position with fixed ambiguities xa
             yu, eu, elu = zdres(nav, obs, cs, bsx, rs, vs, dts, xa[0:3])
             y = yu[iu, :]
             e = eu[iu, :]
