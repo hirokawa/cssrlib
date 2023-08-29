@@ -435,7 +435,11 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
                 nsig, idx_n, kidx = find_corr_idx(cs, nav.nf, sCType.CBIAS,
                                                   sigsPR, sat)
 
-                cbias = np.ones(nav.nf)*np.nan
+                if cs.cssrmode == sc.BDS_PPP and sys == uGNSS.GPS:
+                    # BDS PPP not including cbias for GPS
+                    cbias = np.zeros(nav.nf)
+                else:
+                    cbias = np.ones(nav.nf)*np.nan
                 if nsig >= nav.nf:
                     cbias = cs.lc[0].cbias[idx_n][kidx]
                 elif nav.monlevel > 1:
