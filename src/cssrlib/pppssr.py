@@ -92,7 +92,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     # Process noise sigma
     #
     if nav.pmode == 0:
-        nav.sig_qp = 100.0/np.sqrt(3600)  # [m/sqrt(s)]
+        nav.sig_qp = 100.0/np.sqrt(1)     # [m/sqrt(s)]
         nav.sig_qv = None
     else:
         nav.sig_qp = 0.01/np.sqrt(1)      # [m/sqrt(s)]
