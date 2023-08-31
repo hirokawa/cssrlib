@@ -13,10 +13,10 @@ signals.update({uGNSS.IRN: [uSIG.L5A, uSIG.L9B]})
 for sys, sigs in signals.items():
     for sig in sigs:
         rnxSig = rSigRnx(sys, uTYP.C, sig)
-        print("{} {} {:9.4f} MHz  {:5.2f} cm".format(
-              sys2char(sys), rnxSig.str(),
-              rnxSig.frequency(k=-6)*1e-6,
-              rnxSig.wavelength(k=-6)*1e2))
+        print("{} {} {:9.4f} MHz  {:5.2f} cm"
+              .format(sys2char(sys), rnxSig.str(),
+                      rnxSig.frequency(k=-6)*1e-6,
+                      rnxSig.wavelength(k=-6)*1e2))
     print()
 
 print()
