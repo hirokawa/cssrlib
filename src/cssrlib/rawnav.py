@@ -2,10 +2,13 @@
 Raw Navigation Message decoder
 """
 
+import numpy as np
 import struct as st
 import bitstruct.c as bs
 from cssrlib.gnss import epoch2time, time2gpst, Eph, time2bdt, bdt2time, rCST
 from cssrlib.gnss import prn2sat, uGNSS, time2epoch, sat2prn, sat2id, bdt2gpst
+from cssrlib.gnss import uTYP, gst2time
+from cssrlib.rinex import rnxenc
 
 
 class RawNav():
@@ -386,83 +389,132 @@ class RawNav():
 
         return eph
 
-    def encode_rnx_nav(self, eph=None, fh=None):
-        if eph.sat in self.rec_eph.keys():
-            if eph.iode in self.rec_eph[eph.sat].keys():
-                return
-        else:
-            self.rec_eph[eph.sat] = {}
-        self.rec_eph[eph.sat][eph.iode] = eph.toes
 
-        id_ = sat2id(eph.sat)
-        sys, prn = sat2prn(eph.sat)
+class rcvOpt():
+    flg_qzslnav = False
+    flg_gpslnav = False
+    flg_qzsl6 = False
+    flg_gale6 = False
+    flg_galinav = False
+    flg_bdsb1cc = False
+    flg_bdsb2b = False
+    flg_sbas = False
+    flg_rnxnav = False
+    flg_rnxobs = False
 
-        if sys == uGNSS.BDS and (eph.iodc & 0xff) != eph.iode:
-            return
 
-        if sys == uGNSS.BDS:
-            ep = time2epoch(gpst2bdt(eph.toc))
-            week, tot_ = time2bdt(eph.tot)
-        else:
-            ep = time2epoch(eph.toc)
-            week, tot_ = time2gpst(eph.tot)
+class rcvDec():
+    """ template class for receiver message decoder """
 
-        if sys == uGNSS.BDS and eph.mode == 1:  # B-CNAV1
-            lbl = "CNV1"
-            v1 = eph.Adot
-        elif (sys == uGNSS.GPS or sys == uGNSS.QZS) and eph.mode == 0:  # LNAV
-            lbl = "LNAV"
-            v1 = float(eph.iode)
-        elif sys == uGNSS.GAL and eph.mode == 0:  # INAV
-            lbl = "INAV"
-            v1 = float(eph.iode)
-        else:
-            return
+    monlevel = 0
+    flg_qzslnav = False
+    flg_gpslnav = False
+    flg_qzsl6 = False
+    flg_gale6 = False
+    flg_galinav = False
+    flg_bdsb1c = False
+    flg_bdsb2b = False
+    flg_sbas = False
+    flg_rnxnav = False
+    flg_rnxobs = False
 
-        fh.write("> {:2s} {:3s} {:2s}\n".format("EPH", id_, lbl))
-        fh.write("{:3s} {:4d} {:2d} {:2d} {:2d} {:2d} {:2d}".
-                 format(id_, int(ep[0]), int(ep[1]), int(ep[2]),
-                        int(ep[3]), int(ep[4]), int(ep[5])))
-        fh.write("{:19.12e}{:19.12e}{:19.12e}\n".
-                 format(eph.af0, eph.af1, eph.af2))
-        fh.write("    {:19.12e}{:19.12e}{:19.12e}{:19.12e}\n".
-                 format(v1, eph.crs, eph.deln, eph.M0))
-        fh.write("    {:19.12e}{:19.12e}{:19.12e}{:19.12e}\n".
-                 format(eph.cuc, eph.e, eph.cus, np.sqrt(eph.A)))
-        fh.write("    {:19.12e}{:19.12e}{:19.12e}{:19.12e}\n".
-                 format(eph.toes, eph.cic, eph.OMG0, eph.cis))
-        fh.write("    {:19.12e}{:19.12e}{:19.12e}{:19.12e}\n".
-                 format(eph.i0, eph.crc, eph.omg, eph.OMGd))
+    fh_qzslnav = None
+    fh_gpslnav = None
+    fh_qzsl6 = None
+    fh_gale6 = None
+    fh_galinav = None
+    fh_bdsb1c = None
+    fh_bdsb2b = None
+    fh_sbas = None
+    fh_rnxnav = None
+    fh_rnxobs = None
 
-        if sys == uGNSS.BDS and eph.mode == 1:  # B-CNAV1
-            fh.write("    {:19.12e}{:19.12e}{:19.12e}{:19.12e}\n".
-                     format(eph.idot, eph.delnd, eph.sattype, eph.top))
-            fh.write("    {:19.12e}{:19.12e}{:19.12e}{:19.12e}\n".
-                     format(eph.sisai[0], eph.sisai[1], eph.sisai[2],
-                            eph.sisai[3]))
-            fh.write("    {:19.12e}{:19s}{:19.12e}{:19.12e}\n".
-                     format(eph.isc[0], "", eph.tgd, eph.tgd_b))
-            fh.write("    {:19.12e}{:19.12e}{:19.12e}{:19.12e}\n".
-                     format(float(eph.sismai), float(eph.svh),
-                            float(eph.integ), float(eph.iodc)))
-            fh.write("    {:19.12e}{:19s}{:19s}{:19.12e}\n".
-                     format(tot_, "", "", float(eph.iode)))
+    mode_galinav = 0  # 0: RawNav, 1: Decoded
 
-        if (sys == uGNSS.GPS or sys == uGNSS.QZS) and eph.mode == 0:  # LNAV
-            fh.write("    {:19.12e}{:19.12e}{:19.12e}{:19.12e}\n".
-                     format(eph.idot, float(eph.code), float(eph.week),
-                            float(eph.l2p)))
-            fh.write("    {:19.12e}{:19.12e}{:19.12e}{:19.12e}\n".
-                     format(float(eph.sva), float(eph.svh), eph.tgd,
-                            float(eph.iodc)))
-            fh.write("    {:19.12e}{:19.12e}{:19s}{:19s}\n".
-                     format(tot_, float(eph.fit), "", ""))
+    rn = None  # placeholder for Raw Navigation message decoder
+    re = None  # placeholder for RINEX encoder
 
-        if sys == uGNSS.GAL and eph.mode == 0:  # INAV
-            fh.write("    {:19.12e}{:19.12e}{:19.12e}{:19s}\n".
-                     format(eph.idot, float(eph.code), float(eph.week), ""))
-            fh.write("    {:19.12e}{:19.12e}{:19.12e}{:19.12e}\n".
-                     format(float(eph.sva), float(eph.svh), eph.tgd,
-                            float(eph.tgd_b)))
-            fh.write("    {:19.12e}{:19s}{:19s}{:19s}\n".
-                     format(tot_, "", "", ""))
+    def __init__(self, opt=None):
+        if opt is not None:
+            self.init_param(opt)
+        self.nsig = {uTYP.C: 0, uTYP.L: 0, uTYP.D: 0, uTYP.S: 0}
+
+    def init_param(self, opt: rcvOpt, prefix=''):
+        if opt.flg_rnxnav or opt.flg_rnxobs:
+            self.re = rnxenc(sig_tab=self.sig_tab)
+
+        self.rn = RawNav()
+
+        if opt.flg_qzslnav:
+            self.flg_qzslnav = True
+            self.file_qzslnav = "qzslnav.txt"
+            self.fh_qzslnav = open(prefix+self.file_qzslnav, mode='w')
+        if opt.flg_gpslnav:
+            self.flg_gpslnav = True
+            self.file_gpslnav = "gpslnav.txt"
+            self.fh_gpslnav = open(prefix+self.file_gpslnav, mode='w')
+        if opt.flg_qzsl6:
+            self.flg_qzsl6 = True
+            self.file_qzsl6 = "qzsl6.txt"
+            self.fh_qzsl6 = open(prefix+self.file_qzsl6, mode='w')
+        if opt.flg_gale6:
+            self.flg_gale6 = True
+            self.file_gale6 = "gale6.txt"
+            self.fh_gale6 = open(prefix+self.file_gale6, mode='w')
+        if opt.flg_gale6:
+            self.flg_galinav = True
+            self.file_galinav = "galinav.txt"
+            self.fh_galinav = open(prefix+self.file_galinav, mode='w')
+        if opt.flg_bdsb1c:
+            self.flg_bdsb1c = True
+            # self.file_bdsb1c = "bdsb1c.nav"
+            # self.fh_bdsb1c = open(prefix+self.file_bdsb1c, mode='w')
+        if opt.flg_bdsb2b:
+            self.flg_bdsb2b = True
+            self.file_bdsb2b = "bdsb2b.txt"
+            self.fh_bdsb2b = open(prefix+self.file_bdsb2b, mode='w')
+        if opt.flg_sbas:
+            self.flg_sbas = True
+            self.file_sbas = "sbas.txt"
+            self.fh_sbas = open(prefix+self.file_sbas, mode='w')
+        if opt.flg_rnxnav:
+            self.flg_rnxnav = True
+            self.file_rnxnav = "rnx.nav"
+            self.fh_rnxnav = open(prefix+self.file_rnxnav, mode='w')
+            self.re.rnx_nav_header(self.fh_rnxnav)
+        if opt.flg_rnxobs:
+            self.flg_rnxobs = True
+            self.file_rnxobs = "rnx.obs"
+            self.fh_rnxobs = open(prefix+self.file_rnxobs, mode='w')
+            # self.re.rnx_obs_header(self.fh_rnxobs)
+
+    def file_close(self):
+        if self.fh_qzsl6 is not None:
+            self.fh_qzsl6.close()
+
+        if self.fh_qzslnav is not None:
+            self.fh_qzslnav.close()
+
+        if self.fh_gpslnav is not None:
+            self.fh_gpslnav.close()
+
+        if self.fh_gale6 is not None:
+            self.fh_gale6.close()
+
+        if self.fh_galinav is not None:
+            self.fh_galinav.close()
+
+        if self.fh_bdsb1c is not None:
+            self.fh_bdsb1c.close()
+
+        if self.fh_bdsb2b is not None:
+            self.fh_bdsb2b.close()
+
+        if self.fh_sbas is not None:
+            self.fh_sbas.close()
+
+        if self.fh_rnxnav is not None:
+            self.fh_rnxnav.close()
+
+        if self.fh_rnxobs is not None:
+            self.fh_rnxobs.close()
