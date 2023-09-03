@@ -630,10 +630,11 @@ class Eph():
     tgd_b = 0.0
     tgd_c = 0.0
     sva = 0
-    health = 0
+    svh = 0
     fit = 0
     toes = 0
     tops = 0
+    l2p = 0
     sattype = 0
     sismai = 0
     code = 0
@@ -787,6 +788,7 @@ def timeget():
     ep = np.array([now.year, now.month, now.day, now.hour, now.minute,
                    now.second])
     return epoch2time(ep)
+
 
 def glo2time(tref: gtime_t, tod):
     time = timeadd(gpst2utc(tref), 10800.0)
