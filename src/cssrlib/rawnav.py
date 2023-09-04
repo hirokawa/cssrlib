@@ -5,9 +5,9 @@ Raw Navigation Message decoder
 import numpy as np
 import struct as st
 import bitstruct.c as bs
-from cssrlib.gnss import epoch2time, time2gpst, Eph, time2bdt, bdt2time, rCST
+from cssrlib.gnss import epoch2time, time2gpst, gpst2time, gst2time, time2bdt, bdt2time, rCST
 from cssrlib.gnss import prn2sat, uGNSS, time2epoch, sat2prn, sat2id, bdt2gpst
-from cssrlib.gnss import uTYP, gst2time
+from cssrlib.gnss import Eph, uTYP
 from cssrlib.rinex import rnxenc
 
 
@@ -52,6 +52,7 @@ class RawNav():
         # 64:field1, 24:crc, 8:field2, 6:tail
         # for E1B: field1: reserved1(40) + SAR(22)+spare(2), field2=SSP
         # for E5b: field1: reserved1. field2 = reserved2
+        msg = bytes(msg)
         odd, page = bs.unpack_from('u1u1', msg, 0)
         sid, iodnav = bs.unpack_from('u6u10', msg, 2)
 
@@ -68,6 +69,7 @@ class RawNav():
             buff[sid*16+14+k] = bs.unpack_from('u8', msg, i)[0]
             i += 8
 
+        buff = bytes(buff)
         sid1, iodnav1 = bs.unpack_from('u6u10', buff, 128)
         sid2, iodnav2 = bs.unpack_from('u6u10', buff, 128*2)
         sid3, iodnav3 = bs.unpack_from('u6u10', buff, 128*3)
