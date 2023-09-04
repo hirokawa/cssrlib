@@ -760,7 +760,7 @@ class rnxenc:
         ep = time2epoch(obs.time)
         nsat = len(obs.sat)
         nsig = obs.P.shape[1]
-        fh.write("> {:4d} {:02d} {:02d} {:02d} {:02d} {:11.7f}".
+        fh.write("> {:4d} {:02d} {:02d} {:02d} {:02d} {:010.7f}".
                  format(int(ep[0]), int(ep[1]), int(ep[2]),
                         int(ep[3]), int(ep[4]), ep[5]))
         fh.write("  {:1d}{:3d}\n".format(0, nsat))
