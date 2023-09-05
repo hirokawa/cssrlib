@@ -15,7 +15,7 @@ It supports the following open format:
 ************************************************
 Click this button for a quick demo in Google Colab
 
-<a target="_blank" href="https://colab.research.google.com/github/rtklibexplorer/cssrlib/blob/new_sig/tutorial/cssrlib.ipynb">
+<a target="_blank" href="https://colab.research.google.com/github/andrehauschild/cssrlib/blob/new_sig/tutorial/cssrlib.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 
