@@ -98,6 +98,8 @@ class rnxdec:
                         atts = 'SLX'
                     elif sys == uGNSS.QZS and sig.str()[1] in '5':
                         atts = 'IQX'
+                    elif sys == uGNSS.BDS and sig.str()[1] in '157':
+                        atts = 'PX'
                     else:
                         atts = []
 
