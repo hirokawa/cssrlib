@@ -98,7 +98,12 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
     nav.sig_qztd = 0.1/np.sqrt(3600)      # [m/sqrt(s)]
     nav.sig_qion = 10.0/np.sqrt(1)        # [m/s/sqrt(s)]
 
+    # Processing options
+    #
     nav.tidecorr = True
+    nav.useBiases = True
+    nav.useRxPco = True
+
     nav.thresar = 3.0  # AR acceptance threshold
     nav.armode = 3     # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
@@ -376,8 +381,12 @@ def zdres(nav, obs, bsx, rs, vs, dts, rr):
 
         # Code and phase signal bias, converted from [ns] to [m]
         #
-        cbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
-        pbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
+        if nav.useBiases:
+            cbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
+            pbias = np.array([bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
+        else:
+            cbias = np.array([0.0 for s in sigsPR])
+            pbias = np.array([0.0 for s in sigsCP])
 
         # Check for invalid biases
         #
@@ -415,8 +424,13 @@ def zdres(nav, obs, bsx, rs, vs, dts, rr):
 
         # Receiver/satellite antenna offset
         #
-        antrPR = antModelRx(nav, pos, e[i, :], sigsPR)
-        antrCP = antModelRx(nav, pos, e[i, :], sigsCP)
+        if nav.useRxPco:
+            antrPR = antModelRx(nav, pos, e[i, :], sigsPR)
+            antrCP = antModelRx(nav, pos, e[i, :], sigsCP)
+        else:
+            antrPR = np.array([0.0 for s in sigsPR])
+            antrCP = np.array([0.0 for s in sigsCP])
+
         antsPR = antModelTx(nav, e[i, :], sigsPR, sat, obs.t, rs[i, :])
         antsCP = antModelTx(nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
 
