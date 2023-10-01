@@ -875,7 +875,8 @@ class rtcm(cssr):
             self.fh.write(" {:20s}{:5d}\n".format("Number of satellites:",
                                                   self.nsat))
 
-            self.fh.write(" PRN  s0c[mm] s0d[ppm] s0h[ppm]  sic[mm] sid[ppm]\n")
+            self.fh.write(
+                " PRN  s0c[mm] s0d[ppm] s0h[ppm]  sic[mm] sid[ppm]\n")
             sat_ = self.nrtk_r.keys()
             for sat in sat_:
                 sys_, _ = sat2prn(sat)
@@ -1271,6 +1272,10 @@ class rtcm(cssr):
         i += 102
 
         geph = Geph()
+        geph.pos = np.zeros(3)
+        geph.vel = np.zeros(3)
+        geph.acc = np.zeros(3)
+
         geph.frq = frq-7
         tk_s *= 30.0
         geph.vel[0] = xd*rCST.P2_20*1e3
@@ -1307,6 +1312,9 @@ class rtcm(cssr):
             toe -= 86400.0
         geph.toe = utc2gpst(gpst2time(week, tow+toe))
         geph.mode = 0
+
+        # b7-8: M, b6: P4, b5: P3, b4: P2, b2-3: P1, b0-1: P
+        geph.status = M << 7 | P4 << 6 | P3 << 5 | P2 << 4 | P1 << 2 | P
 
         return i, geph
 

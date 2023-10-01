@@ -6,7 +6,7 @@ import numpy as np
 
 import cssrlib.gnss as gn
 from cssrlib.ephemeris import satposs
-from cssrlib.gnss import sat2id, sat2prn, rSigRnx, uTYP, uGNSS
+from cssrlib.gnss import sat2id, sat2prn, rSigRnx, uTYP, uGNSS, rCST
 from cssrlib.gnss import uTropoModel
 from cssrlib.gnss import time2str
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
@@ -35,13 +35,11 @@ def varerr(nav, el, f):
     return (a**2+(b/s_el)**2)
 
 
-def ionoDelay(sig1, sig2, pr1, pr2):
+def ionoDelay(sig1, sig2, pr1, pr2, f1, f2):
     """
     Compute ionospheric delay based on dual-frequency pseudorange difference
     """
-    f1_2 = sig1.frequency()**2
-    f2_2 = sig2.frequency()**2
-    return (pr1-pr2)/(1-f1_2/f2_2)
+    return (pr1-pr2)/(1-(f1/f2)**2)
 
 
 def rtkinit(nav, pos0=np.zeros(3), logfile=None):
@@ -102,7 +100,7 @@ def rtkinit(nav, pos0=np.zeros(3), logfile=None):
 
     nav.tidecorr = True
     nav.thresar = 3.0  # AR acceptance threshold
-    nav.armode = 0     # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
+    nav.armode = 0  # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
     nav.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
     nav.elmin = np.deg2rad(10.0)
 
@@ -261,22 +259,37 @@ def udstate(nav, obs):
             if pr1 == 0.0 or pr2 == 0.0:
                 continue
 
+            if sys[i] == uGNSS.GLO:
+                if sat[i] not in nav.glo_ch:
+                    print("glonass channed not found: {:d}".format(sat[i]))
+                    continue
+                f1 = sig1.frequency(nav.glo_ch[sat[i]])
+                f2 = sig2.frequency(nav.glo_ch[sat[i]])
+            else:
+                f1 = sig1.frequency()
+                f2 = sig2.frequency()
+
             # Get iono delay at frequency of first signal
             #
-            ion[i] = ionoDelay(sig1, sig2, pr1, pr2)
+            ion[i] = (pr1-pr2)/(1.0-(f1/f2)**2)
 
             # Get pseudorange and carrier-phase observation of signal f
             #
             sig = obs.sig[sys[i]][uTYP.L][f]
-            lam = sig.wavelength()
+
+            if sys[i] == uGNSS.GLO:
+                fi = sig.frequency(nav.glo_ch[sat[i]])
+            else:
+                fi = sig.frequency()
+
+            lam = rCST.CLIGHT/fi
 
             cp = obs.L[i, f]
             pr = obs.P[i, f]
             if cp == 0.0 or pr == 0.0 or lam is None:
                 continue
 
-            bias[i] = cp - pr/lam + \
-                2.0*ion[i]/lam*(sig1.frequency()/sig.frequency())**2
+            bias[i] = cp - pr/lam + 2.0*ion[i]/lam*(f1/fi)**2
 
             """
             amb = nav.x[IB(sat[i], f, nav.na)]
@@ -308,7 +321,8 @@ def udstate(nav, obs):
                 if nav.monlevel > 0:
                     sig = obs.sig[sys_i][uTYP.L][f]
                     nav.fout.write("{}  {} - init  ambiguity  {} {:12.3f}\n"
-                                   .format(time2str(obs.t), sat2id(sat[i]), sig, bias[i]))
+                                   .format(time2str(obs.t), sat2id(sat[i]),
+                                           sig, bias[i]))
 
             j = II(sat[i], nav.na)
             if ion[i] != 0 and nav.x[j] == 0.0:
@@ -317,7 +331,8 @@ def udstate(nav, obs):
 
                 if nav.monlevel > 0:
                     nav.fout.write("{}  {} - init  ionosphere      {:12.3f}\n"
-                                   .format(time2str(obs.t), sat2id(sat[i]), ion[i]))
+                                   .format(time2str(obs.t), sat2id(sat[i]),
+                                           ion[i]))
 
     return 0
 
@@ -417,7 +432,10 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
 
         # Wavelength
         #
-        lam = np.array([s.wavelength() for s in sigsCP])
+        if sys == uGNSS.GLO:
+            lam = np.array([s.wavelength(nav.glo_ch[sat]) for s in sigsCP])
+        else:
+            lam = np.array([s.wavelength() for s in sigsCP])
 
         cbias = np.zeros(nav.nf)
         pbias = np.zeros(nav.nf)
@@ -448,7 +466,8 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
                 # - IS-QZSS-MDC-001 sec 5.5.3.3
                 # - HAS SIS ICD sec 7.4, 7.5
                 # - HAS IDD ICD sec 3.3.4
-                if cs.cssrmode in [sc.GAL_HAS_IDD, sc.GAL_HAS_SIS, sc.QZS_MADOCA]:
+                if cs.cssrmode in [sc.GAL_HAS_IDD, sc.GAL_HAS_SIS,
+                                   sc.QZS_MADOCA]:
                     cbias = -cbias
 
             if cs.lc[0].cstat & (1 << sCType.PBIAS) == (1 << sCType.PBIAS):
@@ -508,9 +527,7 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
         sig0 = None
         if cs is not None:
 
-            if (cs.cssrmode == sc.GAL_HAS_SIS or
-                cs.cssrmode == sc.GAL_HAS_IDD or
-                    cs.cssrmode == sc.QZS_MADOCA):
+            if cs.cssrmode in (sc.GAL_HAS_SIS, sc.GAL_HAS_IDD, sc.QZS_MADOCA):
 
                 if sys == uGNSS.GPS:
                     sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
@@ -518,6 +535,8 @@ def zdres(nav, obs, cs, bsx, rs, vs, dts, rr):
                     sig0 = (rSigRnx("EC1C"), rSigRnx("EC7Q"))
                 elif sys == uGNSS.QZS:
                     sig0 = (rSigRnx("JC1C"), rSigRnx("JC2S"))
+                elif sys == uGNSS.GLO:
+                    sig0 = (rSigRnx("RC1C"), rSigRnx("RC2C"))
 
             elif cs.cssrmode == sc.BDS_PPP:
 
@@ -626,37 +645,49 @@ def sdres(nav, obs, x, y, e, sat, el):
     #
     for sys in obs.sig.keys():
 
-        # Slant ionospheric delay reference frequency
-        #
-        freq0 = obs.sig[sys][uTYP.L][0].frequency()
-
         # Loop over twice the number of frequencies
         #   first for all carrier-phase observations
         #   second all pseudorange observations
         #
         for f in range(0, nf*2):
-
-            # Select carrier-phase frequency and iono frequency ratio
-            #
-            if f < nf:  # carrier
-                sig = obs.sig[sys][uTYP.L][f]
-                mu = -(freq0/sig.frequency())**2
-            else:  # code
-                sig = obs.sig[sys][uTYP.C][f % nf]
-                mu = +(freq0/sig.frequency())**2
-
             # Select satellites from one constellation only
             #
             idx = sysidx(sat, sys)
 
+            if len(idx) == 0:
+                continue
+
             # Select reference satellite with highest elevation
             #
-            if len(idx) > 0:
-                i = idx[np.argmax(el[idx])]
+            i = idx[np.argmax(el[idx])]
 
             # Loop over satellites
             #
             for j in idx:
+
+                # Slant ionospheric delay reference frequency
+                #
+                if sys == uGNSS.GLO:
+                    freq0 = obs.sig[sys][uTYP.L][0].frequency(0)
+                else:
+                    freq0 = obs.sig[sys][uTYP.L][0].frequency()
+
+                # Select carrier-phase frequency and iono frequency ratio
+                #
+                if f < nf:  # carrier
+                    sig = obs.sig[sys][uTYP.L][f]
+                    if sys == uGNSS.GLO:
+                        freq = sig.frequency(nav.glo_ch[sat[j]])
+                    else:
+                        freq = sig.frequency()
+                    mu = -(freq0/freq)**2
+                else:  # code
+                    sig = obs.sig[sys][uTYP.C][f % nf]
+                    if sys == uGNSS.GLO:
+                        freq = sig.frequency(nav.glo_ch[sat[j]])
+                    else:
+                        freq = sig.frequency()
+                    mu = +(freq0/freq)**2
 
                 # Skip edited observations
                 #
@@ -725,10 +756,15 @@ def sdres(nav, obs, x, y, e, sat, el):
                     idx_i = IB(sat[i], f, nav.na)
                     idx_j = IB(sat[j], f, nav.na)
 
-                    lami = sig.wavelength()
+                    if sys == uGNSS.GLO:
+                        lami = sig.wavelength(nav.glo_ch[sat[i]])
+                        lamj = sig.wavelength(nav.glo_ch[sat[j]])
+                    else:
+                        lami = sig.wavelength()
+                        lamj = lami
 
                     H[nv, idx_i] = +lami
-                    H[nv, idx_j] = -lami
+                    H[nv, idx_j] = -lamj
                     v[nv] -= lami*(x[idx_i] - x[idx_j])
 
                     Ri[nv] = varerr(nav, el[i], f)  # measurement variance
@@ -738,10 +774,10 @@ def sdres(nav, obs, x, y, e, sat, el):
                     nav.vsat[sat[j]-1, f] = 1
 
                     if nav.monlevel > 2:
-                        nav.fout.write("{} {}-{} amb {} ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
+                        nav.fout.write("{} {}-{} amb {} ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
                                        .format(time2str(obs.t),
                                                sat2id(sat[i]), sat2id(sat[j]),
-                                               sig, idx_i, idx_j, lami,
+                                               sig, idx_i, idx_j, lami, lamj,
                                                x[idx_i], x[idx_j],
                                                np.sqrt(nav.P[idx_i, idx_i]),
                                                np.sqrt(nav.P[idx_j, idx_j])))
