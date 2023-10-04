@@ -300,7 +300,7 @@ class cssr:
 
         # default navigation message mode: 0:LNAV/INAV, 1: CNAV/CNAV1
         self.nav_mode = {uGNSS.GPS: 0, uGNSS.QZS: 0,
-                         uGNSS.GAL: 0, uGNSS.BDS: 1}
+                         uGNSS.GAL: 0, uGNSS.BDS: 1, uGNSS.GLO: 0}
 
         self.fh = None
         if foutname is not None:
@@ -618,7 +618,7 @@ class cssr:
         """decode MT4073,2 Orbit Correction message """
         head, i = self.decode_head(msg, i)
         self.flg_net = False
-        #if self.iodssr != head['iodssr']:
+        # if self.iodssr != head['iodssr']:
         #    return -1
         dorb_p = self.lc[inet].dorb
         self.lc[inet].dorb = np.zeros((self.nsat_n, 3))
@@ -628,7 +628,7 @@ class cssr:
             i = self.decode_orb_sat(msg, i, k, self.sys_n[k], inet)
             if self.sat_n[k] in self.sat_n_p:
                 j = self.sat_n_p.index(self.sat_n[k])
-                #self.lc[inet].dorb_d[k, :] = self.lc[inet].dorb[k, :] \
+                # self.lc[inet].dorb_d[k, :] = self.lc[inet].dorb[k, :] \
                 #    - dorb_p[j, :]
 
         self.iodssr_c[sCType.ORBIT] = head['iodssr']
@@ -640,7 +640,7 @@ class cssr:
         """decode MT4073,3 Clock Correction message """
         head, i = self.decode_head(msg, i)
         self.flg_net = False
-        #if self.iodssr != head['iodssr']:
+        # if self.iodssr != head['iodssr']:
         #    return -1
 
         if (self.lc[0].cstat & (1 << sCType.MASK)) != (1 << sCType.MASK):
@@ -673,7 +673,7 @@ class cssr:
         head, i = self.decode_head(msg, i)
         nsat = self.nsat_n
         self.flg_net = False
-        #if self.iodssr != head['iodssr']:
+        # if self.iodssr != head['iodssr']:
         #    return -1
         self.lc[inet].cbias = np.zeros((nsat, self.nsig_max))
         for k in range(nsat):
@@ -690,7 +690,7 @@ class cssr:
         head, i = self.decode_head(msg, i)
         nsat = self.nsat_n
         self.flg_net = False
-        #if self.iodssr != head['iodssr']:
+        # if self.iodssr != head['iodssr']:
         #    return -1
         self.lc[inet].pbias = np.zeros((nsat, self.nsig_max))
         self.lc[inet].di = np.zeros((nsat, self.nsig_max), dtype=int)
@@ -707,7 +707,7 @@ class cssr:
         """decode MT4073,6 Bias Correction message """
         nsat = self.nsat_n
         head, i = self.decode_head(msg, i)
-        #if self.iodssr != head['iodssr']:
+        # if self.iodssr != head['iodssr']:
         #    return -1
         dfm = bs.unpack_from_dict('b1b1b1', ['cb', 'pb', 'net'], msg, i)
         self.flg_net = dfm['net']
@@ -871,7 +871,7 @@ class cssr:
     def decode_cssr_comb(self, msg, i, inet=0):
         """decode MT4073,11 Orbit,Clock Combined Correction message """
         head, i = self.decode_head(msg, i)
-        #if self.iodssr != head['iodssr']:
+        # if self.iodssr != head['iodssr']:
         #    return -1
         dfm = bs.unpack_from_dict('b1b1b1', ['orb', 'clk', 'net'], msg, i)
         i += 3

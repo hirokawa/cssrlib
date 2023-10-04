@@ -7,7 +7,8 @@ from cssrlib.gnss import uGNSS, uTYP, rSigRnx
 from cssrlib.gnss import bdt2gpst, time2bdt
 from cssrlib.gnss import gpst2time, bdt2time, epoch2time, timediff, gtime_t
 from cssrlib.gnss import prn2sat, char2sys, timeget, utc2gpst, time2epoch
-from cssrlib.gnss import Eph, Obs, sat2id, sat2prn, gpst2bdt, time2gpst
+from cssrlib.gnss import Eph, Geph, Obs, sat2id, sat2prn, gpst2bdt, time2gpst
+from cssrlib.gnss import timeadd, id2sat
 
 
 class pclk_t:
@@ -43,6 +44,7 @@ class rnxdec:
         # 0:LNAV,INAV,D1/D2, 1:CNAV/CNAV1/FNAV, 2: CNAV2, 3: CNAV3,
         # 4:FDMA, 5:SBAS
         self.mode_nav = 0
+        self.glo_ch = {}
 
     def setSignals(self, sigList):
         """ define the signal list for each constellation """
@@ -114,6 +116,14 @@ class rnxdec:
             return 0.0
         return float(u.replace("D", "E"))
 
+    def adjday(self, t: gtime_t, t0: gtime_t):
+        tt = timediff(t, t0)
+        if tt < -43200.0:
+            return timeadd(t, 86400.0)
+        if tt > 43200.0:
+            return timeadd(t, -86400.0)
+        return t
+
     def decode_time(self, s, ofst=0, slen=2):
         year = int(s[ofst+0:ofst+4])
         month = int(s[ofst+5:ofst+7])
@@ -133,6 +143,7 @@ class rnxdec:
         """
 
         nav.eph = []
+        nav.geph = []
         with open(navfile, 'rt') as fnav:
             for line in fnav:
                 if line[60:73] == 'END OF HEADER':
@@ -235,9 +246,9 @@ class rnxdec:
                         elif m == 'CNV3':
                             self.mode_nav = 3
                         elif m == 'FDMA':
-                            self.mode_nav = 4
+                            self.mode_nav = 0
                         elif m == 'SBAS':
-                            self.mode_nav = 5
+                            self.mode_nav = 0
                         line = fnav.readline()
 
                 # Process ephemeris information
@@ -246,7 +257,68 @@ class rnxdec:
 
                 # Skip undesired constellations
                 #
-                if sys not in (uGNSS.GPS, uGNSS.GAL, uGNSS.QZS, uGNSS.BDS):
+                if sys == uGNSS.GLO:
+                    prn = int(line[1:3])
+                    sat = prn2sat(sys, prn)
+                    geph = Geph(sat)
+                    geph.pos = np.zeros(3)
+                    geph.vel = np.zeros(3)
+                    geph.acc = np.zeros(3)
+
+                    geph.mode = self.mode_nav
+                    toc = self.decode_time(line, 4)
+                    week, tocs = time2gpst(toc)
+                    toc = gpst2time(week,
+                                    np.floor((tocs+450.0)/900.0)*900.0)
+                    dow = int(tocs//86400.0)
+
+                    geph.taun = -self.flt(line, 1)
+                    geph.gamn = self.flt(line, 2)
+                    t0 = self.flt(line, 3)
+
+                    tod = t0 % 86400.0
+                    tof = gpst2time(week, tod + dow*86400.0)
+                    tof = self.adjday(tof, toc)
+
+                    geph.toe = utc2gpst(toc)
+                    geph.tof = utc2gpst(tof)
+
+                    # iode = Tb(7bit)
+                    geph.iode = int(((tocs+10800.0) % 86400)/900.0+0.5)
+
+                    line = fnav.readline()  # line #1
+                    geph.pos[0] = self.flt(line, 0)*1e3
+                    geph.vel[0] = self.flt(line, 1)*1e3
+                    geph.acc[0] = self.flt(line, 2)*1e3
+                    geph.svh = int(self.flt(line, 3))
+
+                    line = fnav.readline()  # line #2
+                    geph.pos[1] = self.flt(line, 0)*1e3
+                    geph.vel[1] = self.flt(line, 1)*1e3
+                    geph.acc[1] = self.flt(line, 2)*1e3
+                    geph.frq = int(self.flt(line, 3))
+
+                    if geph.frq > 128:
+                        geph.frq -= 256
+
+                    line = fnav.readline()  # line #3
+                    geph.pos[2] = self.flt(line, 0)*1e3
+                    geph.vel[2] = self.flt(line, 1)*1e3
+                    geph.acc[2] = self.flt(line, 2)*1e3
+                    geph.age = int(self.flt(line, 3))
+
+                    line = fnav.readline()  # line #4
+
+                    # b7-8: M, b6: P4, b5: P3, b4: P2, b2-3: P1, b0-1: P
+                    geph.status = int(self.flt(line, 0))
+                    geph.dtaun = -self.flt(line, 1)
+                    geph.urai = int(self.flt(line, 2))
+                    # svh = int(self.flt(line, 3))
+
+                    nav.geph.append(geph)
+                    continue
+
+                elif sys not in (uGNSS.GPS, uGNSS.GAL, uGNSS.QZS, uGNSS.BDS):
                     continue
 
                 prn = int(line[1:3])
@@ -254,6 +326,10 @@ class rnxdec:
                     prn += 192
                 sat = prn2sat(sys, prn)
                 eph = Eph(sat)
+
+                eph.urai = np.zeros(3, dtype=int)
+                eph.sisai = np.zeros(4, dtype=int)
+                eph.isc = np.zeros(6)
 
                 eph.mode = self.mode_nav
 
@@ -488,6 +564,15 @@ class rnxdec:
                 self.ts = epoch2time([float(v) for v in line[0:44].split()])
             elif 'TIME OF LAST OBS' in line[60:]:
                 self.te = epoch2time([float(v) for v in line[0:44].split()])
+            elif 'GLONASS SLOT / FRQ #' in line[60:]:
+                nsat = int(line[0:3])
+                for i in range(nsat):
+                    if i > 0 and i % 8 == 0:
+                        line = self.fobs.readline()
+                    j = i % 8
+                    sat = id2sat(line[4+7*j:7+7*j])
+                    ch = int(line[8+7*j: 10+7*j])
+                    self.glo_ch[sat] = ch
 
         return 0
 

@@ -5,7 +5,7 @@ Created on Sun Aug 22 21:01:49 2021
 @author: ruihi
 """
 
-from cssrlib.gnss import Nav, id2sat, sat2id, char2sys
+from cssrlib.gnss import Nav, id2sat, sat2id, char2sys, sat2prn
 from cssrlib.gnss import epoch2time, time2epoch, timeadd, timediff, gtime_t
 from cssrlib.gnss import str2time, gpst2utc, utc2gpst
 from cssrlib.gnss import ecef2enu
@@ -681,6 +681,7 @@ def antModelTx(nav, e, sigs, sat, time, rs, sig0=None):
         range correction for each specified signal
     """
 
+    sys, _ = sat2prn(sat)
     # Select satellite antenna
     #
     ant = searchpcv(nav.sat_ant, sat, time)
@@ -701,8 +702,10 @@ def antModelTx(nav, e, sigs, sat, time, rs, sig0=None):
     #
     off0 = np.zeros(3)
     if sig0 is not None:
-
-        freq = [s.frequency() for s in sig0]
+        if sys == uGNSS.GLO:
+            freq = [s.frequency(nav.glo_ch[sat]) for s in sig0]
+        else:
+            freq = [s.frequency() for s in sig0]
         fac0 = [1.0 for s in sig0]
 
         if len(freq) == 2:

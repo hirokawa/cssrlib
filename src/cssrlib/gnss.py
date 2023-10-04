@@ -30,6 +30,7 @@ class rCST():
     OMGE_BDS = 7.2921150E-5
     RE_WGS84 = 6378137.0
     FE_WGS84 = (1.0/298.257223563)
+    RE_GLO = 6378136.0
     AU = 149597870691.0
     D2R = 0.017453292519943295
     R2D = 57.29577951308232
@@ -416,8 +417,8 @@ class rSigRnx():
                    (s[2] == '5' and s[2] not in 'IQX'):
                     raise ValueError
             elif sys == uGNSS.GLO:
-                if (s[1] == '1' and s[2] not in 'CP') or \
-                   (s[1] == '2' and s[2] not in 'CP') or \
+                if (s[1] == '1' and s[2] not in 'CPX') or \
+                   (s[1] == '2' and s[2] not in 'CPX') or \
                    (s[1] == '3' and s[2] not in 'IQX') or \
                    (s[1] == '4' and s[2] not in 'ABX') or \
                    (s[1] == '6' and s[2] not in 'ABX'):
@@ -638,9 +639,9 @@ class Eph():
     sattype = 0
     sismai = 0
     code = 0
-    urai = np.zeros(3)
-    sisai = np.zeros(4)
-    isc = np.zeros(6)
+    urai = None
+    sisai = None
+    isc = None
     integ = 0
     # 0:LNAV,INAV,D1/D2, 1:CNAV/CNAV1/FNAV, 2: CNAV2, 3: CNAV3, 4:FDMA, 5:SBAS
     mode = 0
@@ -659,13 +660,14 @@ class Geph():
     age = 0.0
     toe = gtime_t()
     tof = gtime_t()
-    pos = np.zeros(3)
-    vel = np.zeros(3)
-    acc = np.zeros(3)
+    pos = None
+    vel = None
+    acc = None
     taun = 0.0         # SV clock bias [s]
     gamn = 0.0         # relative frq bias
     dtaun = 0.0        # delta between L1 and L2 [s]
     mode = 0
+    status = 0
 
     def __init__(self, sat=0):
         self.sat = sat
@@ -695,6 +697,8 @@ class Nav():
 
     def __init__(self, nf=2):
         self.eph = []
+        self.geph = []
+        self.seph = []
         self.peph = []
         self.ion = np.array([
             [0.1118E-07, -0.7451E-08, -0.5961E-07, 0.1192E-06],
@@ -741,6 +745,9 @@ class Nav():
 
         self.tt = 0
         self.t = gtime_t()
+
+        # GLONASS frequency channel table
+        self.glo_ch = {}
 
 
 def epoch2time(ep):
