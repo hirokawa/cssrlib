@@ -12,6 +12,7 @@ from cssrlib.peph import antModelRx, antModelTx
 from cssrlib.cssrlib import sCType, sSigGPS
 from cssrlib.cssrlib import sCSSRTYPE as sc
 from cssrlib.mlambda import mlambda
+from cssrlib.rtk import ddidx
 
 
 class pppos():
@@ -903,7 +904,7 @@ class pppos():
         nx = self.nav.nx
         na = self.nav.na
         xa = np.zeros(na)
-        ix = self.ddidx(self.nav, sat)
+        ix = ddidx(self.nav, sat)
         nb = len(ix)
         if nb <= 0:
             print("no valid DD")
