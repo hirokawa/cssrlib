@@ -80,6 +80,14 @@ class rtcm(cssr):
                 break
         return sys, ssr
 
+    def svid2sat(self, sys, svid):
+        prn = svid
+        if sys == uGNSS.QZS:
+            prn += 192
+        elif sys == uGNSS.SBS:
+            prn += 119
+        return prn2sat(sys, prn)
+
     def ssig2rsig(self, sys: uGNSS, utyp: uTYP, ssig):
         gps_tbl = {
             0: uSIG.L1C,
@@ -373,9 +381,10 @@ class rtcm(cssr):
             else:
                 blen = 6
 
-        prn = bs.unpack_from('u'+str(blen), msg, i)[0]
+        svid = bs.unpack_from('u'+str(blen), msg, i)[0]
         i += blen
-        sat = prn2sat(sys, prn)
+
+        sat = self.svid2sat(sys, svid)
         return i, sat
 
     def decode_orb_sat(self, msg, i, k, sys=uGNSS.NONE, inet=0):
@@ -505,6 +514,7 @@ class rtcm(cssr):
 
         for k in range(nsat):
             i, sat_ = self.decode_sat(msg, i, sys)
+
             nsig = bs.unpack_from('u5', msg, i)[0]
             i += 5
             if sat_ not in self.sat_b:
@@ -516,9 +526,6 @@ class rtcm(cssr):
                 i += 19
 
                 self.lc[0].cbias[sat_][sig] = self.sval(cb, 14, 0.01)
-                # if self.cssrmode == sCSSRTYPE.GAL_HAS_IDD:
-                # work-around for HAS IDD
-                #    self.lc[0].cbias[sat_][sig] *= -1.0
 
         self.lc[0].cstat |= (1 << sCType.CBIAS)
         self.lc[0].t0[sCType.CBIAS] = self.time
@@ -533,9 +540,9 @@ class rtcm(cssr):
         # if self.iodssr != v['iodssr']:
         #    return -1
 
-        if timediff(self.time, self.lc[inet].t0[sCType.CBIAS]) > 0:
+        if timediff(self.time, self.lc[inet].t0[sCType.PBIAS]) > 0:
             self.sat_b = []
-            self.lc[0].cbias = {}
+            self.lc[0].pbias = {}
 
         for k in range(nsat):
             i, sat_ = self.decode_sat(msg, i, sys)
@@ -548,16 +555,13 @@ class rtcm(cssr):
             i += 17
             if sat_ not in self.sat_b:
                 self.sat_b.append(sat_)
-                self.lc[0].cbias[sat_] = {}
+                self.lc[0].pbias[sat_] = {}
 
             for j in range(nsig):
                 sig, si, wl, ci, pb = bs.unpack_from('u5u1u2u4s20', msg, i)
                 i += 32
 
                 self.lc[0].pbias[sat_][sig] = self.sval(pb, 20, 1e-4)
-                # if self.cssrmode == sCSSRTYPE.GAL_HAS_IDD:
-                # work-around for HAS IDD
-                #    self.lc[0].pbias[sat_][sig] *= -1.0
 
         self.lc[0].cstat |= (1 << sCType.PBIAS)
         self.lc[0].t0[sCType.PBIAS] = self.time
@@ -748,10 +752,9 @@ class rtcm(cssr):
 
         for k in range(self.nsat):
             sz = 6 if sys != uGNSS.QZS else 4
-            prn = bs.unpack_from('u'+str(sz), msg, i)[0]
-            if sys == uGNSS.QZS:
-                prn += 192
-            sat = prn2sat(sys, prn)
+            svid = bs.unpack_from('u'+str(sz), msg, i)[0]
+            sat = self.svid2sat(sys, svid)
+
             i += sz
             s0c, s0d, s0h, sic, sid = bs.unpack_from('u8u9u6u10u10', msg, i)
             i += 43
@@ -791,21 +794,17 @@ class rtcm(cssr):
 
         if self.subtype == sCSSR.CLOCK:
             self.fh.write(" {:s}\t{:s}\n".format("SatID", "dclk [m]"))
-            for k, sat_ in enumerate(self.sat_n):
+            for k, sat_ in enumerate(self.lc[0].dclk.keys()):
                 sys_, _ = sat2prn(sat_)
-                if sys != uGNSS.NONE and sys_ != sys:
-                    continue
                 self.fh.write(" {:s}\t{:5.3f}\n".format(sat2id(sat_),
                                                         self.lc[0].dclk[sat_]))
 
-        elif self.subtype == sCSSR.ORBIT:
+        if self.subtype == sCSSR.ORBIT:
             self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\t{:s}\n"
                           .format("SatID", "IODE", "Radial[m]",
                                   "Along[m]", "Cross[m]"))
-            for k, sat_ in enumerate(self.sat_n):
+            for k, sat_ in enumerate(self.lc[0].dorb.keys()):
                 sys_, _ = sat2prn(sat_)
-                if sys != uGNSS.NONE and sys_ != sys:
-                    continue
                 self.fh.write(" {:s}\t{:3d}\t{:5.3f}\t{:5.3f}\t{:5.3f}\n".
                               format(sat2id(sat_),
                                      self.lc[0].iode[sat_],
@@ -813,14 +812,12 @@ class rtcm(cssr):
                                      self.lc[0].dorb[sat_][1],
                                      self.lc[0].dorb[sat_][2]))
 
-        elif self.subtype == sCSSR.COMBINED:
+        if self.subtype == sCSSR.COMBINED:
             self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\t{:s}\t{:s}\n"
                           .format("SatID", "IODE", "Radial[m]",
                                   "Along[m]", "Cross[m]", "dclk[m]"))
-            for k, sat_ in enumerate(self.sat_n):
+            for k, sat_ in enumerate(self.self.lc[0].dorb.keys()):
                 sys_, _ = sat2prn(sat_)
-                if sys != uGNSS.NONE and sys_ != sys:
-                    continue
                 self.fh.write(
                     " {:s}\t{:3d}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\n".
                     format(sat2id(sat_),
@@ -830,22 +827,33 @@ class rtcm(cssr):
                            self.lc[0].dorb[sat_][2],
                            self.lc[0].dclk[sat_]))
 
-        elif self.subtype == sCSSR.CBIAS:
+        if self.subtype == sCSSR.CBIAS or self.subtype == sCSSR.BIAS:
             self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\n"
-                          .format("SatID", "SigID", "Bias[m]", "..."))
-            for k, sat_ in enumerate(self.sat_b):
+                          .format("SatID", "SigID", "CBias[m]", "..."))
+            for k, sat_ in enumerate(self.lc[0].cbias.keys()):
                 sys_, _ = sat2prn(sat_)
-                if sys != uGNSS.NONE and sys_ != sys:
-                    continue
                 self.fh.write(" {:s}\t".format(sat2id(sat_)))
                 for j, sig in enumerate(self.lc[0].cbias[sat_].keys()):
-                    sig_ = self.ssig2rsig(sys, uTYP.C, sig)
+                    sig_ = self.ssig2rsig(sys_, uTYP.C, sig)
                     self.fh.write(
                         "{:s}\t{:5.2f}\t".format(sig_.str(),
                                                  self.lc[0].cbias[sat_][sig]))
                 self.fh.write("\n")
 
-        elif self.subtype == sRTCM.ANT_DESC:
+        if self.subtype == sCSSR.PBIAS or self.subtype == sCSSR.BIAS:
+            self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\n"
+                          .format("SatID", "SigID", "PBias[m]", "..."))
+            for k, sat_ in enumerate(self.lc[0].pbias.keys()):
+                sys_, _ = sat2prn(sat_)
+                self.fh.write(" {:s}\t".format(sat2id(sat_)))
+                for j, sig in enumerate(self.lc[0].pbias[sat_].keys()):
+                    sig_ = self.ssig2rsig(sys_, uTYP.L, sig)
+                    self.fh.write(
+                        "{:s}\t{:5.2f}\t".format(sig_.str(),
+                                                 self.lc[0].pbias[sat_][sig]))
+                self.fh.write("\n")
+
+        if self.subtype == sRTCM.ANT_DESC:
             self.fh.write(" {:20s}{:6d}\n".format("StationID:", self.refid))
             self.fh.write(" {:20s}{:s}\n".format("Antenna Descriptor]:",
                                                  self.ant_desc))
@@ -862,7 +870,7 @@ class rtcm(cssr):
                 self.fh.write(" {:20s}{:s}\n".format("Receiver Serial:",
                                                      self.rcv_serial))
 
-        elif self.subtype == sRTCM.NRTK_RES:
+        if self.subtype == sRTCM.NRTK_RES:
             sys, nrtk = self.nrtktype(self.msgtype)
             self.fh.write(" {:20s}{:6d} ({:s})\n".format("NRTK Residual:",
                                                          self.msgtype,
@@ -887,7 +895,7 @@ class rtcm(cssr):
                 self.fh.write("  {:7.1f} {:8.2f} {:8.1f} {:8.1f} {:8.2f}\n"
                               .format(v[0]*1e3, v[1], v[2], v[3]*1e3, v[4]))
 
-        elif self.subtype == sRTCM.ANT_POS:
+        if self.subtype == sRTCM.ANT_POS:
             self.fh.write(" {:20s}{:6d}\n".format("StationID:", self.refid))
             if self.msgtype in (1005, 1006):
                 self.fh.write(" {:20s}{:6d}\n".format("Station Indicator:",
@@ -897,7 +905,7 @@ class rtcm(cssr):
                                   self.pos_arp[0], self.pos_arp[1],
                                   self.pos_arp[2]))
 
-        elif self.subtype == sRTCM.GLO_BIAS:
+        if self.subtype == sRTCM.GLO_BIAS:
             self.fh.write(" {:20s}{:6d}\n".format("StationID:", self.refid))
             self.fh.write(" {:20s} {:8.2f}\n"
                           .format("GLONASS BIAS L1 C/A [m]:",
@@ -912,7 +920,7 @@ class rtcm(cssr):
                           .format("GLONASS BIAS L2 P   [m]:",
                                   self.glo_bias[3]))
 
-        elif self.subtype == sRTCM.MSM:
+        if self.subtype == sRTCM.MSM:
             sys, msm = self.msmtype(self.msgtype)
             self.fh.write(" {:20s}{:6d} ({:s})\n".format("MSM:", msm,
                                                          self.sys2str(sys)))
@@ -1385,7 +1393,7 @@ class rtcm(cssr):
 
     def decode_qzs_eph(self, msg, i):
         """ QZS Satellite Ephemeris Message """
-        prn, toc, af2, af1, af0 = bs.unpack_from('u4u16s8s16s22', msg, i)
+        svid, toc, af2, af1, af0 = bs.unpack_from('u4u16s8s16s22', msg, i)
         i += 4+16+8+16+22
         iode, crs, deln, M0, cuc = bs.unpack_from('u8s16s16s32s16', msg, i)
         i += 8+16+16+32+16
@@ -1399,7 +1407,7 @@ class rtcm(cssr):
         i += 6+8+10+1
 
         eph = Eph()
-        eph.sat = prn2sat(uGNSS.QZS, prn+192)
+        eph.sat = prn2sat(uGNSS.QZS, svid+192)
         toc *= 16.0
         eph.af2 = af0*rCST.P2_55
         eph.af1 = af1*rCST.P2_43
@@ -1546,7 +1554,7 @@ class rtcm(cssr):
 
     def decode_sbs_eph(self, msg, i):
         """ SBAS Satellite Ephemeris Message """
-        prn, iodn, toc, ura = bs.unpack_from('u6u8u13u4', msg, i)
+        svid, iodn, toc, ura = bs.unpack_from('u6u8u13u4', msg, i)
         i += 6+8+13+4
         x, y, z = bs.unpack_from('s30s30s25', msg, i)
         i += 30+30+25
@@ -1558,7 +1566,7 @@ class rtcm(cssr):
         i += 12+8
 
         seph = Seph()
-        seph.sat = prn2sat(uGNSS.SBS, prn+119)
+        seph.sat = prn2sat(uGNSS.SBS, svid+119)
         seph.iode = iodn
         toc *= 16.0
         seph.ura = ura
