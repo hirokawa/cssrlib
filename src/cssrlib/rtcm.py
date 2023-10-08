@@ -816,7 +816,7 @@ class rtcm(cssr):
             self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\t{:s}\t{:s}\n"
                           .format("SatID", "IODE", "Radial[m]",
                                   "Along[m]", "Cross[m]", "dclk[m]"))
-            for k, sat_ in enumerate(self.self.lc[0].dorb.keys()):
+            for k, sat_ in enumerate(self.lc[0].dorb.keys()):
                 sys_, _ = sat2prn(sat_)
                 self.fh.write(
                     " {:s}\t{:3d}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\n".
