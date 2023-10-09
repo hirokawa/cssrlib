@@ -36,6 +36,8 @@ class rCST():
     R2D = 57.29577951308232
     AS2R = D2R/3600.0
     DAY_SEC = 86400.0
+    WEEK_SEC = 604800.0
+    HALFWEEK_SEC = 302400.0
     CENTURY_SEC = DAY_SEC*36525.0
 
     FREQ_G1 = 1575.42e6      # [Hz] GPS L1
@@ -956,6 +958,15 @@ def time2str(t):
     e = time2epoch(t)
     return "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}"\
         .format(e[0], e[1], e[2], e[3], e[4], int(e[5]))
+
+
+def adjtime(t: gtime_t, tref: gtime_t, dt=rCST.WEEK_SEC):
+    tt = timediff(t, tref)
+    if tt < -dt/2.0:
+        return timeadd(t, dt)
+    if tt > dt/2.0:
+        return timeadd(t, -dt)
+    return t
 
 
 def prn2sat(sys, prn):

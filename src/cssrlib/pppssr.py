@@ -365,7 +365,35 @@ class pppos():
 
         return 0
 
+    def find_bias(self, cs, sigref, sat):
+        nf = len(sigref)
+        v = np.zeros(nf)
+
+        if nf == 0 or sat not in cs.lc[0].cbias.keys():
+            return v
+
+        ctype = sigref[0].typ
+        if ctype == uTYP.C:
+            sigc = cs.lc[0].cbias[sat]
+        else:
+            sigc = cs.lc[0].pbias[sat]
+
+        # work-around for Galileo HAS: L2P -> L2W
+        if cs.cssrmode in [sc.GAL_HAS_SIS, sc.GAL_HAS_IDD]:
+            if ctype == uTYP.C and rSigRnx('GC2P') in sigc.keys():
+                sigc[rSigRnx('GC2W')] = sigc[rSigRnx('GC2P')]
+            if ctype == uTYP.L and rSigRnx('GL2P') in sigc.keys():
+                sigc[rSigRnx('GL2W')] = sigc[rSigRnx('GL2P')]
+
+        for k, sig in enumerate(sigref):
+            if sig in sigc.keys():
+                v[k] = sigc[sig]
+            elif sig.toAtt('X') in sigc.keys():
+                v[k] = sigc[sig.toAtt('X')]
+        return v
+
     def find_corr_idx(self, cs, nf, ctype, sigref, sat):
+
         nsig = 0
         kidx = [-1]*nf
         idx_n = []
@@ -481,19 +509,8 @@ class pppos():
             else:  # from CSSR
 
                 if cs.lc[0].cstat & (1 << sCType.CBIAS) == (1 << sCType.CBIAS):
-                    nsig, idx_n, kidx = self.find_corr_idx(cs, self.nav.nf,
-                                                           sCType.CBIAS,
-                                                           sigsPR, sat)
 
-                    if cs.cssrmode == sc.BDS_PPP and sys == uGNSS.GPS:
-                        # BDS PPP not including cbias for GPS
-                        cbias = np.zeros(self.nav.nf)
-                    else:
-                        cbias = np.ones(self.nav.nf)*np.nan
-                    if nsig >= self.nav.nf:
-                        cbias = cs.lc[0].cbias[idx_n][kidx]
-                    elif self.nav.monlevel > 1:
-                        print("skip cbias for sat={:d}".format(sat))
+                    cbias = self.find_bias(cs, sigsPR, sat)
 
                     # - IS-QZSS-MDC-001 sec 5.5.3.3
                     # - HAS SIS ICD sec 7.4, 7.5
@@ -503,18 +520,8 @@ class pppos():
                         cbias = -cbias
 
                 if cs.lc[0].cstat & (1 << sCType.PBIAS) == (1 << sCType.PBIAS):
-                    nsig, idx_n, kidx = self.find_corr_idx(cs, self.nav.nf,
-                                                           sCType.PBIAS,
-                                                           sigsCP, sat)
 
-                    pbias = np.ones(self.nav.nf)*np.nan
-                    if nsig >= self.nav.nf:
-                        pbias = cs.lc[0].pbias[idx_n][kidx]
-                        # for Gal HAS (cycle -> m)
-                        if cs.cssrmode == sc.GAL_HAS_SIS:
-                            pbias *= lam
-                    elif self.nav.monlevel > 1:
-                        print("skip pbias for sat={:d}".format(sat))
+                    pbias = self.find_bias(cs, sigsCP, sat)
 
                     # - IS-QZSS-MDC-001 sec 5.5.3.3
                     # - HAS SIS ICD sec 7.4, 7.5

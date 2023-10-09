@@ -13,6 +13,7 @@ from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE, prn2sat, sCType
 from cssrlib.gnss import uGNSS, sat2id, gpst2time, timediff, time2str, sat2prn
 from cssrlib.gnss import uTYP, uSIG, rSigRnx, bdt2time, bdt2gpst, glo2time
 from cssrlib.gnss import time2bdt, gpst2bdt, rCST, time2gpst, utc2gpst, timeadd
+from cssrlib.gnss import gtime_t
 from crccheck.crc import Crc24LteA
 from enum import IntEnum
 from cssrlib.gnss import Eph, Obs, Geph, Seph
@@ -54,11 +55,21 @@ class rtcm(cssr):
             uGNSS.QZS: 1246, uGNSS.SBS: 1252, uGNSS.BDS: 1258
         }
 
+        self.eph_t = {
+            uGNSS.GPS: 1019, uGNSS.GLO: 1020, uGNSS.BDS: 1042,
+            uGNSS.QZS: 1044, uGNSS.GAL: 1046
+        }
+
     def is_msmtype(self, msgtype):
         for sys_ in self.msm_t.keys():
             if msgtype >= self.msm_t[sys_] and msgtype <= self.msm_t[sys_]+6:
                 return True
         return False
+
+    def adjustweek(self, week: int, tref: gtime_t):
+        week_, _ = time2gpst(tref)
+        week_ref = (week_//1024)*1024
+        return (week % 1024) + week_ref
 
     def msmtype(self, msgtype):
         sys = uGNSS.NONE
@@ -474,6 +485,7 @@ class rtcm(cssr):
         self.sys_n += [sys]*nsat
         self.sat_n += sat
 
+        self.iodssr_c[sCType.ORBIT] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.ORBIT)
         self.lc[0].t0[sCType.ORBIT] = self.time
 
@@ -495,6 +507,7 @@ class rtcm(cssr):
             i = self.decode_clk_sat(msg, i, k)
             self.lc[0].dclk[sat_] = self.dclk_n[k]
 
+        self.iodssr_c[sCType.CLOCK] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.CLOCK)
         self.lc[0].t0[sCType.CLOCK] = self.time
 
@@ -525,8 +538,10 @@ class rtcm(cssr):
                 sig, cb = bs.unpack_from('u5s14', msg, i)
                 i += 19
 
-                self.lc[0].cbias[sat_][sig] = self.sval(cb, 14, 0.01)
+                rsig = self.ssig2rsig(sys, uTYP.C, sig)
+                self.lc[0].cbias[sat_][rsig] = self.sval(cb, 14, 0.01)
 
+        self.iodssr_c[sCType.CBIAS] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.CBIAS)
         self.lc[0].t0[sCType.CBIAS] = self.time
         return i
@@ -561,8 +576,10 @@ class rtcm(cssr):
                 sig, si, wl, ci, pb = bs.unpack_from('u5u1u2u4s20', msg, i)
                 i += 32
 
-                self.lc[0].pbias[sat_][sig] = self.sval(pb, 20, 1e-4)
+                rsig = self.ssig2rsig(sys, uTYP.L, sig)
+                self.lc[0].pbias[sat_][rsig] = self.sval(pb, 20, 1e-4)
 
+        self.iodssr_c[sCType.PBIAS] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.PBIAS)
         self.lc[0].t0[sCType.PBIAS] = self.time
         return i
@@ -599,6 +616,9 @@ class rtcm(cssr):
         self.sys_n += [sys]*nsat
         self.sat_n += sat
 
+        self.iodssr_c[sCType.ORBIT] = v['iodssr']
+        self.iodssr_c[sCType.CLOCK] = v['iodssr']
+
         self.lc[0].cstat |= (1 << sCType.ORBIT)
         self.lc[0].t0[sCType.ORBIT] = self.time
         self.lc[0].cstat |= (1 << sCType.CLOCK)
@@ -620,6 +640,7 @@ class rtcm(cssr):
             cls_, val = bs.unpack_from_dict('u3u3', msg, i)
             self.ura[s] = self.quality_idx(cls_, val)
 
+        self.iodssr_c[sCType.URA] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.URA)
         self.lc[0].t0[sCType.URA] = self.time
 
@@ -639,6 +660,7 @@ class rtcm(cssr):
             i = self.decode_hclk_sat(msg, i, k)
             self.lc[0].dclk[sat_] = self.dclk_n[k]
 
+        self.iodssr_c[sCType.HCLOCK] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.HCLOCK)
         self.lc[0].t0[sCType.HCLOCK] = self.time
 
@@ -671,6 +693,7 @@ class rtcm(cssr):
                     i += 16
                     s[l_, j] = self.sval(s_, 16, 5e-3)
 
+        self.iodssr_c[sCType.VTEC] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.VTEC)
         self.lc[0].t0[sCType.VTEC] = self.time
 
@@ -1206,7 +1229,7 @@ class rtcm(cssr):
 
     def decode_gps_eph(self, msg, i):
         """ GPS Satellite Ephemeris Message """
-        prn, week, sva, code, idot = bs.unpack_from('u6u10s22s16s8', msg, i)
+        prn, week, sva, code, idot = bs.unpack_from('u6u10u4u2s14', msg, i)
         i += 6+10+4+2+14
         iode, toc, af2, af1, af0 = bs.unpack_from('u8u16s8s16s22', msg, i)
         i += 8+16+8+16+22
@@ -1227,7 +1250,7 @@ class rtcm(cssr):
         eph.idot = idot*rCST.P2_43*rCST.SC2RAD
         eph.iode = iode
         toc *= 16.0
-        eph.af2 = af0*rCST.P2_55
+        eph.af2 = af2*rCST.P2_55
         eph.af1 = af1*rCST.P2_43
         eph.af0 = af0*rCST.P2_31
         eph.iodc = iodc
@@ -1238,7 +1261,7 @@ class rtcm(cssr):
         eph.e = e*rCST.P2_33
         eph.cus = cus*rCST.P2_29
         sqrtA = Asq*rCST.P2_19
-        eph.toes = toe*60.0
+        eph.toes = toe*16.0
         eph.cic = cic*rCST.P2_29
         eph.OMG0 = Omg0*rCST.P2_31*rCST.SC2RAD
         eph.cis = cis*rCST.P2_29
@@ -1250,6 +1273,8 @@ class rtcm(cssr):
         eph.svh = svh
         eph.flag = flag
         eph.fit = fit
+
+        eph.week = self.adjustweek(eph.week, self.time)
 
         eph.toe = gpst2time(eph.week, eph.toes)
         eph.toc = gpst2time(eph.week, toc)
@@ -1355,7 +1380,7 @@ class rtcm(cssr):
         eph.idot = idot*rCST.P2_43*rCST.SC2RAD
         toc *= 60.0
 
-        eph.af2 = af0*rCST.P2_59
+        eph.af2 = af2*rCST.P2_59
         eph.af1 = af1*rCST.P2_46
         eph.af0 = af0*rCST.P2_34
         eph.crs = crs*rCST.P2_5
@@ -1376,6 +1401,8 @@ class rtcm(cssr):
         eph.tgd = tgd*rCST.P2_32
         if self.msgtype == 1046:
             eph.tgd_b = tgd2*rCST.P2_32
+
+        eph.week = self.adjustweek(eph.week, self.time)
 
         eph.toe = gpst2time(eph.week, eph.toes)
         eph.toc = gpst2time(eph.week, toc)
@@ -1409,7 +1436,7 @@ class rtcm(cssr):
         eph = Eph()
         eph.sat = prn2sat(uGNSS.QZS, svid+192)
         toc *= 16.0
-        eph.af2 = af0*rCST.P2_55
+        eph.af2 = af2*rCST.P2_55
         eph.af1 = af1*rCST.P2_43
         eph.af0 = af0*rCST.P2_31
         eph.iode = iode
@@ -1437,6 +1464,8 @@ class rtcm(cssr):
         eph.tgd = tgd*self.P2_31
         eph.iodc = iodc
         eph.fit = fit
+
+        eph.week = self.adjustweek(eph.week, self.time)
 
         eph.toe = gpst2time(eph.week, eph.toes)
         eph.toc = gpst2time(eph.week, toc)
@@ -1542,6 +1571,8 @@ class rtcm(cssr):
         eph.omg = omg*rCST.P2_31*rCST.SC2RAD
         eph.OMGd = OMGd*rCST.P2_41*rCST.SC2RAD
         eph.i0 = i0*rCST.P2_31*rCST.SC2RAD
+
+        eph.week = self.adjustweek(eph.week, self.time)
 
         eph.toe = gpst2time(eph.week, eph.toes)
         eph.toc = gpst2time(eph.week, toc)

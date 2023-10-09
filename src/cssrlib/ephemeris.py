@@ -282,54 +282,39 @@ def satposs(obs, nav, cs=None, orb=None):
 
             if cs is not None:
 
-                if cs.iodssr_c[sCType.ORBIT] == cs.iodssr:
-                    if sat not in cs.sat_n:
-                        continue
-                    idx = cs.sat_n.index(sat)
-                else:
-                    if cs.iodssr_c[sCType.ORBIT] == cs.iodssr_p:
-                        if sat not in cs.sat_n_p:
-                            continue
-                        idx = cs.sat_n_p.index(sat)
-                    else:
+                if cs.iodssr_c[sCType.ORBIT] in [cs.iodssr, cs.iodssr_p]:
+                    if sat not in cs.lc[0].dorb.keys():
                         continue
 
-                iode = cs.lc[0].iode[idx]
-                dorb = cs.lc[0].dorb[idx, :]  # radial,along-track,cross-track
+                iode = cs.lc[0].iode[sat]
+                dorb = cs.lc[0].dorb[sat]  # radial,along-track,cross-track
 
                 if cs.cssrmode == sc.BDS_PPP:  # consistency check for IOD corr
-                    if cs.lc[0].iodc[idx] == cs.lc[0].iodc_c[idx]:
-                        dclk = cs.lc[0].dclk[idx]
+                    if cs.lc[0].iodc[sat] == cs.lc[0].iodc_c[sat]:
+                        dclk = cs.lc[0].dclk[sat]
                     else:
-                        if cs.lc[0].iodc[idx] == cs.lc[0].iodc_c_p[idx]:
-                            dclk = cs.lc[0].dclk_p[idx]
+                        if cs.lc[0].iodc[sat] == cs.lc[0].iodc_c_p[sat]:
+                            dclk = cs.lc[0].dclk_p[sat]
                         else:
                             continue
 
                 else:
-
                     if cs.cssrmode == sc.GAL_HAS_SIS:  # HAS only
-
                         if cs.mask_id != cs.mask_id_clk:  # mask has changed
                             if sat not in cs.sat_n_p:
                                 continue
-                            idx = cs.sat_n_p.index(sat)
-
                     else:
-
                         if cs.iodssr_c[sCType.CLOCK] == cs.iodssr:
                             if sat not in cs.sat_n:
                                 continue
-                            idx = cs.sat_n.index(sat)
                         else:
                             if cs.iodssr_c[sCType.CLOCK] == cs.iodssr_p:
                                 if sat not in cs.sat_n_p:
                                     continue
-                                idx = cs.sat_n_p.index(sat)
                             else:
                                 continue
 
-                    dclk = cs.lc[0].dclk[idx]
+                    dclk = cs.lc[0].dclk[sat]
 
                 if np.isnan(dclk) or np.isnan(dorb@dorb):
                     continue
