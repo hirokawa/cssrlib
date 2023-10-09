@@ -307,13 +307,17 @@ class rnxdec:
                     geph.acc[2] = self.flt(line, 2)*1e3
                     geph.age = int(self.flt(line, 3))
 
-                    line = fnav.readline()  # line #4
+                    # Use GLONASS line #4 only from RINEX v3.05 onwards
+                    #
+                    if self.ver >= 3.05:
 
-                    # b7-8: M, b6: P4, b5: P3, b4: P2, b2-3: P1, b0-1: P
-                    geph.status = int(self.flt(line, 0))
-                    geph.dtaun = -self.flt(line, 1)
-                    geph.urai = int(self.flt(line, 2))
-                    # svh = int(self.flt(line, 3))
+                        line = fnav.readline()  # line #4
+
+                        # b7-8: M, b6: P4, b5: P3, b4: P2, b2-3: P1, b0-1: P
+                        geph.status = int(self.flt(line, 0))
+                        geph.dtaun = -self.flt(line, 1)
+                        geph.urai = int(self.flt(line, 2))
+                        # svh = int(self.flt(line, 3))
 
                     nav.geph.append(geph)
                     continue
