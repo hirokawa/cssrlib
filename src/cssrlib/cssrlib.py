@@ -683,6 +683,7 @@ class cssr:
         for k in range(nsat):
             sat = self.sat_n[k]
             self.lc[inet].pbias[sat] = {}
+            self.lc[inet].di[sat] = {}
             for j in range(0, self.nsig_n[k]):
                 i = self.decode_pbias_sat(msg, i, sat, j, inet)
 
