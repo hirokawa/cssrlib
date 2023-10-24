@@ -8,19 +8,21 @@ from cssrlib.peph import atxdec, biasdec, peph
 from cssrlib.peph import searchpcv, antModelRx, antModelTx
 from cssrlib.rinex import rnxdec
 from cssrlib.gnss import Nav
-from cssrlib.gnss import epoch2time, time2epoch, timeadd
+from cssrlib.gnss import epoch2time, time2epoch, time2doy, timeadd
 from cssrlib.gnss import sat2id, id2sat, sys2char
 from cssrlib.gnss import rSigRnx
 from cssrlib.gnss import pos2ecef, enu2xyz
 
+ep = [2021, 9, 22, 12, 0, 0]
+time = epoch2time(ep)
+doy = int(time2doy(time))
 
 bdir = expanduser('../../../../cssrlib-data/data/')
 atxfile = bdir+"igs14.atx"
-orbfile = bdir+"COD0MGXFIN_20210780000_01D_05M_ORB.SP3"
-clkfile = bdir+"COD0MGXFIN_20210780000_01D_30S_CLK.CLK"
-dcbfile = bdir+"COD0MGXFIN_20210780000_01D_01D_OSB.BIA"
+orbfile = bdir+"COD0MGXFIN_{:4d}{:03d}0000_01D_05M_ORB.SP3".format(ep[0], doy)
+clkfile = bdir+"COD0MGXFIN_{:4d}{:03d}0000_01D_30S_CLK.CLK".format(ep[0], doy)
+dcbfile = bdir+"COD0MGXFIN_{:4d}{:03d}0000_01D_01D_OSB.BIA".format(ep[0], doy)
 
-time = epoch2time([2021, 3, 19, 12, 0, 0])
 sat = id2sat("G01")
 sig = rSigRnx("GC1C")
 
@@ -53,7 +55,7 @@ if True:
 
     print()
 
-if True:
+if False:
 
     print("Test ANTEX module")
     print()
