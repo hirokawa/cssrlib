@@ -272,11 +272,14 @@ def satposs(obs, nav, cs=None, orb=None):
                 continue
             dt = dts_[0]
 
-            eph = findeph(nav.eph, t, sat)
-            if eph is None:
-                svh[i] = 1
-                continue
-            svh[i] = eph.svh
+            if len(nav.eph) > 0:
+                eph = findeph(nav.eph, t, sat)
+                if eph is None:
+                    svh[i] = 1
+                    continue
+                svh[i] = eph.svh
+            else:
+                svh[i] = 0
 
         else:
 
