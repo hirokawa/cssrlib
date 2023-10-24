@@ -936,7 +936,7 @@ def time2epoch(t):
 
 
 def time2doy(t):
-    """ convert time to epoch """
+    """ convert time to day of year (as float value!) """
     ep = time2epoch(t)
     ep[1] = ep[2] = 1.0
     ep[3] = ep[4] = ep[5] = 0.0
