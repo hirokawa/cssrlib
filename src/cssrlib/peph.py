@@ -88,6 +88,9 @@ class peph:
                         print("invalid version: {:s}".format(self.ver))
                         break
                     self.flag = line[2]
+                    if self.flag not in ('P', 'V'):
+                        print("invalid P/V flag: {:s}".format(self.flag))
+                        break
                     self.t0 = str2time(line, 3, 27)
                     self.status = 1
                 elif self.status == 1:
@@ -129,7 +132,7 @@ class peph:
                         self.scl[0] = float(line[3:13])
                         self.scl[1] = float(line[14:26])
                         self.status = 10
-                        for k in range(3):
+                        for _ in range(3):
                             line = fh.readline()
                         continue
                     self.parse_acclist(line)
@@ -140,10 +143,12 @@ class peph:
                         nav.ne += 1
                         self.cnt = 0
                         peph = peph_t(str2time(line, 3, 27))
-                        # print("{:4.0f}/{:02.0f}/{:02.0f} {:2.0f}:{:2.0f}:{:5.2f}"\
-                        #      .format(ep[0],ep[1],ep[2],ep[3],ep[4],ep[5]))
+                        # ep = time2epoch(peph.time)
+                        # print("{:4.0f}/{:02.0f}/{:02.0f} {:2.0f}:{:2.0f}:{:5.2f}"
+                        #       .format(ep[0], ep[1], ep[2], ep[3], ep[4], ep[5]))
 
-                        for k in range(self.nsat):
+                        nline = self.nsat if self.flag == 'P' else self.nsat*2
+                        for _ in range(nline):
                             line = fh.readline()
                             if line[0] != 'P' and line[0] != 'V':
                                 continue
