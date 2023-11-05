@@ -71,7 +71,8 @@ class cssr_pvs(cssr):
         if sat == 0 or t0 % 2 == 0:  # for DFMC SBAS only
             return
 
-        self.sat_n.append(sat)
+        if sat not in self.sat_n:
+            self.sat_n.append(sat)
 
         dorb = np.zeros(3)
 
