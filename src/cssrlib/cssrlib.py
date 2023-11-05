@@ -10,13 +10,14 @@ from cssrlib.gnss import uSIG, uTYP, sat2prn, time2str, sat2id
 
 
 class sCSSRTYPE(IntEnum):
-    QZS_CLAS = 0
-    QZS_MADOCA = 1
+    QZS_CLAS = 0     # QZS CLAS PPP-RTK
+    QZS_MADOCA = 1   # MADOCA-PPP
     GAL_HAS_SIS = 2  # Galileo HAS Signal-In-Space
     GAL_HAS_IDD = 3  # Galileo HAS Internet Data Distribution
-    BDS_PPP = 4
+    BDS_PPP = 4      # BDS PPP
     IGS_SSR = 5
     RTCM3_SSR = 6
+    PVS_PPP = 7      # PPP via SouthPAN
 
 
 class sGNSS(IntEnum):
@@ -743,10 +744,11 @@ class cssr:
         head, i = self.decode_head(msg, i)
         if self.iodssr != head['iodssr']:
             return -1
-        self.ura = np.zeros(self.nsat_n)
-        for k in range(0, self.nsat_n):
+        self.ura = {}
+        for k in range(self.nsat_n):
+            sat = self.sat_n[k]
             v = bs.unpack_from_dict('u3u3', ['class', 'val'], msg, i)
-            self.ura[k] = self.quality_idx(v['class'], v['val'])
+            self.ura[sat] = self.quality_idx(v['class'], v['val'])
             i += 6
         self.lc[0].cstat |= (1 << sCType.URA)
         self.lc[0].t0[sCType.URA] = self.time
@@ -787,15 +789,16 @@ class cssr:
         self.lc[inet].sat_n = self.decode_local_sat(netmask)
         self.lc[inet].nsat_n = nsat = len(self.lc[inet].sat_n)
         i += 7+self.nsat_n
-        self.lc[inet].stec_quality = np.zeros(nsat)
-        self.lc[inet].ci = np.zeros((nsat, 6))
+        self.lc[inet].stec_quality = {}
+        self.lc[inet].ci = {}
         for k in range(nsat):
+            sat = self.lc[inet].sat_n[k]
             v = bs.unpack_from_dict('u3u3', ['class', 'val'], msg, i)
-            self.lc[inet].stec_quality[k] = self.quality_idx(v['class'],
-                                                             v['val'])
+            self.lc[inet].stec_quality[sat] = self.quality_idx(v['class'],
+                                                               v['val'])
             i += 6
             ci, i = self.decode_cssr_stec_coeff(msg, dfm['stype'], i)
-            self.lc[inet].ci[k, :] = ci
+            self.lc[inet].ci[sat] = ci
         self.lc[inet].cstat |= (1 << sCType.STEC)
         self.lc[inet].t0[sCType.STEC] = self.time
         return i
@@ -820,11 +823,12 @@ class cssr:
         i += 20+self.nsat_n
         sz = 7 if dfm['range'] == 0 else 16
         fmt = 's'+str(sz)
-        self.lc[inet].stec = np.zeros((ng, nsat))
+        self.lc[inet].stec = np.zeros(ng, dtype=list)
         self.lc[inet].dtd = np.zeros(ng)
         self.lc[inet].dtw = np.zeros(ng)
 
-        for j in range(0, ng):
+        for j in range(ng):
+            self.lc[inet].stec[j] = {}
             if dfm['ttype'] > 0:
                 vd = bs.unpack_from_dict('s9s8', ['dtd', 'dtw'], msg, i)
                 i += 17
@@ -832,9 +836,10 @@ class cssr:
                 self.lc[inet].dtw[j] = self.sval(vd['dtw'], 8, 0.004)
 
             for k in range(nsat):
+                sat = self.lc[inet].sat_n[k]
                 dstec = bs.unpack_from(fmt, msg, i)[0]
                 i += sz
-                self.lc[inet].stec[j, k] = self.sval(dstec, sz, 0.04)
+                self.lc[inet].stec[j][sat] = self.sval(dstec, sz, 0.04)
         self.lc[inet].cstat |= (1 << sCType.TROP)
         self.lc[inet].t0[sCType.TROP] = self.time
         return i
@@ -952,25 +957,27 @@ class cssr:
         self.lc[inet].netmask = netmask
         self.lc[inet].sat_n = self.decode_local_sat(netmask)
         self.lc[inet].nsat_n = nsat = len(self.lc[inet].sat_n)
-        self.lc[inet].stec_quality = np.zeros(nsat)
+        self.lc[inet].stec_quality = {}
         if dfm['stec'] & 2 > 0:
-            self.lc[inet].ci = np.zeros((nsat, 6))
-            self.lc[inet].stype = np.zeros(nsat, dtype=int)
+            self.lc[inet].ci = {}
+            self.lc[inet].stype = {}
         if dfm['stec'] & 1 > 0:
-            self.lc[inet].dstec = np.zeros((nsat, ng))
+            self.lc[inet].dstec = {}
 
         for k in range(nsat):
+            sat = self.lc[inet].sat_n[k]
             if dfm['stec'] > 0:
                 v = bs.unpack_from_dict('u3u3', ['class', 'value'], msg, i)
                 i += 6
-                self.lc[inet].stec_quality[k] = self.quality_idx(v['class'],
-                                                                 v['value'])
+                self.lc[inet].stec_quality[sat] = self.quality_idx(v['class'],
+                                                                   v['value'])
             if dfm['stec'] & 2 > 0:  # functional term
-                self.lc[inet].stype[k] = bs.unpack_from('u2', msg, i)[0]
+                self.lc[inet].stype[sat] = bs.unpack_from('u2', msg, i)[0]
                 i += 2
                 ci, i = self.decode_cssr_stec_coeff(msg,
-                                                    self.lc[inet].stype[k], i)
-                self.lc[inet].ci[k, :] = ci
+                                                    self.lc[inet].stype[sat],
+                                                    i)
+                self.lc[inet].ci[sat] = ci
 
             if dfm['stec'] & 1 > 0:  # residual term
                 sz_idx = bs.unpack_from('u2', msg, i)[0]
@@ -980,7 +987,7 @@ class cssr:
                 v = bs.unpack_from(('s'+str(sz))*ng, msg, i)
                 i += sz*ng
                 for j in range(ng):
-                    self.lc[inet].dstec[k, j] = self.sval(v[j], sz, scl)
+                    self.lc[inet].dstec[sat][j] = self.sval(v[j], sz, scl)
 
         if dfm['trop'] > 0:
             self.lc[inet].cstat |= (1 << sCType.TROP)
