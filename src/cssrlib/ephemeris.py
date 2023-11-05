@@ -384,7 +384,7 @@ def satposs(obs, nav, cs=None, orb=None):
                     A = np.array([er, ea, ec])
 
                 if cs.cssrmode == sc.PVS_PPP:
-                    dorb_e = dorb
+                    dorb_e = -dorb
                 else:
                     dorb_e = dorb@A
 
