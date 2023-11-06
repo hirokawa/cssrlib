@@ -2,9 +2,11 @@
 module for PPP processing
 """
 import cssrlib.gnss as gn
-from cssrlib.peph import gpst2utc
-import numpy as np
+from cssrlib.peph import gpst2utc, time2epoch
+from enum import IntEnum
 from math import sin, cos, atan2, asin
+import numpy as np
+from pysolid.solid import solid_grid
 
 
 def nut_iau1980(t_, f):
@@ -308,6 +310,16 @@ def windupcorr(time, rs, vs, rr, phw, full=False):
     return phw
 
 
+class uTideModel(IntEnum):
+    """
+    Enumeration for Earth tide model selection
+    """
+
+    NONE = -1
+    SIMPLE = 0
+    IERS2010 = 1
+
+
 def tide_pl(eu, rp, GMp, pos):
     """ pole tide correction """
     H3 = 0.293
@@ -370,6 +382,19 @@ def tidedisp(tutc, pos, erpv=None):
     E = gn.xyz2enu(pos)
     dr = solid_tide(rs, rm, pos, E, gmst)
     return dr
+
+
+def tidedispIERS2010(tutc, pos, erpv=None):
+    """
+    Wrapper for solid_grid() method of PySolid module to compute Earth tide
+    displacement corrections according to the IERS2010 conventions
+    """
+    e = time2epoch(tutc)
+    disp_e, disp_n, disp_u = solid_grid(e[0], e[1], e[2], e[3], e[4], int(e[5]),
+                                        np.rad2deg(pos[0]), 0, 1,
+                                        np.rad2deg(pos[1]), 0, 1)
+    E = gn.enu2xyz(pos)
+    return E@np.array([disp_e[0, 0], disp_n[0, 0], disp_u[0, 0]])
 
 
 if __name__ == '__main__':
