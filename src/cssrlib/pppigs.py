@@ -652,12 +652,29 @@ def sdres(nav, obs, x, y, e, sat, el):
 
 
 def kfupdate(x, P, H, v, R):
-    """ Kalman filter measurement update """
+    """
+    Kalman filter measurement update.
+
+    Parameters:
+    x (ndarray): State estimate vector
+    P (ndarray): State covariance matrix
+    H (ndarray): Observation model matrix
+    v (ndarray): Innovation vector (residual between measurement and prediction)
+    R (ndarray): Measurement noise covariance
+
+    Returns:
+    x (ndarray): Updated state estimate vector
+    P (ndarray): Updated state covariance matrix
+    S (ndarray): Innovation covariance matrix
+    """
+
     PHt = P@H.T
     S = H@PHt+R
     K = PHt@np.linalg.inv(S)
     x += K@v
-    P = P - K@H@P
+    #P = P - K@H@P
+    IKH = np.eye(P.shape[0])-K@H
+    P = IKH@P@IKH.T + K@R@K.T  # Joseph stabilized version
 
     return x, P, S
 

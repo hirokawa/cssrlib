@@ -3,11 +3,13 @@ module for standard PPP positioning
 """
 
 import numpy as np
+
 from cssrlib.ephemeris import satposs
 from cssrlib.gnss import sat2id, sat2prn, rSigRnx, uTYP, uGNSS, rCST
 from cssrlib.gnss import uTropoModel, ecef2pos, tropmodel, geodist, satazel
 from cssrlib.gnss import time2str, timediff, gpst2utc, tropmapf
-from cssrlib.ppp import tidedisp, shapiro, windupcorr
+from cssrlib.ppp import tidedisp, tidedispIERS2010, uTideModel
+from cssrlib.ppp import shapiro, windupcorr
 from cssrlib.peph import antModelRx, antModelTx
 from cssrlib.cssrlib import sCType, sSigGPS
 from cssrlib.cssrlib import sCSSRTYPE as sc
@@ -79,7 +81,9 @@ class pppos():
         self.nav.sig_qztd = 0.1/np.sqrt(3600)      # [m/sqrt(s)]
         self.nav.sig_qion = 10.0/np.sqrt(1)        # [m/s/sqrt(s)]
 
-        self.nav.tidecorr = True
+        # Processing options
+        #
+        self.nav.tidecorr = uTideModel.IERS2010
         self.nav.thresar = 3.0  # AR acceptance threshold
         # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
         self.nav.armode = 0
@@ -450,11 +454,12 @@ class pppos():
 
         # Solid Earth tide corrections
         #
-        # TODO: add solid earth tide displacements
-        #
-        if self.nav.tidecorr:
+        if self.nav.tidecorr == uTideModel.SIMPLE:
             pos = ecef2pos(rr_)
             disp = tidedisp(gpst2utc(obs.t), pos)
+        elif self.nav.tidecorr == uTideModel.IERS2010:
+            pos = ecef2pos(rr_)
+            disp = tidedispIERS2010(gpst2utc(obs.t), pos)
         else:
             disp = np.zeros(3)
         rr_ += disp
@@ -873,12 +878,29 @@ class pppos():
         return R
 
     def kfupdate(self, x, P, H, v, R):
-        """ Kalman filter measurement update """
+        """
+        Kalman filter measurement update.
+
+        Parameters:
+        x (ndarray): State estimate vector
+        P (ndarray): State covariance matrix
+        H (ndarray): Observation model matrix
+        v (ndarray): Innovation vector (residual between measurement and prediction)
+        R (ndarray): Measurement noise covariance
+
+        Returns:
+        x (ndarray): Updated state estimate vector
+        P (ndarray): Updated state covariance matrix
+        S (ndarray): Innovation covariance matrix
+        """
+
         PHt = P@H.T
         S = H@PHt+R
         K = PHt@np.linalg.inv(S)
         x += K@v
-        P = P - K@H@P
+        #P = P - K@H@P
+        IKH = np.eye(P.shape[0])-K@H
+        P = IKH@P@IKH.T + K@R@K.T  # Joseph stabilized version
 
         return x, P, S
 
@@ -1107,8 +1129,8 @@ class pppos():
 
                 # Check C/N0
                 #
-                cnr_min = self.nav.cnr_min_gpy if sigsCN[f].isGPS_PY(
-                ) else self.nav.cnr_min
+                cnr_min = self.nav.cnr_min_gpy \
+                    if sigsCN[f].isGPS_PY() else self.nav.cnr_min
                 if obs.S[j, f] < cnr_min:
                     self.nav.edt[i, f] = 1
                     if self.nav.monlevel > 0:
