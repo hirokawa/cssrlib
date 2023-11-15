@@ -134,7 +134,7 @@ class rnxdec:
         t = epoch2time([year, month, day, hour, minute, sec])
         return t
 
-    def decode_nav(self, navfile, nav):
+    def decode_nav(self, navfile, nav, append=False):
         """
         Decode RINEX Navigation message from file
 
@@ -142,8 +142,10 @@ class rnxdec:
 
         """
 
-        nav.eph = []
-        nav.geph = []
+        if not append:
+            nav.eph = []
+            nav.geph = []
+
         with open(navfile, 'rt') as fnav:
             for line in fnav:
                 if line[60:73] == 'END OF HEADER':
