@@ -409,6 +409,13 @@ class rnxdec:
                     elif sys == uGNSS.BDS:
                         eph.tgd_b = float(self.flt(line, 3))  # tgd2 B2/B3
 
+                    # work-around for QZS with non-zero health since Nov/9/2023
+                    if sys == uGNSS.QZS and eph.svh > 0:
+                        if timediff(eph.toc, gpst2time(2287, 406800)) >= 0:
+                            # based on IS-QZSS-PNT-005
+                            if eph.svh == 1 or eph.svh == 16:
+                                eph.svh = 0
+
                 if self.mode_nav < 3:
                     line = fnav.readline()  # line #7
                     if sys == uGNSS.BDS:
