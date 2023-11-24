@@ -253,10 +253,9 @@ class cssr_bds(cssr):
         """ decode clock correction for satellite """
         iodc, dclk = bs.unpack_from('u3s15', msg, i)
         i += 18
-        if sat not in self.lc[inet].iodc_c.keys():
-            self.lc[inet].iodc_c[sat] = iodc
 
-        if iodc != self.lc[inet].iodc_c[sat]:
+        if sat in self.lc[inet].iodc_c.keys() and \
+                iodc != self.lc[inet].iodc_c[sat]:
             self.lc[inet].iodc_c_p[sat] = self.lc[inet].iodc_c[sat]
             self.lc[inet].dclk_p[sat] = self.lc[inet].dclk[sat]
         self.lc[inet].iodc_c[sat] = iodc

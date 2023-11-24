@@ -600,18 +600,20 @@ class cssr:
         i += self.dclk_blen
         return i
 
-    def decode_cbias_sat(self, msg, i, sat, j, inet=0):
+    def decode_cbias_sat(self, msg, i, sat, rsig, inet=0):
         """ decoder code bias correction of cssr """
         cb = bs.unpack_from('s'+str(self.cb_blen), msg, i)[0]
-        self.lc[inet].cbias[sat][j] = self.sval(cb, self.cb_blen, self.cb_scl)
+        self.lc[inet].cbias[sat][rsig] = self.sval(
+            cb, self.cb_blen, self.cb_scl)
         i += self.cb_blen
         return i
 
-    def decode_pbias_sat(self, msg, i, sat, j, inet=0):
+    def decode_pbias_sat(self, msg, i, sat, rsig, inet=0):
         """ decoder phase bias correction of cssr """
         pb, di = bs.unpack_from('s'+str(self.pb_blen) + 'u2', msg, i)
-        self.lc[inet].pbias[sat][j] = self.sval(pb, self.pb_blen, self.pb_scl)
-        self.lc[inet].di[sat][j] = di
+        self.lc[inet].pbias[sat][rsig] = self.sval(
+            pb, self.pb_blen, self.pb_scl)
+        self.lc[inet].di[sat][rsig] = di
         i += self.pb_blen + 2
         return i
 
@@ -665,9 +667,11 @@ class cssr:
         self.lc[inet].cbias = {}
         for k in range(nsat):
             sat = self.sat_n[k]
+            sys, _ = sat2prn(sat)
             self.lc[inet].cbias[sat] = {}
-            for j in range(0, self.nsig_n[k]):
-                i = self.decode_cbias_sat(msg, i, sat, j, inet)
+            for j in range(len(self.sig_n[sat])):
+                rsig = self.sig_n[sat][j].toTyp(uTYP.C)
+                i = self.decode_cbias_sat(msg, i, sat, rsig, inet)
 
         self.iodssr_c[sCType.CBIAS] = head['iodssr']
         self.lc[inet].cstat |= (1 << sCType.CBIAS)
@@ -683,10 +687,12 @@ class cssr:
         self.lc[inet].di = {}
         for k in range(nsat):
             sat = self.sat_n[k]
+            sys, _ = sat2prn(sat)
             self.lc[inet].pbias[sat] = {}
             self.lc[inet].di[sat] = {}
-            for j in range(0, self.nsig_n[k]):
-                i = self.decode_pbias_sat(msg, i, sat, j, inet)
+            for j in range(len(self.sig_n[sat])):
+                rsig = self.sig_n[sat][j].toTyp(uTYP.L)
+                i = self.decode_pbias_sat(msg, i, sat, rsig, inet)
 
         self.iodssr_c[sCType.PBIAS] = head['iodssr']
         self.lc[inet].cstat |= (1 << sCType.PBIAS)
@@ -714,19 +720,24 @@ class cssr:
             self.lc[inet].cbias = {}
         if dfm['pb']:
             self.lc[inet].pbias = {}
-            self.lc[inet].di = np.zeros((nsat, self.nsig_max), dtype=int)
+            self.lc[inet].di = {}
         ki = 0
         for k in range(self.nsat_n):
             if not self.isset(v['svmaskn'], self.nsat_n, k):
                 continue
             sat = self.sat_n[k]
-            self.lc[inet].cbias[sat] = {}
-            self.lc[inet].pbias[sat] = {}
+            if dfm['cb']:
+                self.lc[inet].cbias[sat] = {}
+            if dfm['pb']:
+                self.lc[inet].pbias[sat] = {}
+                self.lc[inet].di[sat] = {}
             for j in range(self.nsig_n[k]):
                 if dfm['cb']:
-                    i = self.decode_cbias_sat(msg, i, sat, j, inet)
+                    rsig = self.sig_n[sat][j].toTyp(uTYP.C)
+                    i = self.decode_cbias_sat(msg, i, sat, rsig, inet)
                 if dfm['pb']:
-                    i = self.decode_pbias_sat(msg, i, sat, j, inet)
+                    rsig = self.sig_n[sat][j].toTyp(uTYP.L)
+                    i = self.decode_pbias_sat(msg, i, sat, rsig, inet)
             ki += 1
 
         if dfm['cb']:
@@ -986,6 +997,7 @@ class cssr:
                 scl = self.stec_scl_t[sz_idx]
                 v = bs.unpack_from(('s'+str(sz))*ng, msg, i)
                 i += sz*ng
+                self.lc[inet].dstec[sat] = np.zeros(ng)
                 for j in range(ng):
                     self.lc[inet].dstec[sat][j] = self.sval(v[j], sz, scl)
 

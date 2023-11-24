@@ -285,9 +285,17 @@ def satposs(obs, nav, cs=None, orb=None):
 
             if cs is not None:
 
-                if cs.iodssr_c[sCType.ORBIT] in [cs.iodssr, cs.iodssr_p]:
-                    if sat not in cs.lc[0].dorb.keys():
+                if cs.iodssr_c[sCType.ORBIT] == cs.iodssr:
+                    if sat not in cs.sat_n:
                         continue
+                elif cs.iodssr_c[sCType.ORBIT] == cs.iodssr_p:
+                    if sat not in cs.sat_n_p:
+                        continue
+                else:
+                    continue
+
+                if sat not in cs.lc[0].iode.keys():
+                    continue
 
                 iode = cs.lc[0].iode[sat]
                 dorb = cs.lc[0].dorb[sat]  # radial,along-track,cross-track
@@ -319,8 +327,8 @@ def satposs(obs, nav, cs=None, orb=None):
 
                     dclk = cs.lc[0].dclk[sat]
 
-#                if np.isnan(dclk) or np.isnan(dorb@dorb):
-#                    continue
+                if np.isnan(dclk) or np.isnan(dorb@dorb):
+                    continue
 
                 mode = cs.nav_mode[sys]
 
