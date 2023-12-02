@@ -3,7 +3,6 @@ module for PPP-RTK positioning
 """
 
 import numpy as np
-import cssrlib.gnss as gn
 from cssrlib.gnss import tropmodel, uGNSS, uTropoModel, timediff, sat2prn
 from cssrlib.gnss import rCST, uTYP, sat2id, time2str, ecef2pos
 from cssrlib.gnss import gpst2utc, rSigRnx, geodist, tropmapf
@@ -12,7 +11,6 @@ from cssrlib.ephemeris import satposs
 from cssrlib.cssrlib import sCType
 from cssrlib.peph import antModelRx, antModelTx
 from cssrlib.ppp import tidedisp, shapiro, windupcorr
-from cssrlib.rtk import ddres
 from cssrlib.pppssr import pppos
 from cssrlib.cssrlib import sCSSRTYPE as sc
 
@@ -37,10 +35,17 @@ class ppprtkpos(pppos):
         #
         self.nav.trpModel = uTropoModel.SAAST
 
+        # no estimation for trop/iono
+        self.nav.ntrop = 0
+        self.nav.niono = 0
+
         # Position (+ optional velocity)
         #
         self.nav.na = 3 if nav.pmode == 0 else 6
         self.nav.nq = 3 if nav.pmode == 0 else 6
+
+        self.nav.na += self.nav.ntrop + self.nav.niono
+        self.nav.nq += self.nav.ntrop + self.nav.niono
 
         # State vector dimensions (including slant iono delay and ambiguities)
         #
@@ -182,7 +187,7 @@ class ppprtkpos(pppos):
             # Reset phase-ambiguity if instantaneous AR
             # or expire obs outage counter
             #
-            for i in range(gn.uGNSS.MAXSAT):
+            for i in range(uGNSS.MAXSAT):
 
                 sat_ = i+1
                 sys_i, _ = sat2prn(sat_)
@@ -293,7 +298,7 @@ class ppprtkpos(pppos):
         for i in range(n):
 
             sat = obs.sat[i]
-            sys, _ = gn.sat2prn(sat)
+            sys, _ = sat2prn(sat)
 
             # Skip edited observations
             #
@@ -454,8 +459,7 @@ class ppprtkpos(pppos):
 
         # SD residuals
         #
-        # v, H, R = self.sdres(obs, xp, y, e, sat, el)
-        v, H, R = ddres(self.nav, obs, xp, y, e, sat, el)
+        v, H, R = self.sdres(obs, xp, y, e, sat, el)
         Pp = self.nav.P.copy()
 
         # Kalman filter measurement update
@@ -473,8 +477,7 @@ class ppprtkpos(pppos):
 
         # Residuals for float solution
         #
-        # v, H, R = self.sdres(obs, xp, y, e, sat, el)
-        v, H, R = ddres(self.nav, obs, xp, y, e, sat, el)
+        v, H, R = self.sdres(obs, xp, y, e, sat, el)
         if self.valpos(v, R):
             self.nav.x = xp
             self.nav.P = Pp
@@ -499,8 +502,7 @@ class ppprtkpos(pppos):
                 yu, eu, elu = self.zdres(obs, cs, bsx, rs, vs, dts, xa[0:3])
                 y = yu[iu, :]
                 e = eu[iu, :]
-                # v, H, R = self.sdres(obs, xa, y, e, sat, el)
-                v, H, R = ddres(self.nav, obs, xa, y, e, sat, el)
+                v, H, R = self.sdres(obs, xa, y, e, sat, el)
                 # R <= Q=H'PH+R  chisq<max_inno[3] (0.5)
                 if self.valpos(v, R):
                     if self.nav.armode == 3:     # fix and hold

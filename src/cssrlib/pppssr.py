@@ -39,8 +39,14 @@ class pppos():
         # Position (+ optional velocity), zenith tropo delay and
         # slant ionospheric delay states
         #
-        self.nav.na = (4 if self.nav.pmode == 0 else 7) + uGNSS.MAXSAT
-        self.nav.nq = (4 if self.nav.pmode == 0 else 7) + uGNSS.MAXSAT
+        self.nav.ntrop = 1
+        self.nav.niono = uGNSS.MAXSAT
+
+        self.nav.na = (3 if self.nav.pmode == 0 else 6)
+        self.nav.nq = (3 if self.nav.pmode == 0 else 6)
+
+        self.nav.na += self.nav.ntrop + self.nav.niono
+        self.nav.nq += self.nav.ntrop + self.nav.niono
 
         # State vector dimensions (including slant iono delay and ambiguities)
         #
@@ -764,44 +770,47 @@ class pppos():
                     #
                     H[nv, 0:3] = -e[i, :] + e[j, :]
 
-                    # SD troposphere
-                    #
-                    _, mapfwi = tropmapf(
-                        obs.t, pos, el[i], model=self.nav.trpModel)
-                    _, mapfwj = tropmapf(
-                        obs.t, pos, el[j], model=self.nav.trpModel)
+                    if self.nav.ntrop > 0:  # tropo is estimated
 
-                    idx_i = self.IT(self.nav.na)
-                    H[nv, idx_i] = mapfwi - mapfwj
-                    v[nv] -= (mapfwi - mapfwj)*x[idx_i]
+                        # SD troposphere
+                        #
+                        _, mapfwi = tropmapf(
+                            obs.t, pos, el[i], model=self.nav.trpModel)
+                        _, mapfwj = tropmapf(
+                            obs.t, pos, el[j], model=self.nav.trpModel)
 
-                    if self.nav.monlevel > 2:
-                        self.nav.fout.write(
-                            "{}         ztd      ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f}\n"
-                            .format(time2str(obs.t), idx_i, idx_i,
-                                    (mapfwi - mapfwj),
-                                    x[self.IT(self.nav.na)],
-                                    np.sqrt(self.nav.P[
-                                        self.IT(self.nav.na),
-                                        self.IT(self.nav.na)])))
+                        idx_i = self.IT(self.nav.na)
+                        H[nv, idx_i] = mapfwi - mapfwj
+                        v[nv] -= (mapfwi - mapfwj)*x[idx_i]
 
-                    # SD ionosphere
-                    #
-                    idx_i = self.II(sat[i], self.nav.na)
-                    idx_j = self.II(sat[j], self.nav.na)
-                    H[nv, idx_i] = +mu
-                    H[nv, idx_j] = -mu
-                    v[nv] -= mu*(x[idx_i] - x[idx_j])
+                        if self.nav.monlevel > 2:
+                            self.nav.fout.write(
+                                "{}         ztd      ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f}\n"
+                                .format(time2str(obs.t), idx_i, idx_i,
+                                        (mapfwi - mapfwj),
+                                        x[self.IT(self.nav.na)],
+                                        np.sqrt(self.nav.P[
+                                            self.IT(self.nav.na),
+                                            self.IT(self.nav.na)])))
 
-                    if self.nav.monlevel > 2:
-                        self.nav.fout.write(
-                            "{} {}-{} ion {} ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
-                            .format(time2str(obs.t),
-                                    sat2id(sat[i]), sat2id(sat[j]),
-                                    sig, idx_i, idx_j, mu,
-                                    x[idx_i], x[idx_j],
-                                    np.sqrt(self.nav.P[idx_i, idx_i]),
-                                    np.sqrt(self.nav.P[idx_j, idx_j])))
+                    if self.nav.niono > 0:  # iono is estimated
+                        # SD ionosphere
+                        #
+                        idx_i = self.II(sat[i], self.nav.na)
+                        idx_j = self.II(sat[j], self.nav.na)
+                        H[nv, idx_i] = +mu
+                        H[nv, idx_j] = -mu
+                        v[nv] -= mu*(x[idx_i] - x[idx_j])
+
+                        if self.nav.monlevel > 2:
+                            self.nav.fout.write(
+                                "{} {}-{} ion {} ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
+                                .format(time2str(obs.t),
+                                        sat2id(sat[i]), sat2id(sat[j]),
+                                        sig, idx_i, idx_j, mu,
+                                        x[idx_i], x[idx_j],
+                                        np.sqrt(self.nav.P[idx_i, idx_i]),
+                                        np.sqrt(self.nav.P[idx_j, idx_j])))
 
                     # SD ambiguity
                     #
