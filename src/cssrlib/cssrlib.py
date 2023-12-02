@@ -1219,12 +1219,13 @@ class cssr:
         nsat = self.lc[inet].nsat_n
         stec = np.zeros(nsat)
         for i in range(nsat):
+            sat = self.lc[inet].sat_n[i]
             if self.lc[inet].flg_stec & 2:
-                ci = self.lc[inet].ci[i, :]
+                ci = self.lc[inet].ci[sat]
                 stec[i] = [1, dlat, dlon, dlat*dlon, dlat**2, dlon**2]@ci
             if self.lc[inet].flg_stec & 1:
-                dstec = self.lc[inet].dstec[i,
-                                            self.grid_index-1]@self.grid_weight
+                dstec = self.lc[inet].dstec[sat][self.grid_index-1] \
+                    @ self.grid_weight
                 stec[i] += dstec
         return stec
 
