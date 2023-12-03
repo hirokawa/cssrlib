@@ -529,11 +529,11 @@ class pppos():
             if self.nav.ephopt == 4:
 
                 # Code and phase signal bias, converted from [ns] to [m]
-                #
+                # note: IGS uses sign convention different with RTCM
                 cbias = np.array(
-                    [bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
+                    [-bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
                 pbias = np.array(
-                    [bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
+                    [-bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
 
             else:  # from CSSR
 
@@ -551,11 +551,8 @@ class pppos():
                         (1 << sCType.PBIAS):
                     pbias += self.find_bias(cs, sigsCP, sat, inet)
 
-                # - IS-QZSS-MDC-001 sec 5.5.3.3
-                # - HAS SIS ICD sec 7.4, 7.5
-                # - HAS IDD ICD sec 3.3.4
-                if cs.cssrmode in [sc.GAL_HAS_IDD, sc.GAL_HAS_SIS,
-                                   sc.QZS_MADOCA]:
+                # note: some services use sign convention different with RTCM
+                if cs.cssrmode in [sc.QZS_CLAS, sc.BDS_PPP, sc.PVS_PPP]:
                     pbias = -pbias
                     cbias = -cbias
 
@@ -667,8 +664,8 @@ class pppos():
 
             # Range correction
             #
-            prc[i, :] = trop + antrPR + antsPR + iono + cbias
-            cpc[i, :] = trop + antrCP + antsCP - iono + pbias + phw
+            prc[i, :] = trop + antrPR + antsPR + iono - cbias
+            cpc[i, :] = trop + antrCP + antsCP - iono - pbias + phw
 
             r += relatv - _c*dts[i]
 
