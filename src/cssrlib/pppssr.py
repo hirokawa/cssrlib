@@ -11,10 +11,18 @@ from cssrlib.gnss import time2str, timediff, gpst2utc, tropmapf
 from cssrlib.ppp import tidedisp, tidedispIERS2010, uTideModel
 from cssrlib.ppp import shapiro, windupcorr
 from cssrlib.peph import antModelRx, antModelTx
-from cssrlib.cssrlib import sCType, sSigGPS
+from cssrlib.cssrlib import sCType
 from cssrlib.cssrlib import sCSSRTYPE as sc
 from cssrlib.mlambda import mlambda
 from cssrlib.rtk import ddidx
+
+# format definition for logging
+fmt_ztd = "{}         ztd      ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f}\n"
+fmt_ion = "{} {}-{} ion {} ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} " + \
+    "{:10.3f} {:10.3f}\n"
+fmt_res = "{} {}-{} res {} ({:3d}) {:10.3f} sig_i {:10.3f} sig_j {:10.3f}\n"
+fmt_amb = "{} {}-{} amb {} ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} " + \
+    "{:10.3f} {:10.3f} {:10.3f}\n"
 
 
 class pppos():
@@ -23,7 +31,8 @@ class pppos():
     nav = None
     VAR_HOLDAMB = 0.001
 
-    def __init__(self, nav, pos0=np.zeros(3), logfile=None):
+    def __init__(self, nav, pos0=np.zeros(3),
+                 logfile=None, trop_opt=1, iono_opt=1, phw_opt=1):
         """ initialize variables for PPP """
 
         self.nav = nav
@@ -36,11 +45,20 @@ class pppos():
         #
         self.nav.trpModel = uTropoModel.SAAST
 
+        # 0: use trop-model, 1: estimate, 2: use cssr correction
+        self.nav.trop_opt = trop_opt
+
+        # 0: use iono-model, 1: estimate, 2: use cssr correction
+        self.nav.iono_opt = iono_opt
+
+        # 0: none, 1: full model, 2: local/regional model
+        self.nav.phw_opt = phw_opt
+
         # Position (+ optional velocity), zenith tropo delay and
         # slant ionospheric delay states
         #
-        self.nav.ntrop = 1
-        self.nav.niono = uGNSS.MAXSAT
+        self.nav.ntrop = (1 if self.nav.trop_opt == 1 else 0)
+        self.nav.niono = (uGNSS.MAXSAT if self.nav.iono_opt == 1 else 0)
 
         self.nav.na = (3 if self.nav.pmode == 0 else 6)
         self.nav.nq = (3 if self.nav.pmode == 0 else 6)
@@ -112,29 +130,36 @@ class pppos():
         # Velocity
         if self.nav.pmode >= 1:  # kinematic
             dP[3:6] = self.nav.sig_v0**2
+
         # Tropo delay
-        if self.nav.pmode >= 1:  # kinematic
-            dP[6] = self.nav.sig_ztd0**2
-        else:
-            dP[3] = self.nav.sig_ztd0**2
+        if self.nav.trop_opt == 1:  # trop is estimated
+            if self.nav.pmode >= 1:  # kinematic
+                dP[6] = self.nav.sig_ztd0**2
+            else:
+                dP[3] = self.nav.sig_ztd0**2
 
         # Process noise
         #
         self.nav.q = np.zeros(self.nav.nq)
         self.nav.q[0:3] = self.nav.sig_qp**2
+
         # Velocity
         if self.nav.pmode >= 1:  # kinematic
             self.nav.q[3:6] = self.nav.sig_qv**2
-        # Tropo delay
-        if self.nav.pmode >= 1:  # kinematic
-            self.nav.q[6] = self.nav.sig_qztd**2
-        else:
-            self.nav.q[3] = self.nav.sig_qztd**2
-        # Iono delay
-        if self.nav.pmode >= 1:  # kinematic
-            self.nav.q[7:7+uGNSS.MAXSAT] = self.nav.sig_qion**2
-        else:
-            self.nav.q[4:4+uGNSS.MAXSAT] = self.nav.sig_qion**2
+
+        if self.nav.trop_opt == 1:  # trop is estimated
+            # Tropo delay
+            if self.nav.pmode >= 1:  # kinematic
+                self.nav.q[6] = self.nav.sig_qztd**2
+            else:
+                self.nav.q[3] = self.nav.sig_qztd**2
+
+        if self.nav.iono_opt == 1:  # iono is estimated
+            # Iono delay
+            if self.nav.pmode >= 1:  # kinematic
+                self.nav.q[7:7+uGNSS.MAXSAT] = self.nav.sig_qion**2
+            else:
+                self.nav.q[4:4+uGNSS.MAXSAT] = self.nav.sig_qion**2
 
         # Logging level
         #
@@ -212,9 +237,10 @@ class pppos():
         #
         nx = self.nav.nx
         Phi = np.eye(nx)
-        ni = self.nav.na-uGNSS.MAXSAT
-        Phi[ni:self.nav.na, ni:self.nav.na] = np.zeros(
-            (uGNSS.MAXSAT, uGNSS.MAXSAT))
+        # if self.nav.niono > 0:
+        #    ni = self.nav.na-uGNSS.MAXSAT
+        #    Phi[ni:self.nav.na, ni:self.nav.na] = np.zeros(
+        #        (uGNSS.MAXSAT, uGNSS.MAXSAT))
         if self.nav.pmode > 0:
             self.nav.x[0:3] += self.nav.x[3:6]*tt
             Phi[0:3, 3:6] = np.eye(3)*tt
@@ -257,21 +283,23 @@ class pppos():
                             .format(time2str(obs.t), sat2id(sat_),
                                     obs.sig[sys_i][uTYP.L][f]))
 
-                # Reset slant ionospheric delay estimate
-                #
-                j = self.II(sat_, self.nav.na)
-                if reset and self.nav.x[j] != 0.0:
-                    self.initx(0.0, 0.0, j)
+                if self.nav.niono > 0:
+                    # Reset slant ionospheric delay estimate
+                    #
+                    j = self.II(sat_, self.nav.na)
+                    if reset and self.nav.x[j] != 0.0:
+                        self.initx(0.0, 0.0, j)
 
-                    if self.nav.monlevel > 0:
-                        self.nav.fout.write("{}  {} - reset ionosphere\n"
-                                            .format(time2str(obs.t),
-                                                    sat2id(sat_)))
+                        if self.nav.monlevel > 0:
+                            self.nav.fout.write("{}  {} - reset ionosphere\n"
+                                                .format(time2str(obs.t),
+                                                        sat2id(sat_)))
 
             # Ambiguity
             #
             bias = np.zeros(ns)
             ion = np.zeros(ns)
+            f1 = 0
 
             """
             offset = 0
@@ -284,32 +312,34 @@ class pppos():
                 if np.any(self.nav.edt[sat[i]-1, :] > 0):
                     continue
 
-                # Get dual-frequency pseudoranges for this constellation
-                #
-                sig1 = obs.sig[sys[i]][uTYP.C][0]
-                sig2 = obs.sig[sys[i]][uTYP.C][1]
+                if self.nav.niono > 0:
+                    # Get dual-frequency pseudoranges for this constellation
+                    #
+                    sig1 = obs.sig[sys[i]][uTYP.C][0]
+                    sig2 = obs.sig[sys[i]][uTYP.C][1]
 
-                pr1 = obs.P[i, 0]
-                pr2 = obs.P[i, 1]
+                    pr1 = obs.P[i, 0]
+                    pr2 = obs.P[i, 1]
 
-                # Skip zero observations
-                #
-                if pr1 == 0.0 or pr2 == 0.0:
-                    continue
-
-                if sys[i] == uGNSS.GLO:
-                    if sat[i] not in self.nav.glo_ch:
-                        print("glonass channed not found: {:d}".format(sat[i]))
+                    # Skip zero observations
+                    #
+                    if pr1 == 0.0 or pr2 == 0.0:
                         continue
-                    f1 = sig1.frequency(self.nav.glo_ch[sat[i]])
-                    f2 = sig2.frequency(self.nav.glo_ch[sat[i]])
-                else:
-                    f1 = sig1.frequency()
-                    f2 = sig2.frequency()
 
-                # Get iono delay at frequency of first signal
-                #
-                ion[i] = (pr1-pr2)/(1.0-(f1/f2)**2)
+                    if sys[i] == uGNSS.GLO:
+                        if sat[i] not in self.nav.glo_ch:
+                            print("glonass channed not found: {:d}"
+                                  .format(sat[i]))
+                            continue
+                        f1 = sig1.frequency(self.nav.glo_ch[sat[i]])
+                        f2 = sig2.frequency(self.nav.glo_ch[sat[i]])
+                    else:
+                        f1 = sig1.frequency()
+                        f2 = sig2.frequency()
+
+                    # Get iono delay at frequency of first signal
+                    #
+                    ion[i] = (pr1-pr2)/(1.0-(f1/f2)**2)
 
                 # Get pseudorange and carrier-phase observation of signal f
                 #
@@ -363,31 +393,39 @@ class pppos():
                             .format(time2str(obs.t), sat2id(sat[i]),
                                     sig, bias[i]))
 
-                j = self.II(sat[i], self.nav.na)
-                if ion[i] != 0 and self.nav.x[j] == 0.0:
+                if self.nav.niono > 0:
+                    j = self.II(sat[i], self.nav.na)
+                    if ion[i] != 0 and self.nav.x[j] == 0.0:
 
-                    self.initx(ion[i], self.nav.sig_ion0**2, j)
+                        self.initx(ion[i], self.nav.sig_ion0**2, j)
 
-                    if self.nav.monlevel > 0:
-                        self.nav.fout.write(
-                            "{}  {} - init  ionosphere      {:12.3f}\n"
-                            .format(time2str(obs.t), sat2id(sat[i]),
-                                    ion[i]))
+                        if self.nav.monlevel > 0:
+                            self.nav.fout.write(
+                                "{}  {} - init  ionosphere      {:12.3f}\n"
+                                .format(time2str(obs.t), sat2id(sat[i]),
+                                        ion[i]))
 
         return 0
 
-    def find_bias(self, cs, sigref, sat):
+    def find_bias(self, cs, sigref, sat, inet=0):
+        """ find satellite signal bias from correction """
         nf = len(sigref)
         v = np.zeros(nf)
 
-        if nf == 0 or sat not in cs.lc[0].cbias.keys():
+        if nf == 0:
             return v
 
         ctype = sigref[0].typ
         if ctype == uTYP.C:
-            sigc = cs.lc[0].cbias[sat]
+            if cs.lc[inet].cbias is None or \
+                    sat not in cs.lc[inet].cbias.keys():
+                return v
+            sigc = cs.lc[inet].cbias[sat]
         else:
-            sigc = cs.lc[0].pbias[sat]
+            if cs.lc[inet].pbias is None or \
+                    sat not in cs.lc[inet].pbias.keys():
+                return v
+            sigc = cs.lc[inet].pbias[sat]
 
         # work-around for Galileo HAS: L2P -> L2W
         if cs.cssrmode in [sc.GAL_HAS_SIS, sc.GAL_HAS_IDD]:
@@ -402,49 +440,6 @@ class pppos():
             elif sig.toAtt('X') in sigc.keys():
                 v[k] = sigc[sig.toAtt('X')]
         return v
-
-    def find_corr_idx(self, cs, nf, ctype, sigref, sat):
-
-        nsig = 0
-        kidx = [-1]*nf
-        idx_n = []
-
-        sys, _ = sat2prn(sat)
-
-        if cs.iodssr_c[ctype] == cs.iodssr:
-            idx_n_ = np.where(np.array(cs.sat_n) == sat)[0]
-        else:  # work-around for mask change case
-            if cs.iodssr_c[ctype] == cs.iodssr_p:
-                idx_n_ = np.where(np.array(cs.sat_n_p) == sat)[0]
-            else:
-                return nsig, idx_n, kidx
-
-        if len(idx_n_) == 0:
-            return nsig, idx_n, kidx
-        idx_n = idx_n_[0]
-
-        if cs.iodssr_c[ctype] == cs.iodssr:
-            sig_n = cs.sig_n[idx_n]
-        elif cs.iodssr_c[ctype] == cs.iodssr_p:
-            sig_n = cs.sig_n_p[idx_n]
-        else:
-            return nsig, idx_n, kidx
-
-        utype = uTYP.C if ctype == sCType.CBIAS else uTYP.L
-
-        for k, sig in enumerate(sig_n):
-            if sig < 0:
-                continue
-            for f in range(nf):
-                if cs.cssrmode == sc.GAL_HAS_SIS and \
-                   sys == uGNSS.GPS and sig == sSigGPS.L2P:
-                    sig = sSigGPS.L2W  # work-around
-                sig_ = cs.ssig2rsig(sys, utype, sig)
-                if sig_ == sigref[f] or sig_ == sigref[f].toAtt('X'):
-                    kidx[f] = k
-                    nsig += 1
-
-        return nsig, idx_n, kidx
 
     def zdres(self, obs, cs, bsx, rs, vs, dts, rr):
         """ non-differential residual """
@@ -480,6 +475,22 @@ class pppos():
         trop_hs, trop_wet, _ = tropmodel(obs.t, pos,
                                          model=self.nav.trpModel)
 
+        if self.nav.trop_opt == 2 or self.nav.iono_opt == 2:  # from cssr
+            inet = cs.find_grid_index(pos)
+            dlat, dlon = cs.get_dpos(pos)
+        else:
+            inet = -1
+
+        if self.nav.trop_opt == 2:  # trop from cssr
+            trph, trpw = cs.get_trop(dlat, dlon)
+            trop_hs0, trop_wet0, _ = tropmodel(obs.t, [pos[0], pos[1], 0],
+                                               model=self.nav.trpModel)
+            r_hs = trop_hs/trop_hs0
+            r_wet = trop_wet/trop_wet0
+
+        if self.nav.iono_opt == 2:  # iono from cssr
+            stec = cs.get_stec(dlat, dlon)
+
         cpc = np.zeros((n, nf))
         prc = np.zeros((n, nf))
 
@@ -493,6 +504,9 @@ class pppos():
             if np.any(self.nav.edt[sat-1, :] > 0):
                 continue
 
+            if inet > 0 and sat not in cs.lc[inet].sat_n:
+                continue
+
             # Pseudorange, carrier-phase and C/N0 signals
             #
             sigsPR = obs.sig[sys][uTYP.C]
@@ -503,8 +517,11 @@ class pppos():
             if sys == uGNSS.GLO:
                 lam = np.array([s.wavelength(self.nav.glo_ch[sat])
                                 for s in sigsCP])
+                frq = np.array([s.frequency(self.nav.glo_ch[sat])
+                               for s in sigsCP])
             else:
                 lam = np.array([s.wavelength() for s in sigsCP])
+                frq = np.array([s.frequency() for s in sigsCP])
 
             cbias = np.zeros(self.nav.nf)
             pbias = np.zeros(self.nav.nf)
@@ -521,24 +538,26 @@ class pppos():
             else:  # from CSSR
 
                 if cs.lc[0].cstat & (1 << sCType.CBIAS) == (1 << sCType.CBIAS):
-
                     cbias = self.find_bias(cs, sigsPR, sat)
 
-                    # - IS-QZSS-MDC-001 sec 5.5.3.3
-                    # - HAS SIS ICD sec 7.4, 7.5
-                    # - HAS IDD ICD sec 3.3.4
-                    if cs.cssrmode in [sc.GAL_HAS_IDD, sc.GAL_HAS_SIS,
-                                       sc.QZS_MADOCA]:
-                        cbias = -cbias
+                if inet > 0 and cs.lc[inet].cstat & (1 << sCType.CBIAS) == \
+                        (1 << sCType.CBIAS):
+                    cbias += self.find_bias(cs, sigsPR, sat, inet)
 
                 if cs.lc[0].cstat & (1 << sCType.PBIAS) == (1 << sCType.PBIAS):
-
                     pbias = self.find_bias(cs, sigsCP, sat)
 
-                    # - IS-QZSS-MDC-001 sec 5.5.3.3
-                    # - HAS SIS ICD sec 7.4, 7.5
-                    if cs.cssrmode in [sc.GAL_HAS_SIS, sc.QZS_MADOCA]:
-                        pbias = -pbias
+                if inet > 0 and cs.lc[inet].cstat & (1 << sCType.PBIAS) == \
+                        (1 << sCType.PBIAS):
+                    pbias += self.find_bias(cs, sigsCP, sat, inet)
+
+                # - IS-QZSS-MDC-001 sec 5.5.3.3
+                # - HAS SIS ICD sec 7.4, 7.5
+                # - HAS IDD ICD sec 3.3.4
+                if cs.cssrmode in [sc.GAL_HAS_IDD, sc.GAL_HAS_SIS,
+                                   sc.QZS_MADOCA]:
+                    pbias = -pbias
+                    cbias = -cbias
 
             # Check for invalid biases
             #
@@ -566,12 +585,25 @@ class pppos():
 
             # Tropospheric delay
             #
-            trop = mapfh*trop_hs + mapfw*trop_wet
+            if self.nav.iono_opt == 2:  # from cssr
+                trop = mapfh*trph*r_hs+mapfw*trpw*r_wet
+            else:
+                trop = mapfh*trop_hs + mapfw*trop_wet
+
+            # Ionospheric delay
+            if self.nav.iono_opt == 2:  # from cssr
+                idx_l = cs.lc[inet].sat_n.index(sat)
+                iono = np.array([40.3e16/(f*f)*stec[idx_l] for f in frq])
+            else:
+                iono = np.zeros(nf)
 
             # Phase wind-up effect
             #
-            self.nav.phw[sat-1] = windupcorr(obs.t, rs[i, :], vs[i, :], rr_,
-                                             self.nav.phw[sat-1], full=True)
+            if self.nav.phw_opt > 0:
+                phw_mode = (False if self.nav.phw_opt == 2 else True)
+                self.nav.phw[sat-1] = windupcorr(obs.t, rs[i, :], vs[i, :],
+                                                 rr_, self.nav.phw[sat-1],
+                                                 full=phw_mode)
 
             # cycle -> m
             phw = lam*self.nav.phw[sat-1]
@@ -635,8 +667,8 @@ class pppos():
 
             # Range correction
             #
-            prc[i, :] = trop + antrPR + antsPR + cbias
-            cpc[i, :] = trop + antrCP + antsCP + pbias + phw
+            prc[i, :] = trop + antrPR + antsPR + iono + cbias
+            cpc[i, :] = trop + antrCP + antsCP - iono + pbias + phw
 
             r += relatv - _c*dts[i]
 
@@ -785,7 +817,7 @@ class pppos():
 
                         if self.nav.monlevel > 2:
                             self.nav.fout.write(
-                                "{}         ztd      ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f}\n"
+                                fmt_ztd
                                 .format(time2str(obs.t), idx_i, idx_i,
                                         (mapfwi - mapfwj),
                                         x[self.IT(self.nav.na)],
@@ -804,7 +836,7 @@ class pppos():
 
                         if self.nav.monlevel > 2:
                             self.nav.fout.write(
-                                "{} {}-{} ion {} ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
+                                fmt_ion
                                 .format(time2str(obs.t),
                                         sat2id(sat[i]), sat2id(sat[j]),
                                         sig, idx_i, idx_j, mu,
@@ -840,7 +872,7 @@ class pppos():
 
                         if self.nav.monlevel > 2:
                             self.nav.fout.write(
-                                "{} {}-{} amb {} ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f} {:10.3f}\n"
+                                fmt_amb
                                 .format(time2str(obs.t),
                                         sat2id(sat[i]), sat2id(sat[j]),
                                         sig, idx_i, idx_j, lami, lamj,
@@ -857,7 +889,7 @@ class pppos():
 
                     if self.nav.monlevel > 1:
                         self.nav.fout.write(
-                            "{} {}-{} res {} ({:3d}) {:10.3f} sig_i {:10.3f} sig_j {:10.3f}\n"
+                            fmt_res
                             .format(time2str(obs.t),
                                     sat2id(sat[i]), sat2id(sat[j]), sig,
                                     nv, v[nv],
@@ -895,7 +927,8 @@ class pppos():
         x (ndarray): State estimate vector
         P (ndarray): State covariance matrix
         H (ndarray): Observation model matrix
-        v (ndarray): Innovation vector (residual between measurement and prediction)
+        v (ndarray): Innovation vector
+                     (residual between measurement and prediction)
         R (ndarray): Measurement noise covariance
 
         Returns:
@@ -1016,11 +1049,12 @@ class pppos():
 
         # Solid Earth tide corrections
         #
-        # TODO: add solid earth tide displacements
-        #
-        if self.nav.tidecorr:
+        if self.nav.tidecorr == uTideModel.SIMPLE:
             pos = ecef2pos(rr_)
             disp = tidedisp(gpst2utc(obs.t), pos)
+        elif self.nav.tidecorr == uTideModel.IERS2010:
+            pos = ecef2pos(rr_)
+            disp = tidedispIERS2010(gpst2utc(obs.t), pos)
         else:
             disp = np.zeros(3)
         rr_ += disp

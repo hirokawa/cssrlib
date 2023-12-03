@@ -722,6 +722,19 @@ class Nav():
         self.ephopt = 2  # ephemeris option 0: BRDC, 1: SBAS, 2: SSR-APC,
         #                  3: SSR-CG, 4: PREC
 
+        # Select tropospheric model
+        #
+        self.trpModel = uTropoModel.SAAST
+
+        # 0: use trop-model, 1: estimate, 2: use cssr correction
+        self.trop_opt = 0
+
+        # 0: use iono-model, 1: estimate, 2: use cssr correction
+        self.iono_opt = 0
+
+        # 0: none, 1: full model, 2: local/regional model
+        self.phw_opt = 1
+
         self.monlevel = 1
         self.cnr_min = 25
         self.cnr_min_gpy = 15
