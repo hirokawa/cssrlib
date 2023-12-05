@@ -4,7 +4,7 @@ module for ephemeris processing
 
 import numpy as np
 from cssrlib.gnss import uGNSS, rCST, sat2prn, timediff, timeadd, vnorm
-from cssrlib.gnss import gtime_t, Geph, adjtime
+from cssrlib.gnss import gtime_t, Geph
 from cssrlib.cssrlib import sCSSRTYPE as sc
 from cssrlib.cssrlib import sCType
 
@@ -268,7 +268,7 @@ def satposs(obs, nav, cs=None, orb=None):
         if nav.ephopt == 4:
 
             rs_, dts_, _ = orb.peph2pos(t, sat, nav)
-            if rs_ is None or dts_ is None:
+            if rs_ is None or dts_ is None or np.isnan(dts_[0]):
                 continue
             dt = dts_[0]
 
