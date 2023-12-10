@@ -14,6 +14,7 @@ from cssrlib.peph import antModelRx, antModelTx
 from cssrlib.cssrlib import sCType
 from cssrlib.cssrlib import sCSSRTYPE as sc
 from cssrlib.mlambda import mlambda
+from copy import deepcopy
 
 # format definition for logging
 fmt_ztd = "{}         ztd      ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f}\n"
@@ -1240,9 +1241,41 @@ class pppos():
 
         return np.array(sat, dtype=int)
 
-    def process(self, obs, cs=None, orb=None, bsx=None):
+    def base_process(self, obs, obsb, rs, dts, svh):
+        """ processing for base station in RTK """
+
+        rsb, vsb, dtsb, svhb, _ = satposs(obsb, self.nav)
+        yr, er, elr = self.zdres(
+            obsb, None, None, rsb, vsb, dtsb, self.nav.rb, 0)
+        # ns, iu, ir = self.selsat(obs, obsb, elr)
+
+        # Editing observations (base/rover)
+        sat_ed_r = self.qcedit(obsb, rsb, dtsb, svhb)
+        sat_ed_u = self.qcedit(obs, rs, dts, svh)
+
+        # define common satellite between base and rover
+        sat_ed = np.intersect1d(sat_ed_u, sat_ed_r, True)
+        ir = np.intersect1d(obsb.sat, sat_ed, True, True)[1]
+        iu = np.intersect1d(obs.sat, sat_ed, True, True)[1]
+
+        ns = len(iu)
+
+        y = np.zeros((ns*2, self.nav.nf*2))
+        e = np.zeros((ns*2, 3))
+
+        y[ns:, :] = yr[ir, :]
+        e[ns:, :] = er[ir, :]
+
+        obs_ = deepcopy(obs)
+        obs_.sat = obs.sat[iu]
+        obs_.L = obs.L[iu, :]-obsb.L[ir, :]
+        obs_.P = obs.P[iu, :]-obsb.P[ir, :]
+
+        return y, e, iu, obs_
+
+    def process(self, obs, cs=None, orb=None, bsx=None, obsb=None):
         """
-        PPP positioning
+        PPP/PPP-RTK/RTK positioning
         """
 
         # Skip empty epochs
@@ -1259,14 +1292,28 @@ class pppos():
             print(" too few satellites < 6: nsat={:d}".format(nsat))
             return
 
-        # Editing of observations
-        #
-        sat_ed = self.qcedit(obs, rs, dts, svh)
+        if obsb is None:  # PPP/PPP-RTK
+            # Editing of observations
+            #
+            sat_ed = self.qcedit(obs, rs, dts, svh)
+
+            # Select satellites having passed quality control
+            #
+            # index of valid sats in obs.sat
+            iu = np.where(np.isin(obs.sat, sat_ed))[0]
+            ns = len(iu)
+            y = np.zeros((ns, self.nav.nf*2))
+            e = np.zeros((ns, 3))
+
+            obs_ = obs
+        else:  # RTK
+            y, e, iu, obs_ = self.base_process(obs, obsb, rs, dts, svh)
+            ns = len(iu)
 
         # Kalman filter time propagation, initialization of ambiguities
         # and iono
         #
-        self.udstate(obs)
+        self.udstate(obs_)
 
         xa = np.zeros(self.nav.nx)
         xp = self.nav.x.copy()
@@ -1278,10 +1325,9 @@ class pppos():
         # Select satellites having passed quality control
         #
         # index of valid sats in obs.sat
-        iu = np.where(np.isin(obs.sat, sat_ed))[0]
         sat = obs.sat[iu]
-        y = yu[iu, :]
-        e = eu[iu, :]
+        y[:ns, :] = yu[iu, :]
+        e[:ns, :] = eu[iu, :]
         el = elu[iu]
 
         # Store reduced satellite list
