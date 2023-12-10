@@ -8,7 +8,7 @@ import numpy as np
 from copy import deepcopy
 import cssrlib.gnss as gn
 from cssrlib.ephemeris import satposs
-from cssrlib.gnss import uTYP
+from cssrlib.gnss import uTYP, uGNSS, timediff, sat2prn, time2str, sat2id, rCST
 from cssrlib.peph import antModelRx
 from cssrlib.ppp import tidedisp
 from cssrlib.mlambda import mlambda
@@ -35,6 +35,218 @@ class rtkpos(pppos):
         self.nav.sig_p0 = 30.0  # [m]
         self.nav.thresar = 2.0  # AR acceptance threshold
         self.nav.armode = 1     # AR is enabled
+
+    def udstate(self, obs, obsb, iu, ir):
+        """ time propagation of states and initialize """
+
+        tt = timediff(obs.t, self.nav.t)
+
+        sat = obs.sat[iu]
+        ns = len(sat)
+        sys = []
+
+        for sat_i in obs.sat[iu]:
+            sys_i, _ = sat2prn(sat_i)
+            sys.append(sys_i)
+
+        # pos,vel,ztd,ion,amb
+        #
+        nx = self.nav.nx
+        Phi = np.eye(nx)
+        # if self.nav.niono > 0:
+        #    ni = self.nav.na-uGNSS.MAXSAT
+        #    Phi[ni:self.nav.na, ni:self.nav.na] = np.zeros(
+        #        (uGNSS.MAXSAT, uGNSS.MAXSAT))
+        if self.nav.pmode > 0:
+            self.nav.x[0:3] += self.nav.x[3:6]*tt
+            Phi[0:3, 3:6] = np.eye(3)*tt
+        self.nav.P[0:nx, 0:nx] = Phi@self.nav.P[0:nx, 0:nx]@Phi.T
+
+        # Process noise
+        #
+        dP = np.diag(self.nav.P)
+        dP.flags['WRITEABLE'] = True
+        dP[0:self.nav.nq] += self.nav.q[0:self.nav.nq]*tt
+
+        # Update Kalman filter state elements
+        #
+        for f in range(self.nav.nf):
+
+            # Reset phase-ambiguity if instantaneous AR
+            # or expire obs outage counter
+            #
+            for i in range(uGNSS.MAXSAT):
+
+                sat_ = i+1
+                sys_i, _ = sat2prn(sat_)
+
+                self.nav.outc[i, f] += 1
+                reset = (self.nav.outc[i, f] >
+                         self.nav.maxout or np.any(self.nav.edt[i, :] > 0))
+                if sys_i not in obs.sig.keys():
+                    continue
+
+                # Reset ambiguity estimate
+                #
+                j = self.IB(sat_, f, self.nav.na)
+                if reset and self.nav.x[j] != 0.0:
+                    self.initx(0.0, 0.0, j)
+                    self.nav.outc[i, f] = 0
+
+                    if self.nav.monlevel > 0:
+                        self.nav.fout.write(
+                            "{}  {} - reset ambiguity  {}\n"
+                            .format(time2str(obs.t), sat2id(sat_),
+                                    obs.sig[sys_i][uTYP.L][f]))
+
+                if self.nav.niono > 0:
+                    # Reset slant ionospheric delay estimate
+                    #
+                    j = self.II(sat_, self.nav.na)
+                    if reset and self.nav.x[j] != 0.0:
+                        self.initx(0.0, 0.0, j)
+
+                        if self.nav.monlevel > 0:
+                            self.nav.fout.write("{}  {} - reset ionosphere\n"
+                                                .format(time2str(obs.t),
+                                                        sat2id(sat_)))
+
+            # Ambiguity
+            #
+            bias = np.zeros(ns)
+            ion = np.zeros(ns)
+            f1 = 0
+
+            offset = 0
+            na = 0
+
+            for i in range(ns):
+
+                # Do not initialize invalid observations
+                #
+                if np.any(self.nav.edt[sat[i]-1, :] > 0):
+                    continue
+
+                if self.nav.niono > 0:
+                    # Get dual-frequency pseudoranges for this constellation
+                    #
+                    sig1 = obs.sig[sys[i]][uTYP.C][0]
+                    sig2 = obs.sig[sys[i]][uTYP.C][1]
+
+                    pr1 = obs.P[i, 0]
+                    pr2 = obs.P[i, 1]
+
+                    # Skip zero observations
+                    #
+                    if pr1 == 0.0 or pr2 == 0.0:
+                        continue
+
+                    if sys[i] == uGNSS.GLO:
+                        if sat[i] not in self.nav.glo_ch:
+                            print("glonass channed not found: {:d}"
+                                  .format(sat[i]))
+                            continue
+                        f1 = sig1.frequency(self.nav.glo_ch[sat[i]])
+                        f2 = sig2.frequency(self.nav.glo_ch[sat[i]])
+                    else:
+                        f1 = sig1.frequency()
+                        f2 = sig2.frequency()
+
+                    # Get iono delay at frequency of first signal
+                    #
+                    ion[i] = (pr1-pr2)/(1.0-(f1/f2)**2)
+
+                # Get pseudorange and carrier-phase observation of signal f
+                #
+                sig = obs.sig[sys[i]][uTYP.L][f]
+
+                if sys[i] == uGNSS.GLO:
+                    fi = sig.frequency(self.nav.glo_ch[sat[i]])
+                else:
+                    fi = sig.frequency()
+
+                lam = rCST.CLIGHT/fi
+
+                cp = obs.L[iu[i], f] - obsb.L[ir[i], f]
+                pr = obs.P[iu[i], f] - obsb.P[ir[i], f]
+                if cp == 0.0 or pr == 0.0 or lam is None:
+                    continue
+
+                bias[i] = cp - pr/lam + 2.0*ion[i]/lam*(f1/fi)**2
+
+                amb = self.nav.x[self.IB(sat[i], f, self.nav.na)]
+                if amb != 0.0:
+                    offset += bias[i] - amb
+                    na += 1
+
+            # Adjust phase-code coherency
+            #
+            if na > 0:
+                db = offset/na
+                for i in range(uGNSS.MAXSAT):
+                    sat_ = i+1
+                    if self.nav.x[self.IB(sat_, f, self.nav.na)] != 0.0:
+                        self.nav.x[self.IB(sat_, f, self.nav.na)] += db
+
+            # Initialize ambiguity
+            #
+            for i in range(ns):
+
+                sys_i, _ = sat2prn(sat[i])
+
+                j = self.IB(sat[i], f, self.nav.na)
+                if bias[i] != 0.0 and self.nav.x[j] == 0.0:
+
+                    self.initx(bias[i], self.nav.sig_n0**2, j)
+
+                    if self.nav.monlevel > 0:
+                        sig = obs.sig[sys_i][uTYP.L][f]
+                        self.nav.fout.write(
+                            "{}  {} - init  ambiguity  {} {:12.3f}\n"
+                            .format(time2str(obs.t), sat2id(sat[i]),
+                                    sig, bias[i]))
+
+                if self.nav.niono > 0:
+                    j = self.II(sat[i], self.nav.na)
+                    if ion[i] != 0 and self.nav.x[j] == 0.0:
+
+                        self.initx(ion[i], self.nav.sig_ion0**2, j)
+
+                        if self.nav.monlevel > 0:
+                            self.nav.fout.write(
+                                "{}  {} - init  ionosphere      {:12.3f}\n"
+                                .format(time2str(obs.t), sat2id(sat[i]),
+                                        ion[i]))
+
+        return 0
+
+    def selsat(self, obs, obsb, elb):
+        """ select common satellite between rover and base station """
+        # exclude satellite with missing observation and cycle slip for rover
+        idx_u = []
+        for k, _ in enumerate(obs.sat):
+            if obs.P[k, 0] == 0.0 or obs.P[k, 1] == 0.0 or \
+               obs.L[k, 0] == 0.0 or obs.L[k, 1] == 0.0 or \
+               obs.lli[k, 0] > 0 or obs.lli[k, 1] > 0:
+                continue
+            idx_u.append(k)
+
+        # exclude satellite with missing observation and cycle slip for base
+        idx_r = []
+        for k, _ in enumerate(obsb.sat):
+            if obsb.P[k, 0] == 0.0 or obsb.P[k, 1] == 0.0 or \
+               obsb.L[k, 0] == 0.0 or obsb.L[k, 1] == 0.0 or \
+               obsb.lli[k, 0] > 0 or obsb.lli[k, 1] > 0 or \
+               elb[k] < self.nav.elmin:
+                continue
+            idx_r.append(k)
+
+        idx = np.intersect1d(
+            obs.sat[idx_u], obsb.sat[idx_r], return_indices=True)
+        k = len(idx[0])
+        iu = np.array(idx_u)[idx[1]]
+        ir = np.array(idx_r)[idx[2]]
+        return k, iu, ir
 
     def process(self, obs, cs=None, orb=None, bsx=None, obsb=None):
         """
@@ -81,17 +293,13 @@ class rtkpos(pppos):
         if ns < 4:
             return -1
 
-        # Kalman filter time propagation, initialization of ambiguities
-        # and iono
-        #
-        self.udstate(obs_)
-
         xa = np.zeros(self.nav.nx)
         xp = self.nav.x.copy()
 
         if obsb is not None:  # residual of base-station for RTK
             yr, er, elr = self.zdres(
                 obsb, cs, bsx, rsb, vsb, dtsb, self.nav.rb, 0)
+            ns, iu, ir = self.selsat(obs, obsb, elr)
 
             y = np.zeros((ns*2, self.nav.nf*2))
             e = np.zeros((ns*2, 3))
@@ -101,6 +309,12 @@ class rtkpos(pppos):
         else:
             y = np.zeros((ns, self.nav.nf*2))
             e = np.zeros((ns, 3))
+
+        # Kalman filter time propagation, initialization of ambiguities
+        # and iono
+        #
+        self.udstate(obs, obsb, iu, ir)
+        xp = self.nav.x.copy()
 
         # Non-differential residuals
         #
@@ -552,12 +766,15 @@ def udstate(nav, obs, obsb, iu, ir):
         # reset phase-bias if instantaneous AR or
         # expire obs outage counter
         for i in range(gn.uGNSS.MAXSAT):
+
+            sat_ = i+1
+            sys_i, _ = sat2prn(sat_)
+
             nav.outc[i, f] += 1
             reset = (nav.outc[i, f] > nav.maxout)
-            sys_i, _ = gn.sat2prn(i+1)
             if sys_i not in obs.sig.keys():
                 continue
-            j = IB(i+1, f, nav.na)
+            j = IB(sat_, f, nav.na)
             if reset and nav.x[j] != 0.0:
                 initx(nav, 0.0, 0.0, j)
                 nav.outc[i, f] = 0
