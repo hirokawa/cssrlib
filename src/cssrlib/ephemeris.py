@@ -20,6 +20,8 @@ def findeph(nav, t, sat, iode=-1, mode=0):
         if eph_.sat != sat:
             continue
         dt = timediff(t, eph_.toe)
+        if sat == 43 and eph_.mode == 1:
+            None
         if (iode < 0 or eph_.iode == iode) and eph_.mode == mode and \
                 abs(dt) < dt_p:
             eph = eph_
@@ -402,17 +404,19 @@ def satposs(obs, nav, cs=None, orb=None):
                 ers = vnorm(rs[i, :]-nav.x[0: 3])
                 dorb_ = -ers@dorb_e
                 sis = dclk-dorb_
-                if cs.lc[0].t0[1].time % 30 == 0 and \
-                        timediff(cs.lc[0].t0[1], nav.time_p) > 0:
+                if cs.lc[0].t0[sat][sCType.ORBIT].time % 30 == 0 and \
+                        timediff(cs.lc[0].t0[sat][sCType.ORBIT], nav.time_p) > 0:
                     if abs(nav.sis[sat]) > 0:
                         nav.dsis[sat] = sis - nav.sis[sat]
                     nav.sis[sat] = sis
 
                 nav.dorb[sat] = dorb_
                 nav.dclk[sat] = dclk
-                nsat += 1
+
+            nsat += 1
 
     if cs is not None:
-        nav.time_p = cs.lc[0].t0[1]
+        if sat in cs.lc[0].t0 and sCType.ORBIT in cs.lc[0].t0[sat]:
+            nav.time_p = cs.lc[0].t0[sat][sCType.ORBIT]
 
     return rs, vs, dts, svh, nsat

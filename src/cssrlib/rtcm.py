@@ -9,7 +9,7 @@ RTCM 3 decoder
 import numpy as np
 import struct as st
 import bitstruct as bs
-from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE, prn2sat, sCType
+from cssrlib.cssrlib import cssr, sCSSR, prn2sat, sCType
 from cssrlib.gnss import uGNSS, sat2id, gpst2time, timediff, time2str, sat2prn
 from cssrlib.gnss import uTYP, uSIG, rSigRnx, bdt2time, bdt2gpst, glo2time
 from cssrlib.gnss import time2bdt, gpst2bdt, rCST, time2gpst, utc2gpst, timeadd
@@ -481,13 +481,14 @@ class rtcm(cssr):
             self.lc[0].iode[sat_] = self.iode_n[k]
             self.lc[0].dorb[sat_] = self.dorb_n[k, :]
 
+            self.set_t0(0, sat_, sCType.ORBIT, self.time)
+
         self.nsat_n += nsat
         self.sys_n += [sys]*nsat
         self.sat_n += sat
 
         self.iodssr_c[sCType.ORBIT] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.ORBIT)
-        self.lc[0].t0[sCType.ORBIT] = self.time
 
         return i
 
@@ -507,9 +508,10 @@ class rtcm(cssr):
             i = self.decode_clk_sat(msg, i, k)
             self.lc[0].dclk[sat_] = self.dclk_n[k]
 
+            self.set_t0(0, sat_, sCType.CLOCK, self.time)
+
         self.iodssr_c[sCType.CLOCK] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.CLOCK)
-        self.lc[0].t0[sCType.CLOCK] = self.time
 
         return i
 
@@ -527,6 +529,7 @@ class rtcm(cssr):
 
         for k in range(nsat):
             i, sat_ = self.decode_sat(msg, i, sys)
+            self.set_t0(0, sat_, sCType.CBIAS, self.time)
 
             nsig = bs.unpack_from('u5', msg, i)[0]
             i += 5
@@ -543,7 +546,7 @@ class rtcm(cssr):
 
         self.iodssr_c[sCType.CBIAS] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.CBIAS)
-        self.lc[0].t0[sCType.CBIAS] = self.time
+
         return i
 
     def decode_cssr_pbias(self, msg, i, inet=0):
@@ -561,6 +564,8 @@ class rtcm(cssr):
 
         for k in range(nsat):
             i, sat_ = self.decode_sat(msg, i, sys)
+            self.set_t0(0, sat_, sCType.PBIAS, self.time)
+
             nsig = bs.unpack_from('u5', msg, i)[0]
             i += 5
             yaw, dyaw = bs.unpack_from('u9s8', msg, i)
@@ -581,7 +586,7 @@ class rtcm(cssr):
 
         self.iodssr_c[sCType.PBIAS] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.PBIAS)
-        self.lc[0].t0[sCType.PBIAS] = self.time
+
         return i
 
     def decode_cssr_comb(self, msg, i, inet=0):
@@ -605,6 +610,9 @@ class rtcm(cssr):
         sat = []
         for k in range(nsat):
             i, sat_ = self.decode_sat(msg, i, sys)
+            self.set_t0(0, sat_, sCType.ORBIT, self.time)
+            self.set_t0(0, sat_, sCType.CLOCK, self.time)
+
             i = self.decode_orb_sat(msg, i, k, sys)
             i = self.decode_clk_sat(msg, i, k)
             sat.append(sat_)
@@ -620,9 +628,7 @@ class rtcm(cssr):
         self.iodssr_c[sCType.CLOCK] = v['iodssr']
 
         self.lc[0].cstat |= (1 << sCType.ORBIT)
-        self.lc[0].t0[sCType.ORBIT] = self.time
         self.lc[0].cstat |= (1 << sCType.CLOCK)
-        self.lc[0].t0[sCType.CLOCK] = self.time
 
         return i
 
@@ -635,14 +641,14 @@ class rtcm(cssr):
             self.ura = np.zeros(self.nsat_n)
 
         for k in range(nsat):
-            i, sat = self.decode_sat(msg, i, sys)
-            s = self.sat_n.index(sat)
+            i, sat_ = self.decode_sat(msg, i, sys)
+            s = self.sat_n.index(sat_)
             cls_, val = bs.unpack_from_dict('u3u3', msg, i)
             self.ura[s] = self.quality_idx(cls_, val)
+            self.set_t0(0, sat_, sCType.URA, self.time)
 
         self.iodssr_c[sCType.URA] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.URA)
-        self.lc[0].t0[sCType.URA] = self.time
 
         return i
 
@@ -659,10 +665,10 @@ class rtcm(cssr):
             i, sat_ = self.decode_sat(msg, i, sys)
             i = self.decode_hclk_sat(msg, i, k)
             self.lc[0].dclk[sat_] = self.dclk_n[k]
+            self.set_t0(0, sat_, sCType.HCLOCK, self.time)
 
         self.iodssr_c[sCType.HCLOCK] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.HCLOCK)
-        self.lc[0].t0[sCType.HCLOCK] = self.time
 
         return i
 
@@ -696,6 +702,7 @@ class rtcm(cssr):
         self.iodssr_c[sCType.VTEC] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.VTEC)
         self.lc[0].t0[sCType.VTEC] = self.time
+        self.set_t0(ctype=sCType.VTEC, t=self.time)
 
         return i
 

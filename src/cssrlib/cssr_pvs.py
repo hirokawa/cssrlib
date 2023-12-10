@@ -2,7 +2,10 @@
 PVS (PPP via SouthPAN) correction data decoder
 
 [1] Service Definition Document for Open Services, SBAS-STN-0001,
-    December 2022
+    Revision 02, December 2022
+
+[2] Service Definition Document for Data Access Services, SBAS-STN-0002,
+    Revision 01, November 2023
 
 """
 
@@ -24,6 +27,12 @@ class cssr_pvs(cssr):
         self.lc[0].dclk = {}
         self.lc[0].dorb = {}
         self.lc[0].iode = {}
+        self.lc[0].t0 = {}
+
+        self.tmax = {sCType.CLOCK: 120.0, sCType.ORBIT: 120.0}
+
+        # GPS LNAV, Galileo F/NAV
+        self.nav_mode = {uGNSS.GPS: 0, uGNSS.GAL: 1}
 
     def slot2sat(self, slot):
         sat = 0
@@ -51,6 +60,16 @@ class cssr_pvs(cssr):
         elif dt < -rCST.HALFWEEK_SEC:
             time = timeadd(time,  rCST.WEEK_SEC)
         return time
+
+    def check_validity(self, time):
+        for sat in self.sat_n:
+            if timediff(time, self.lc[0].t0[sat][sCType.CLOCK]) > \
+                    self.tmax[sCType.CLOCK]:
+                self.lc[0].dclk[sat] = 0.0
+            if timediff(time, self.lc[0].t0[sat][sCType.ORBIT]) > \
+                    self.tmax[sCType.ORBIT]:
+                self.lc[0].iode[sat] = -1
+                self.lc[0].dorb[sat] = np.zeros(3)
 
     def decode_cssr_orb(self, msg, i, inet=0):
         """ Types 32 clock-ephemeris correction and covariance matrix """
@@ -91,10 +110,9 @@ class cssr_pvs(cssr):
         self.lc[0].dclk[sat] = dclk
 
         self.iodssr = 0
-        self.lc[0].cstat |= (1 << sCType.CLOCK)
-        self.lc[0].t0[sCType.CLOCK] = self.time
-        self.lc[0].cstat |= (1 << sCType.ORBIT)
-        self.lc[0].t0[sCType.ORBIT] = self.time
+        self.lc[0].cstat |= (1 << sCType.CLOCK) | (1 << sCType.ORBIT)
+        self.lc[0].t0[sat] = {
+            sCType.CLOCK: self.time0, sCType.ORBIT: self.time0}
 
         self.iodssr_c[sCType.CLOCK] = self.iodssr
         self.iodssr_c[sCType.ORBIT] = self.iodssr

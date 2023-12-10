@@ -14,7 +14,6 @@ from cssrlib.peph import antModelRx, antModelTx
 from cssrlib.cssrlib import sCType
 from cssrlib.cssrlib import sCSSRTYPE as sc
 from cssrlib.mlambda import mlambda
-from cssrlib.rtk import ddidx
 
 # format definition for logging
 fmt_ztd = "{}         ztd      ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f}\n"
@@ -441,7 +440,7 @@ class pppos():
                 v[k] = sigc[sig.toAtt('X')]
         return v
 
-    def zdres(self, obs, cs, bsx, rs, vs, dts, rr):
+    def zdres(self, obs, cs, bsx, rs, vs, dts, rr, rtype=1):
         """ non-differential residual """
 
         _c = rCST.CLIGHT
@@ -535,7 +534,7 @@ class pppos():
                 pbias = np.array(
                     [-bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
 
-            else:  # from CSSR
+            elif cs is not None:  # from CSSR
 
                 if cs.lc[0].cstat & (1 << sCType.CBIAS) == (1 << sCType.CBIAS):
                     cbias = self.find_bias(cs, sigsPR, sat)
@@ -602,8 +601,10 @@ class pppos():
                                                  rr_, self.nav.phw[sat-1],
                                                  full=phw_mode)
 
-            # cycle -> m
-            phw = lam*self.nav.phw[sat-1]
+                # cycle -> m
+                phw = lam*self.nav.phw[sat-1]
+            else:
+                phw = np.zeros(nf)
 
             # Select APC reference signals
             #
@@ -631,8 +632,8 @@ class pppos():
 
             # Receiver/satellite antenna offset
             #
-            antrPR = antModelRx(self.nav, pos, e[i, :], sigsPR)
-            antrCP = antModelRx(self.nav, pos, e[i, :], sigsCP)
+            antrPR = antModelRx(self.nav, pos, e[i, :], sigsPR, rtype)
+            antrCP = antModelRx(self.nav, pos, e[i, :], sigsCP, rtype)
 
             if self.nav.ephopt == 4:
 
@@ -708,6 +709,8 @@ class pppos():
         nf = self.nav.nf  # number of frequencies (or signals)
         ns = len(el)  # number of satellites
         nc = len(obs.sig.keys())  # number of constellations
+
+        mode = 1 if len(y) == ns else 0  # 0:DD,1:SD
 
         nb = np.zeros(2*nc*nf, dtype=int)
 
@@ -791,9 +794,12 @@ class pppos():
                     if i == j:
                         continue
 
-                    #  Single-difference measurement
-                    #
-                    v[nv] = y[i, f] - y[j, f]
+                    if mode == 0:  # DD
+                        v[nv] = (y[i, f]-y[i+ns, f])-(y[j, f]-y[j+ns, f])
+                    else:
+                        #  Single-difference measurement
+                        #
+                        v[nv] = y[i, f] - y[j, f]
 
                     # SD line-of-sight vectors
                     #
@@ -968,12 +974,51 @@ class pppos():
                     nv += 1
         return xa
 
+    def ddidx(self, nav, sat):
+        """ index for SD to DD transformation matrix D """
+        nb = 0
+        n = uGNSS.MAXSAT
+        na = nav.na
+        ix = np.zeros((n, 2), dtype=int)
+        nav.fix = np.zeros((n, nav.nf), dtype=int)
+        for m in range(uGNSS.GNSSMAX):
+            k = na
+            for f in range(nav.nf):
+                for i in range(k, k+n):
+                    sat_i = i-k+1
+                    sys, _ = sat2prn(sat_i)
+                    if (sys != m):
+                        continue
+                    if sat_i not in sat or nav.x[i] == 0.0 \
+                       or nav.vsat[sat_i-1, f] == 0:
+                        continue
+                    if nav.el[sat_i-1] >= nav.elmaskar:
+                        nav.fix[sat_i-1, f] = 2
+                        break
+                    else:
+                        nav.fix[sat_i-1, f] = 1
+                for j in range(k, k+n):
+                    sat_j = j-k+1
+                    sys, _ = sat2prn(sat_j)
+                    if (sys != m):
+                        continue
+                    if i == j or sat_j not in sat or nav.x[j] == 0.0 \
+                       or nav.vsat[sat_j-1, f] == 0:
+                        continue
+                    if nav.el[sat_j-1] >= nav.elmaskar:
+                        ix[nb, :] = [i, j]
+                        nb += 1
+                        nav.fix[sat_j-1, f] = 2
+                k += n
+        ix = np.resize(ix, (nb, 2))
+        return ix
+
     def resamb_lambda(self, sat):
         """ resolve integer ambiguity using LAMBDA method """
         nx = self.nav.nx
         na = self.nav.na
         xa = np.zeros(na)
-        ix = ddidx(self.nav, sat)
+        ix = self.ddidx(self.nav, sat)
         nb = len(ix)
         if nb <= 0:
             print("no valid DD")
@@ -1034,15 +1079,18 @@ class pppos():
                 self.nav.x, self.nav.P, H[0:nv, :], v[0:nv], R)
         return 0
 
-    def qcedit(self, obs, rs, dts, svh):
+    def qcedit(self, obs, rs, dts, svh, rr=None):
         """ Coarse quality control and editing of observations """
 
         # Predicted position at next epoch
         #
         tt = timediff(obs.t, self.nav.t)
-        rr_ = self.nav.x[0:3].copy()
-        if self.nav.pmode > 0:
-            rr_ += self.nav.x[3:6]*tt
+        if rr is None:
+            rr_ = self.nav.x[0:3].copy()
+            if self.nav.pmode > 0:
+                rr_ += self.nav.x[3:6]*tt
+        else:
+            rr_ = rr
 
         # Solid Earth tide corrections
         #

@@ -173,7 +173,7 @@ class cssr_bds(cssr):
         self.iodssr = head['iodssr']
 
         self.lc[0].cstat |= (1 << sCType.MASK)
-        self.lc[0].t0[sCType.MASK] = self.time
+        # self.lc[0].t0[0][sCType.MASK] = self.time
         return i
 
     def decode_cssr_orb_sat(self, msg, i, inet, sat_n):
@@ -199,6 +199,11 @@ class cssr_bds(cssr):
         self.lc[inet].iodc[sat] = iodc
         self.lc[inet].dorb[sat] = dorb
         self.ura[sat] = self.quality_idx(ucls, uval)
+
+        if sat not in self.lc[inet].t0:
+            self.lc[inet].t0[sat] = {}
+
+        self.lc[inet].t0[sat][sCType.ORBIT] = self.time
         return i
 
     def decode_cssr_orb(self, msg, i, inet=0):
@@ -214,7 +219,7 @@ class cssr_bds(cssr):
 
         self.iodssr_c[sCType.ORBIT] = head['iodssr']
         self.lc[inet].cstat |= (1 << sCType.ORBIT)
-        self.lc[inet].t0[sCType.ORBIT] = self.time
+
         i += 19
         return i
 
@@ -237,6 +242,10 @@ class cssr_bds(cssr):
             sat = prn2sat(sys, prn)
             if sat not in sat_n:
                 continue
+            if sat not in self.lc[inet].t0:
+                self.lc[inet].t0[sat] = {}
+            self.lc[inet].t0[sat][sCType.CBIAS] = self.time
+
             self.lc[inet].cbias[sat] = {}
             for j in range(0, nsig):
                 sig, cb = bs.unpack_from('u4s12', msg, i)
@@ -246,7 +255,7 @@ class cssr_bds(cssr):
 
         self.iodssr_c[sCType.CBIAS] = head['iodssr']
         self.lc[inet].cstat |= (1 << sCType.CBIAS)
-        self.lc[inet].t0[sCType.CBIAS] = self.time
+
         return i
 
     def decode_cssr_clk_sat(self, msg, i, inet, sat):
@@ -279,10 +288,13 @@ class cssr_bds(cssr):
             if idx < self.nsat_n:
                 sat = self.sat_n[idx]
                 i = self.decode_cssr_clk_sat(msg, i, inet, sat)
+                if sat not in self.lc[inet].t0:
+                    self.lc[inet].t0[sat] = {}
+                self.lc[inet].t0[sat][sCType.CLOCK] = self.time
 
         self.iodssr_c[sCType.CLOCK] = head['iodssr']
         self.lc[inet].cstat |= (1 << sCType.CLOCK)
-        self.lc[inet].t0[sCType.CLOCK] = self.time
+
         i += 10
         return i
 
@@ -304,7 +316,7 @@ class cssr_bds(cssr):
                 self.ura[sat] = self.quality_idx(v['class'], v['val'])
 
         self.lc[0].cstat |= (1 << sCType.URA)
-        self.lc[0].t0[sCType.URA] = self.time
+        # self.lc[0].t0[0][sCType.URA] = self.time
         return i
 
     def decode_cssr_comb1(self, msg, i, inet=0):
