@@ -28,8 +28,8 @@ class peph_t:
             self.time = time
         else:
             self.time = gtime_t()
-        self.pos = np.zeros((uGNSS.MAXSAT, 4))
-        self.vel = np.zeros((uGNSS.MAXSAT, 4))
+        self.pos = np.ones((uGNSS.MAXSAT, 4))*np.nan
+        self.vel = np.ones((uGNSS.MAXSAT, 4))*np.nan
         self.std = np.zeros((uGNSS.MAXSAT, 4))
         self.vst = np.zeros((uGNSS.MAXSAT, 4))
 
@@ -175,7 +175,7 @@ class peph:
                                     continue
 
                                 val = float(line[4+j*14:18+j*14])
-                                if val != 0.0 and abs(val-999999.999999) >= 1e-6:
+                                if abs(val-999999.999999) >= 1e-6:
                                     scl = 1e3 if j < 3 else 1e-6
                                     if line[0] == 'P':
                                         v = True
@@ -275,12 +275,12 @@ class peph:
             dts[0] = c[1]
             if dts[0] != 0.0:
                 std = p_[1].std[sat-1, 3]*rCST.CLIGHT-EXTERR_CLK*t[1]
-        elif c[0] != 0.0 and c[1] != 0.0:
+        elif c[0] != np.nan and c[1] != np.nan:
             dts[0] = (c[1]*t[0]-c[0]*t[1])/(t[0]-t[1])
             i = 0 if t[0] < -t[1] else 1
             std = p_[i].std[sat-1, 3]+EXTERR_CLK*abs(t[i])
         else:
-            dts[0] = 0.0
+            dts[0] = np.nan
 
         if varc:
             varc = std**2
