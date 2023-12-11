@@ -13,7 +13,7 @@ import numpy as np
 import bitstruct as bs
 from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE, prn2sat, sCType
 from cssrlib.cssrlib import sat2id
-from cssrlib.gnss import uGNSS, rCST, gpst2time, timediff, timeadd
+from cssrlib.gnss import uGNSS, rCST, gpst2time, timediff, timeadd, time2gpst
 
 
 class cssr_pvs(cssr):
@@ -25,7 +25,9 @@ class cssr_pvs(cssr):
         self.sat_n = []
 
         self.lc[0].dclk = {}
+        self.lc[0].ddft = {}
         self.lc[0].dorb = {}
+        self.lc[0].dvel = {}
         self.lc[0].iode = {}
         self.lc[0].t0 = {}
 
@@ -94,12 +96,19 @@ class cssr_pvs(cssr):
             self.sat_n.append(sat)
 
         dorb = np.zeros(3)
+        dvel = np.zeros(3)
 
         dorb[0] = dx*0.0625
         dorb[1] = dy*0.0625
         dorb[2] = dz*0.0625
 
         dclk = db*0.03125
+
+        dvel[0] = dxd*0.00048828
+        dvel[1] = dyd*0.00048828
+        dvel[2] = dzd*0.00048828
+
+        ddft = dbd*0.00024414
 
         tow = self.tow0 + t0*16.0
         self.time = self.adjust_time_week(
@@ -108,6 +117,8 @@ class cssr_pvs(cssr):
         self.lc[0].iode[sat] = iodn
         self.lc[0].dorb[sat] = dorb
         self.lc[0].dclk[sat] = dclk
+        self.lc[0].dvel[sat] = dvel
+        self.lc[0].ddft[sat] = ddft
 
         self.iodssr = 0
         self.lc[0].cstat |= (1 << sCType.CLOCK) | (1 << sCType.ORBIT)
@@ -118,8 +129,8 @@ class cssr_pvs(cssr):
         self.iodssr_c[sCType.ORBIT] = self.iodssr
 
         if self.monlevel > 0:
-            print("{:.1f} {:3s} {:3d}".format(
-                tow, sat2id(sat), iodn))
+            self.fh.write("{:.1f} {:3s} {:3d}\n"
+                          .format(tow, sat2id(sat), iodn))
 
         return i
 
@@ -132,5 +143,10 @@ class cssr_pvs(cssr):
             self.subtype = sCSSR.ORBIT
             i = self.decode_cssr_orb(msg, i)
 
-        if self.monlevel > 0:
-            print(" mt={:2d} tow={:6.1f}".format(mt, self.tow))
+        if self.monlevel > 3:
+            if self.time != -1:
+                _, tow = time2gpst(self.time)
+            else:
+                tow = -1
+            self.fh.write("mt={:2d} tow={:6.1f}\n"
+                          .format(mt, tow))

@@ -302,7 +302,12 @@ def satposs(obs, nav, cs=None, orb=None):
                 iode = cs.lc[0].iode[sat]
                 dorb = cs.lc[0].dorb[sat]  # radial,along-track,cross-track
 
+                if cs.cssrmode == sc.PVS_PPP:
+                    dorb += cs.lc[0].dvel[sat] * \
+                        (timediff(obs.t, cs.lc[0].t0[sat][sCType.ORBIT]))
+
                 if cs.cssrmode == sc.BDS_PPP:  # consistency check for IOD corr
+
                     if cs.lc[0].iodc[sat] == cs.lc[0].iodc_c[sat]:
                         dclk = cs.lc[0].dclk[sat]
                     else:
@@ -312,6 +317,7 @@ def satposs(obs, nav, cs=None, orb=None):
                             continue
 
                 else:
+
                     if cs.cssrmode == sc.GAL_HAS_SIS:  # HAS only
                         if cs.mask_id != cs.mask_id_clk:  # mask has changed
                             if sat not in cs.sat_n_p:
@@ -328,6 +334,10 @@ def satposs(obs, nav, cs=None, orb=None):
                                 continue
 
                     dclk = cs.lc[0].dclk[sat]
+
+                    if cs.cssrmode == sc.PVS_PPP:
+                        dclk += cs.lc[0].ddft[sat] * \
+                            (timediff(obs.t, cs.lc[0].t0[sat][sCType.CLOCK]))
 
                 if np.isnan(dclk) or np.isnan(dorb@dorb):
                     continue
@@ -400,6 +410,9 @@ def satposs(obs, nav, cs=None, orb=None):
 
                 rs[i, :] -= dorb_e
                 dts[i] += dclk/rCST.CLIGHT
+
+                if cs.cssrmode == sc.PVS_PPP and sys == uGNSS.GPS:
+                    dts[i] -= eph.tgd
 
                 ers = vnorm(rs[i, :]-nav.x[0: 3])
                 dorb_ = -ers@dorb_e
