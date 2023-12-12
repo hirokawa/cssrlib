@@ -38,6 +38,8 @@ if True:
     nav = sp.parse_sp3(orbfile, nav)
     nav = rnx.decode_clk(clkfile, nav)
 
+    sp.write_sp3('output.sp3', nav)
+
     n = 10
     rs = np.zeros((1, 6))
     dts = np.zeros((1, 2))
