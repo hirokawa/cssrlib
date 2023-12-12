@@ -212,12 +212,15 @@ class peph:
 
             # Write header section
             #
+
+            # Epoch lines
+            #
             t0 = nav.peph[0].time
             e = time2epoch(t0)
             ne = len(nav.peph)
 
-            fh.write("#dP{:04d} {:02d} {:02d} {:02d} {:02d} {:011.8f} {:8d} d+D\n"
-                     .format(e[0], e[1], e[2], e[3], e[4], e[5], ne))
+            fh.write("#dP{:04d} {:02d} {:02d} {:02d} {:02d} {:011.8f} {:7d} d+D {:16s}\n"
+                     .format(e[0], e[1], e[2], e[3], e[4], e[5], ne, ' '))
 
             week, secs = time2gpst(t0)
             tstep = timediff(nav.peph[1].time, t0)
@@ -227,9 +230,18 @@ class peph:
             fh.write("## {:04d} {:15.8f} {:14.8f} {:5n} {:15.13f}\n"
                      .format(week, secs, tstep, mjd, fod))
 
+            # Satellite list and accuracy indicators
             #
-            # Add satellite list here!!
-            #
+            for i in range(int(np.ceil(self.nsat / 17))):
+
+                nsat = "{:4n}".format(self.nsat) if i == 0 else "    "
+                prns = [sat2id(s) for s in self.sat[i*17:i*17+17]]
+                fh.write('+ {}   {:51s}\n'.format(nsat, ''.join(prns)))
+
+            for i in range(int(self.nsat / 17+1)):
+
+                accs = ['  0' for s in self.sat[i*17:i*17+17]]
+                fh.write('++{}   {:51s}\n'.format('    ', ''.join(accs)))
 
             fh.write(
                 '%c M  cc GPS ccc cccc cccc cccc cccc ccccc ccccc ccccc ccccc\n')
@@ -245,56 +257,37 @@ class peph:
             fh.write(
                 '%i    0    0    0    0      0      0      0      0         0\n')
 
+            # Comment section
+            #
             fh.write('/* \n')
-
-            """
-            #dP2023  8 11  0  0  0.00000000     289 d+D   IGS20 FIT AIUB
-            ## 2274 432000.00000000   300.00000000 60167 0.0000000000000
-            +  118   G01G02G03G04G05G06G07G08G09G10G11G12G13G14G15G16G17
-            +        G18G19G20G21G23G24G25G26G27G28G29G30G31G32R01R02R03
-            +        R04R05R07R08R09R11R12R13R14R15R16R17R18R19R20R21R22
-            +        R24R25E02E03E04E05E07E08E09E10E11E12E13E14E15E18E19
-            +        E21E24E25E26E27E30E31E33E34E36C06C07C08C09C10C11C12
-            +        C13C14C16C19C20C21C22C23C24C25C26C27C28C29C30C32C33
-            +        C34C35C36C37C38C39C40C41C42C43C44C45C46J02J03J04  0
-            ++         5  5  5  5  5  5  5  5  5  5  5  5  5  5  5  5  5
-            ++         5  5  5  5  5  5  5  5  5  5  5  5  5  5  5  5  5
-            ++         5  5  5  5  5  5  5  5  5  5  5  5  5  5  5  5  5
-            ++         5  5  5  5  5  5  5  5  5  5  5  5  5  5  5  5  5
-            ++         5  5  8  5  5  5  5  5  5  5  5  5  5  5  5  5  5
-            ++         5  5  5  5  5  5  5  5  5  5  5  5  5  5  5  5  5
-            ++         5  5  5  5  5  5  5  5  5  5  5  5  5  5  5  5  0
-            %c M  cc GPS ccc cccc cccc cccc cccc ccccc ccccc ccccc ccccc
-            %c cc cc ccc ccc cccc cccc cccc cccc ccccc ccccc ccccc ccccc
-            %f  1.2500000  1.025000000  0.00000000000  0.000000000000000
-            %f  0.0000000  0.000000000  0.00000000000  0.000000000000000
-            %i    0    0    0    0      0      0      0      0         0
-            %i    0    0    0    0      0      0      0      0         0
-            /* Center for Orbit Determination in Europe (CODE)
-            /* MGEX orbits and clocks for year-day 2023-2230
-            /* Middle day of a 3-day long-arc multi-GNSS solution
-            /* Systems considered: GPS/GLONASS/Galileo/BeiDou/QZSS
-            /* Product reference - DOI 10.7892/boris.75882.3
-            /* PCV:IGS20      OL/AL:FES2014b NONE     YN ORB:CoN CLK:CoN
-            """
 
             # Write data section
             #
             for peph in nav.peph:
+
                 e = time2epoch(peph.time)
+
                 fh.write("*  {:04d} {:02d} {:02d} {:02d} {:02d} {:011.8f}\n"
                          .format(e[0], e[1], e[2], e[3], e[4], e[5]))
+
                 for sat in self.sat:
-                    if np.isnan(peph.pos[sat+1][0:3]).any():
+
+                    if np.isnan(peph.pos[sat-1][0:3]).any():
                         continue
+
                     clk = 0.999999999999 \
-                        if np.isnan(peph.pos[sat+1][3]) else peph.pos[sat+1][3]
+                        if np.isnan(peph.pos[sat-1][3]) else peph.pos[sat-1][3]
+
                     fh.write("P{:3s} {:13.6f} {:13.6f} {:13.6f} {:13.6f}\n"
                              .format(sat2id(sat),
-                                     peph.pos[sat+1][0]*1e-3,
-                                     peph.pos[sat+1][1]*1e-3,
-                                     peph.pos[sat+1][2]*1e-3,
+                                     peph.pos[sat-1][0]*1e-3,
+                                     peph.pos[sat-1][1]*1e-3,
+                                     peph.pos[sat-1][2]*1e-3,
                                      clk*1e+6))
+
+            # Terminate file
+            #
+            fh.write('EOF\n')
 
     def interppol(self, x, y, n):
         for j in range(1, n):
