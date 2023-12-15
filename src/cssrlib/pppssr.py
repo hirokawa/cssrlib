@@ -631,6 +631,13 @@ class pppos():
                     elif sys == uGNSS.BDS:
                         sig0 = (rSigRnx("CC6I"),)
 
+                elif cs.cssrmode == sc.PVS_PPP:
+
+                    if sys == uGNSS.GPS:
+                        sig0 = (rSigRnx("GC1C"), rSigRnx("GC5Q"))
+                    elif sys == uGNSS.GAL:
+                        sig0 = (rSigRnx("EC1C"), rSigRnx("EC5Q"))
+
             # Receiver/satellite antenna offset
             #
             antrPR = antModelRx(self.nav, pos, e[i, :], sigsPR, rtype)
@@ -638,14 +645,15 @@ class pppos():
 
             if self.nav.ephopt == 4:
 
-                antsPR = antModelTx(
-                    self.nav, e[i, :], sigsPR, sat, obs.t, rs[i, :])
-                antsCP = antModelTx(
-                    self.nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
+                antsPR = antModelTx(self.nav, e[i, :], sigsPR,
+                                    sat, obs.t, rs[i, :])
+                antsCP = antModelTx(self.nav, e[i, :], sigsCP,
+                                    sat, obs.t, rs[i, :])
 
             elif cs is not None and (cs.cssrmode == sc.GAL_HAS_SIS or
                                      cs.cssrmode == sc.GAL_HAS_IDD or
                                      cs.cssrmode == sc.QZS_MADOCA or
+                                     cs.cssrmode == sc.PVS_PPP or
                                      cs.cssrmode == sc.BDS_PPP):
 
                 antsPR = antModelTx(self.nav, e[i, :], sigsPR,

@@ -2,7 +2,6 @@
 Test script for peph module
 """
 import numpy as np
-from os.path import expanduser
 
 from cssrlib.peph import atxdec, biasdec, peph
 from cssrlib.peph import searchpcv, antModelRx, antModelTx
@@ -36,6 +35,8 @@ if True:
     sp = peph()
 
     nav = sp.parse_sp3(orbfile, nav)
+    sp.write_sp3('test_peph.sp3', nav)
+
     nav = rnx.decode_clk(clkfile, nav)
 
     n = 10
