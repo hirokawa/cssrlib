@@ -253,6 +253,9 @@ class rnxdec:
                             self.mode_nav = 0
                         line = fnav.readline()
 
+                elif self.ver >= 3.0:  # RINEX 3.0.x
+                    self.mode_nav = 0
+
                 # Process ephemeris information
                 #
                 sys = char2sys(line[0])
@@ -384,6 +387,10 @@ class rnxdec:
                 if sys == uGNSS.GAL or self.mode_nav == 0:
                     eph.code = int(self.flt(line, 1))  # source for GAL
                     eph.week = int(self.flt(line, 2))
+
+                    if sys == uGNSS.GAL and self.ver < 4.0:
+                        eph.mode = 1 if eph.code & 0x2 else 0
+
                 else:
                     eph.delnd = self.flt(line, 1)
                     if sys == uGNSS.BDS:

@@ -14,6 +14,30 @@ import bitstruct as bs
 from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE, prn2sat, sCType
 from cssrlib.cssrlib import sat2id
 from cssrlib.gnss import uGNSS, rCST, gpst2time, timediff, timeadd, time2gpst
+from binascii import unhexlify
+
+
+def decode_sinca_line(line):
+    """ SINCA (SISNeT compression algorithm) decoder  """
+    if line[0:4] != '*MSG':
+        return None
+    v = line.split(',')
+    s = v[3]
+    week, tow = int(v[1]), int(v[2])
+    t = gpst2time(week, tow)
+    for key in '|/':
+        if key in s:
+            while True:
+                pos = s.find(key)
+                if pos < 0:
+                    break
+                c = s[pos-1]
+                k = 2 if key == '|' else 3
+                n = int(s[pos+1:pos+k], 16)
+                s = s.replace(s[pos-1:pos+k], c*n, 1)
+
+    sb = unhexlify(s.split('*')[0])
+    return t, sb
 
 
 class cssr_pvs(cssr):
@@ -115,9 +139,9 @@ class cssr_pvs(cssr):
             gpst2time(self.week, tow), self.time0)
 
         self.lc[0].iode[sat] = iodn
-        self.lc[0].dorb[sat] = dorb
+        self.lc[0].dorb[sat] = -dorb
         self.lc[0].dclk[sat] = dclk
-        self.lc[0].dvel[sat] = dvel
+        self.lc[0].dvel[sat] = -dvel
         self.lc[0].ddft[sat] = ddft
 
         self.iodssr = 0
