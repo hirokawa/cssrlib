@@ -30,10 +30,10 @@ pip install bitstruct galois crccheck pysolid
 pip install notebook numpy matplotlib
 ```
 
-Optionally, on linux, users can install the `cartopy` package
+Optionally, on linux, users can install the `cartopy` package and the `PySolid` package
 
 ```
-pip install cartopy
+pip install cartopy pysolid
 ```
 
 If the installation of `cartopy` fails, try installing `libgeos++-dev` first.
@@ -74,9 +74,14 @@ Run RTK sample.
  python test_rtk.py
 ```
 
-Other samples are also available in a separate repository [`cssrlib-data`](https://github.com/hirokawa/cssrlib-data) including :
+Other samples with dataset are also available in a separate repository [`cssrlib-data`](https://github.com/hirokawa/cssrlib-data) including :
 
-- Galileo-HAS decoder
-- BDS-PPP decoder
-- Jupyter-Notebook including samples for RTK/PPP-RTK.
+- Galileo-HAS PPP (SIS/IDD) processing example
+- BDS-PPP processing example
+- QZSS MADOCA-PPP processing example
+- QZSS CLAS PPP-RTK processing example
+- IGS (SP3+BIAS) PPP-AR processing example
+- (experimental) PPP via SouthPAN (PVS) processing example
+- Binary message parser for Septentrio receiver (Mosaic/PolaRX5)
+
 

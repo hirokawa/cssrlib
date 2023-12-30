@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 # [1.0.0] 2024-01-01
 
 ### Added
-New class structure for PPP/PPP-RTK/RTK processing
+New integrated class structure (PPPOS) for PPP/PPP-RTK/RTK processing
 
 Support for RTCM3 (Galileo HAS IDD)
 
@@ -17,13 +17,20 @@ Parser for RTCM3, L5 SBAS
 
 Experimental support for PPP via SouthPAN (PVS)
 
+New solid Earth tides model using PySolid (2010 IERS Conventions) 
+
 ### Changed
 
 Improved documentation
 
 Sign of SSR satellite signal code/phase bias align with RTCM 3 convention
 
+PPPIGS was integrated into PPPOS and removed
+
 ### Fixed
+
+Link for cssrlib-data
+
 ### Deprecated
 ### Removed
 Function based PPP/PPP-RTK/RTK processing
@@ -47,6 +54,8 @@ Jupyter notebook with examples
 ### Changed
 
 Improved documentation
+
+Added link for Google Colab
 
 ### Fixed
 ### Deprecated
