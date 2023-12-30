@@ -8,7 +8,7 @@ import sys
 
 import cssrlib.rinex as rn
 import cssrlib.gnss as gn
-from cssrlib.rtk import rtkinit, relpos
+from cssrlib.rtk import rtkpos
 from cssrlib.gnss import rSigRnx
 from cssrlib.peph import atxdec, searchpcv
 
@@ -25,13 +25,13 @@ pos_ref = gn.ecef2pos(xyz_ref)
 #
 sigs = [rSigRnx("GC1C"), rSigRnx("GC2W"),
         rSigRnx("EC1C"), rSigRnx("EC5Q"),
-        rSigRnx("GL1C"), rSigRnx("GL2W"),
-        rSigRnx("EL1C"), rSigRnx("EL5Q")]
+        rSigRnx("GL1C"), rSigRnx("GL2W"), rSigRnx("GS1C"), rSigRnx("GS2W"),
+        rSigRnx("EL1C"), rSigRnx("EL5Q"), rSigRnx("ES1C"), rSigRnx("ES5Q")]
 
 sigsb = [rSigRnx("GC1C"), rSigRnx("GC2W"),
          rSigRnx("EC1X"), rSigRnx("EC5X"),
-         rSigRnx("GL1C"), rSigRnx("GL2W"),
-         rSigRnx("EL1X"), rSigRnx("EL5X")]
+         rSigRnx("GL1C"), rSigRnx("GL2W"), rSigRnx("GS1C"), rSigRnx("GS2W"),
+         rSigRnx("EL1X"), rSigRnx("EL5X"), rSigRnx("ES1X"), rSigRnx("ES5X")]
 
 # rover
 #
@@ -79,13 +79,14 @@ t = np.zeros(nep)
 enu = np.zeros((nep, 3))
 smode = np.zeros(nep, dtype=int)
 
-rtkinit(nav, dec.pos)
+rtk = rtkpos(nav, dec.pos, 'test_rtk.log')
 rr = dec.pos
+
 for ne in range(nep):
     obs, obsb = rn.sync_obs(dec, decb)
     if ne == 0:
         t0 = nav.t = obs.t
-    relpos(nav, obs, obsb)
+    rtk.process(obs, obsb=obsb)
     t[ne] = gn.timediff(nav.t, t0)
     sol = nav.xa[0:3] if nav.smode == 4 else nav.x[0:3]
     enu[ne, :] = gn.ecef2enu(pos_ref, sol-xyz_ref)

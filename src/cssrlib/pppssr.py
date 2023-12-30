@@ -1282,6 +1282,10 @@ class pppos():
             y, e, iu, obs_ = self.base_process(obs, obsb, rs, dts, svh)
             ns = len(iu)
 
+        if ns < 6:
+            print(" too few satellites < 6: ns={:d}".format(ns))
+            return
+
         # Kalman filter time propagation, initialization of ambiguities
         # and iono
         #

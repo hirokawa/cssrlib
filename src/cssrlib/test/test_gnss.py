@@ -53,5 +53,8 @@ print(sys2char(sig.sys), sig.str())
 sig = rSigRnx(uGNSS.IRN, uTYP.S, uSIG.L1X)
 print(sys2char(sig.sys), sig.str())
 
-sig = rSigRnx(uGNSS.GPS, "D1X", "what??")
-print(sys2char(sig.sys), sig.str())
+try:
+    sig = rSigRnx(uGNSS.GPS, "D1X", "what??")
+    print(sys2char(sig.sys), sig.str())
+except ValueError:
+    print("error in value.")
