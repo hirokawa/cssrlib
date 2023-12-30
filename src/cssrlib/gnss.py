@@ -722,6 +722,11 @@ class Nav():
         self.ephopt = 2  # ephemeris option 0: BRDC, 1: SBAS, 2: SSR-APC,
         #                  3: SSR-CG, 4: PREC
 
+        # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
+        self.armode = 0
+        self.thresar = 3.0  # AR acceptance threshold
+        self.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
+
         # Select tropospheric model
         #
         self.trpModel = uTropoModel.SAAST

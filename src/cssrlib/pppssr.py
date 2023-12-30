@@ -14,7 +14,6 @@ from cssrlib.peph import antModelRx, antModelTx
 from cssrlib.cssrlib import sCType
 from cssrlib.cssrlib import sCSSRTYPE as sc
 from cssrlib.mlambda import mlambda
-from copy import deepcopy
 
 # format definition for logging
 fmt_ztd = "{}         ztd      ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f}\n"
@@ -631,13 +630,6 @@ class pppos():
                     elif sys == uGNSS.BDS:
                         sig0 = (rSigRnx("CC6I"),)
 
-                elif cs.cssrmode == sc.PVS_PPP:
-
-                    if sys == uGNSS.GPS:
-                        sig0 = (rSigRnx("GC1C"), rSigRnx("GC5Q"))
-                    elif sys == uGNSS.GAL:
-                        sig0 = (rSigRnx("EC1C"), rSigRnx("EC5Q"))
-
             # Receiver/satellite antenna offset
             #
             antrPR = antModelRx(self.nav, pos, e[i, :], sigsPR, rtype)
@@ -645,15 +637,14 @@ class pppos():
 
             if self.nav.ephopt == 4:
 
-                antsPR = antModelTx(self.nav, e[i, :], sigsPR,
-                                    sat, obs.t, rs[i, :])
-                antsCP = antModelTx(self.nav, e[i, :], sigsCP,
-                                    sat, obs.t, rs[i, :])
+                antsPR = antModelTx(
+                    self.nav, e[i, :], sigsPR, sat, obs.t, rs[i, :])
+                antsCP = antModelTx(
+                    self.nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
 
             elif cs is not None and (cs.cssrmode == sc.GAL_HAS_SIS or
                                      cs.cssrmode == sc.GAL_HAS_IDD or
                                      cs.cssrmode == sc.QZS_MADOCA or
-                                     cs.cssrmode == sc.PVS_PPP or
                                      cs.cssrmode == sc.BDS_PPP):
 
                 antsPR = antModelTx(self.nav, e[i, :], sigsPR,
@@ -1250,36 +1241,9 @@ class pppos():
         return np.array(sat, dtype=int)
 
     def base_process(self, obs, obsb, rs, dts, svh):
-        """ processing for base station in RTK """
-
-        rsb, vsb, dtsb, svhb, _ = satposs(obsb, self.nav)
-        yr, er, elr = self.zdres(
-            obsb, None, None, rsb, vsb, dtsb, self.nav.rb, 0)
-        # ns, iu, ir = self.selsat(obs, obsb, elr)
-
-        # Editing observations (base/rover)
-        sat_ed_r = self.qcedit(obsb, rsb, dtsb, svhb)
-        sat_ed_u = self.qcedit(obs, rs, dts, svh)
-
-        # define common satellite between base and rover
-        sat_ed = np.intersect1d(sat_ed_u, sat_ed_r, True)
-        ir = np.intersect1d(obsb.sat, sat_ed, True, True)[1]
-        iu = np.intersect1d(obs.sat, sat_ed, True, True)[1]
-
-        ns = len(iu)
-
-        y = np.zeros((ns*2, self.nav.nf*2))
-        e = np.zeros((ns*2, 3))
-
-        y[ns:, :] = yr[ir, :]
-        e[ns:, :] = er[ir, :]
-
-        obs_ = deepcopy(obs)
-        obs_.sat = obs.sat[iu]
-        obs_.L = obs.L[iu, :]-obsb.L[ir, :]
-        obs_.P = obs.P[iu, :]-obsb.P[ir, :]
-
-        return y, e, iu, obs_
+        """ processing for base station in RTK
+            (implemented in rtkpos) """
+        return None, None, None, None
 
     def process(self, obs, cs=None, orb=None, bsx=None, obsb=None):
         """
@@ -1300,11 +1264,11 @@ class pppos():
             print(" too few satellites < 6: nsat={:d}".format(nsat))
             return
 
-        if obsb is None:  # PPP/PPP-RTK
-            # Editing of observations
-            #
-            sat_ed = self.qcedit(obs, rs, dts, svh)
+        # Editing of observations
+        #
+        sat_ed = self.qcedit(obs, rs, dts, svh)
 
+        if obsb is None:  # PPP/PPP-RTK
             # Select satellites having passed quality control
             #
             # index of valid sats in obs.sat
