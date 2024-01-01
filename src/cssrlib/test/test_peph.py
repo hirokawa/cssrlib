@@ -2,29 +2,30 @@
 Test script for peph module
 """
 import numpy as np
-from os.path import expanduser
 
 from cssrlib.peph import atxdec, biasdec, peph
 from cssrlib.peph import searchpcv, antModelRx, antModelTx
 from cssrlib.rinex import rnxdec
 from cssrlib.gnss import Nav
-from cssrlib.gnss import epoch2time, time2epoch, timeadd
+from cssrlib.gnss import epoch2time, time2epoch, time2doy, timeadd
 from cssrlib.gnss import sat2id, id2sat, sys2char
 from cssrlib.gnss import rSigRnx
 from cssrlib.gnss import pos2ecef, enu2xyz
 
+ep = [2021, 9, 22, 12, 0, 0]
+time = epoch2time(ep)
+doy = int(time2doy(time))
 
-bdir = expanduser('../../../../cssrlib-data/data/')
+bdir = '../../../../cssrlib-data/data/'
+orbfile = bdir+"COD0MGXFIN_{:4d}{:03d}0000_01D_05M_ORB.SP3".format(ep[0], doy)
+clkfile = bdir+"COD0MGXFIN_{:4d}{:03d}0000_01D_30S_CLK.CLK".format(ep[0], doy)
+dcbfile = bdir+"COD0MGXFIN_{:4d}{:03d}0000_01D_01D_OSB.BIA".format(ep[0], doy)
 atxfile = bdir+"igs14.atx"
-orbfile = bdir+"COD0OPSRAP_20210780000_01D_15M_ORB.SP3"
-clkfile = bdir+"COD0OPSRAP_20210780000_01D_30S_CLK.CLK"
-dcbfile = bdir+"COD0OPSRAP_20210780000_01D_01D_OSB.BIA"
 
-time = epoch2time([2021, 3, 19, 12, 0, 0])
 sat = id2sat("G01")
 sig = rSigRnx("GC1C")
 
-if False:
+if True:
 
     print("Test SP3 and Clock-RINEX module")
     print()
@@ -34,16 +35,20 @@ if False:
     sp = peph()
 
     nav = sp.parse_sp3(orbfile, nav)
+    sp.write_sp3('test_peph.sp3', nav)
+
     nav = rnx.decode_clk(clkfile, nav)
 
     n = 10
     rs = np.zeros((1, 6))
     dts = np.zeros((1, 2))
     for k in range(n):
+
         t = timeadd(time, 30*k)
+        ep = time2epoch(t)
+
         rs[0, :], dts[0, :], var = sp.peph2pos(t, sat, nav)
 
-        ep = time2epoch(t)
         print("{:4d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}  {:s}  "
               "{:15.4f} {:15.4f} {:15.4f} {:15.6f}"
               .format(ep[0], ep[1], ep[2], ep[3], ep[4], ep[5], sat2id(sat),
@@ -51,7 +56,7 @@ if False:
 
     print()
 
-if True:
+if False:
 
     print("Test ANTEX module")
     print()

@@ -15,7 +15,6 @@ It supports the following open format:
 ************************************************
 Click this button for a quick demo in Google Colab
 
-
 <a target="_blank" href="https://colab.research.google.com/github/hirokawa/cssrlib/blob/main/tutorials/cssrlib.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
@@ -27,14 +26,14 @@ Prerequisites
 Additional python packages are required as prerequisites and can be installed via the following commands
 
 ```
-pip install bitstruct galois crccheck
+pip install bitstruct galois crccheck pysolid
 pip install notebook numpy matplotlib
 ```
 
-Optionally, on linux, users can install the `cartopy` package
+Optionally, on linux, users can install the `cartopy` package and the `PySolid` package
 
 ```
-pip install cartopy
+pip install cartopy pysolid
 ```
 
 If the installation of `cartopy` fails, try installing `libgeos++-dev` first.
@@ -75,9 +74,14 @@ Run RTK sample.
  python test_rtk.py
 ```
 
-Other samples are also available in a separate repository [`cssrlib-data`](https://github.com/hirokawa/cssrlib-data) including :
+Other samples with dataset are also available in a separate repository [`cssrlib-data`](https://github.com/hirokawa/cssrlib-data) including :
 
-- Galileo-HAS decoder
-- BDS-PPP decoder
-- Jupyter-Notebook including samples for RTK/PPP-RTK.
+- Galileo-HAS PPP (SIS/IDD) processing example
+- BDS-PPP processing example
+- QZSS MADOCA-PPP processing example
+- QZSS CLAS PPP-RTK processing example
+- IGS (SP3+BIAS) PPP-AR processing example
+- (experimental) PPP via SouthPAN (PVS) processing example
+- Binary message parser for Septentrio receiver (Mosaic/PolaRX5)
+
 

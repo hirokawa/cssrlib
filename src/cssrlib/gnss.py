@@ -30,11 +30,14 @@ class rCST():
     OMGE_BDS = 7.2921150E-5
     RE_WGS84 = 6378137.0
     FE_WGS84 = (1.0/298.257223563)
+    RE_GLO = 6378136.0
     AU = 149597870691.0
     D2R = 0.017453292519943295
     R2D = 57.29577951308232
     AS2R = D2R/3600.0
     DAY_SEC = 86400.0
+    WEEK_SEC = 604800.0
+    HALFWEEK_SEC = 302400.0
     CENTURY_SEC = DAY_SEC*36525.0
 
     FREQ_G1 = 1575.42e6      # [Hz] GPS L1
@@ -416,8 +419,8 @@ class rSigRnx():
                    (s[2] == '5' and s[2] not in 'IQX'):
                     raise ValueError
             elif sys == uGNSS.GLO:
-                if (s[1] == '1' and s[2] not in 'CP') or \
-                   (s[1] == '2' and s[2] not in 'CP') or \
+                if (s[1] == '1' and s[2] not in 'CPX') or \
+                   (s[1] == '2' and s[2] not in 'CPX') or \
                    (s[1] == '3' and s[2] not in 'IQX') or \
                    (s[1] == '4' and s[2] not in 'ABX') or \
                    (s[1] == '6' and s[2] not in 'ABX'):
@@ -638,9 +641,9 @@ class Eph():
     sattype = 0
     sismai = 0
     code = 0
-    urai = np.zeros(3)
-    sisai = np.zeros(4)
-    isc = np.zeros(6)
+    urai = None
+    sisai = None
+    isc = None
     integ = 0
     # 0:LNAV,INAV,D1/D2, 1:CNAV/CNAV1/FNAV, 2: CNAV2, 3: CNAV3, 4:FDMA, 5:SBAS
     mode = 0
@@ -659,13 +662,14 @@ class Geph():
     age = 0.0
     toe = gtime_t()
     tof = gtime_t()
-    pos = np.zeros(3)
-    vel = np.zeros(3)
-    acc = np.zeros(3)
+    pos = None
+    vel = None
+    acc = None
     taun = 0.0         # SV clock bias [s]
     gamn = 0.0         # relative frq bias
     dtaun = 0.0        # delta between L1 and L2 [s]
     mode = 0
+    status = 0
 
     def __init__(self, sat=0):
         self.sat = sat
@@ -695,6 +699,8 @@ class Nav():
 
     def __init__(self, nf=2):
         self.eph = []
+        self.geph = []
+        self.seph = []
         self.peph = []
         self.ion = np.array([
             [0.1118E-07, -0.7451E-08, -0.5961E-07, 0.1192E-06],
@@ -715,6 +721,24 @@ class Nav():
         self.pmode = 1  # 0: static, 1: kinematic
         self.ephopt = 2  # ephemeris option 0: BRDC, 1: SBAS, 2: SSR-APC,
         #                  3: SSR-CG, 4: PREC
+
+        # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
+        self.armode = 0
+        self.thresar = 3.0  # AR acceptance threshold
+        self.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
+
+        # Select tropospheric model
+        #
+        self.trpModel = uTropoModel.SAAST
+
+        # 0: use trop-model, 1: estimate, 2: use cssr correction
+        self.trop_opt = 0
+
+        # 0: use iono-model, 1: estimate, 2: use cssr correction
+        self.iono_opt = 0
+
+        # 0: none, 1: full model, 2: local/regional model
+        self.phw_opt = 1
 
         self.monlevel = 1
         self.cnr_min = 25
@@ -741,6 +765,9 @@ class Nav():
 
         self.tt = 0
         self.t = gtime_t()
+
+        # GLONASS frequency channel table
+        self.glo_ch = {}
 
 
 def epoch2time(ep):
@@ -927,7 +954,7 @@ def time2epoch(t):
 
 
 def time2doy(t):
-    """ convert time to epoch """
+    """ convert time to day of year (as float value!) """
     ep = time2epoch(t)
     ep[1] = ep[2] = 1.0
     ep[3] = ep[4] = ep[5] = 0.0
@@ -949,6 +976,15 @@ def time2str(t):
     e = time2epoch(t)
     return "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}"\
         .format(e[0], e[1], e[2], e[3], e[4], int(e[5]))
+
+
+def adjtime(t: gtime_t, tref: gtime_t, dt=rCST.WEEK_SEC):
+    tt = timediff(t, tref)
+    if tt < -dt/2.0:
+        return timeadd(t, dt)
+    if tt > dt/2.0:
+        return timeadd(t, -dt)
+    return t
 
 
 def prn2sat(sys, prn):

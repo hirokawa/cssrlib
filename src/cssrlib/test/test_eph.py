@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import numpy as np
 from cssrlib.rinex import rnxdec
-from cssrlib.gnss import Nav, epoch2time, prn2sat, uGNSS, sat2prn,\
+from cssrlib.gnss import Nav, epoch2time, prn2sat, uGNSS, sat2prn, \
     timeadd, ecef2pos
 from cssrlib.ephemeris import findeph, eph2pos
 

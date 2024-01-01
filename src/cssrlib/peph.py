@@ -5,9 +5,10 @@ Created on Sun Aug 22 21:01:49 2021
 @author: ruihi
 """
 
-from cssrlib.gnss import Nav, id2sat, sat2id, char2sys
+from cssrlib.gnss import Nav, id2sat, sat2id, char2sys, sat2prn
 from cssrlib.gnss import epoch2time, time2epoch, timeadd, timediff, gtime_t
-from cssrlib.gnss import str2time, gpst2utc, utc2gpst
+from cssrlib.gnss import str2time, time2str, time2doy
+from cssrlib.gnss import gpst2utc, utc2gpst, time2gpst
 from cssrlib.gnss import ecef2enu
 from cssrlib.gnss import rCST, rSigRnx, uGNSS, uTYP, uSIG
 
@@ -28,8 +29,8 @@ class peph_t:
             self.time = time
         else:
             self.time = gtime_t()
-        self.pos = np.zeros((uGNSS.MAXSAT, 4))
-        self.vel = np.zeros((uGNSS.MAXSAT, 4))
+        self.pos = np.ones((uGNSS.MAXSAT, 4))*np.nan
+        self.vel = np.ones((uGNSS.MAXSAT, 4))*np.nan
         self.std = np.zeros((uGNSS.MAXSAT, 4))
         self.vst = np.zeros((uGNSS.MAXSAT, 4))
 
@@ -175,7 +176,7 @@ class peph:
                                     continue
 
                                 val = float(line[4+j*14:18+j*14])
-                                if val != 0.0 and abs(val-999999.999999) >= 1e-6:
+                                if abs(val-999999.999999) >= 1e-6:
                                     scl = 1e3 if j < 3 else 1e-6
                                     if line[0] == 'P':
                                         v = True
@@ -201,6 +202,92 @@ class peph:
                         nav.peph.append(peph)
 
         return nav
+
+    def write_sp3(self, fname, nav):
+        """
+        Write data to SP3 file
+        """
+
+        with open(fname, "w") as fh:
+
+            # Write header section
+            #
+
+            # Epoch lines
+            #
+            t0 = nav.peph[0].time
+            e = time2epoch(t0)
+            ne = len(nav.peph)
+
+            fh.write("#dP{:04d} {:02d} {:02d} {:02d} {:02d} {:011.8f} {:7d} d+D {:16s}\n"
+                     .format(e[0], e[1], e[2], e[3], e[4], e[5], ne, ' '))
+
+            week, secs = time2gpst(t0)
+            tstep = timediff(nav.peph[1].time, t0)
+            mjd = 44244 + 7*week + int(secs/86400.0)
+            fod = time2doy(t0) % 1
+
+            fh.write("## {:04d} {:15.8f} {:14.8f} {:5n} {:15.13f}\n"
+                     .format(week, secs, tstep, mjd, fod))
+
+            # Satellite list and accuracy indicators
+            #
+            for i in range(int(np.ceil(self.nsat / 17))):
+
+                nsat = "{:4n}".format(self.nsat) if i == 0 else "    "
+                prns = [sat2id(s) for s in self.sat[i*17:i*17+17]]
+                fh.write('+ {}   {:51s}\n'.format(nsat, ''.join(prns)))
+
+            for i in range(int(self.nsat / 17+1)):
+
+                accs = ['  0' for s in self.sat[i*17:i*17+17]]
+                fh.write('++{}   {:51s}\n'.format('    ', ''.join(accs)))
+
+            fh.write(
+                '%c M  cc GPS ccc cccc cccc cccc cccc ccccc ccccc ccccc ccccc\n')
+            fh.write(
+                '%c cc cc ccc ccc cccc cccc cccc cccc ccccc ccccc ccccc ccccc\n')
+
+            fh.write(
+                '%f  1.2500000  1.025000000  0.00000000000  0.000000000000000\n')
+            fh.write(
+                '%f  0.0000000  0.000000000  0.00000000000  0.000000000000000\n')
+            fh.write(
+                '%i    0    0    0    0      0      0      0      0         0\n')
+            fh.write(
+                '%i    0    0    0    0      0      0      0      0         0\n')
+
+            # Comment section
+            #
+            fh.write('/* \n')
+
+            # Write data section
+            #
+            for peph in nav.peph:
+
+                e = time2epoch(peph.time)
+
+                fh.write("*  {:04d} {:02d} {:02d} {:02d} {:02d} {:011.8f}\n"
+                         .format(e[0], e[1], e[2], e[3], e[4], e[5]))
+
+                for sat in self.sat:
+
+                    if np.isnan(peph.pos[sat-1][0:3]).any():
+                        continue
+
+                    clk = 0.999999999999 \
+                        if np.isnan(peph.pos[sat-1][3]) else peph.pos[sat-1][3]
+
+                    fh.write("P{:3s} {:13.6f} {:13.6f} {:13.6f} {:13.6f}\n"
+                             .format(sat2id(sat),
+                                     peph.pos[sat-1][0]*1e-3,
+                                     peph.pos[sat-1][1]*1e-3,
+                                     peph.pos[sat-1][2]*1e-3,
+                                     clk*1e+6))
+
+            # Terminate file
+            #
+            fh.write('EOF\n')
 
     def interppol(self, x, y, n):
         for j in range(1, n):
@@ -275,12 +362,12 @@ class peph:
             dts[0] = c[1]
             if dts[0] != 0.0:
                 std = p_[1].std[sat-1, 3]*rCST.CLIGHT-EXTERR_CLK*t[1]
-        elif c[0] != 0.0 and c[1] != 0.0:
+        elif c[0] != np.nan and c[1] != np.nan:
             dts[0] = (c[1]*t[0]-c[0]*t[1])/(t[0]-t[1])
             i = 0 if t[0] < -t[1] else 1
             std = p_[i].std[sat-1, 3]+EXTERR_CLK*abs(t[i])
         else:
-            dts[0] = 0.0
+            dts[0] = np.nan
 
         if varc:
             varc = std**2
@@ -686,6 +773,7 @@ def antModelTx(nav, e, sigs, sat, time, rs, sig0=None):
         range correction for each specified signal
     """
 
+    sys, _ = sat2prn(sat)
     # Select satellite antenna
     #
     ant = searchpcv(nav.sat_ant, sat, time)
@@ -706,8 +794,10 @@ def antModelTx(nav, e, sigs, sat, time, rs, sig0=None):
     #
     off0 = np.zeros(3)
     if sig0 is not None:
-
-        freq = [s.frequency() for s in sig0]
+        if sys == uGNSS.GLO:
+            freq = [s.frequency(nav.glo_ch[sat]) for s in sig0]
+        else:
+            freq = [s.frequency() for s in sig0]
         fac0 = [1.0 for s in sig0]
 
         if len(freq) == 2:
