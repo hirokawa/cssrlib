@@ -18,6 +18,9 @@ class sCSSRTYPE(IntEnum):
     IGS_SSR = 5
     RTCM3_SSR = 6
     PVS_PPP = 7      # PPP via SouthPAN
+    SBAS_L1 = 8      # L1 SBAS
+    SBAS_L5 = 9      # L5 SBAS (DFMC)
+    STDPOS = 10
 
 
 class sGNSS(IntEnum):
@@ -287,6 +290,12 @@ class cssr:
             self.lc[inet].flg_stec = 0
             self.lc[inet].nsat_n = 0
             self.lc[inet].t0 = {}
+            self.lc[inet].t0[sCType.CLOCK] = gtime_t()
+            self.lc[inet].t0[sCType.ORBIT] = gtime_t()
+            self.lc[inet].t0[sCType.CBIAS] = gtime_t()
+            self.lc[inet].t0[sCType.PBIAS] = gtime_t()
+            self.lc[inet].t0[sCType.STEC] = gtime_t()
+            self.lc[inet].t0[sCType.TROP] = gtime_t()
 
         self.dorb_scl = [0.0016, 0.0064, 0.0064]
         self.dclk_scl = 0.0016

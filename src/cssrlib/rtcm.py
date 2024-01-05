@@ -819,6 +819,7 @@ class rtcm(cssr):
 
     def out_log(self, obs=None, eph=None, geph=None, seph=None):
         sys = self.get_ssr_sys(self.msgtype)
+        inet = self.inet
         self.fh.write("{:4d}\t{:s}\n".format(self.msgtype,
                                              time2str(self.time)))
 
@@ -860,27 +861,27 @@ class rtcm(cssr):
         if self.subtype == sCSSR.CBIAS or self.subtype == sCSSR.BIAS:
             self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\n"
                           .format("SatID", "SigID", "CBias[m]", "..."))
-            for k, sat_ in enumerate(self.lc[0].cbias.keys()):
+            for k, sat_ in enumerate(self.lc[inet].cbias.keys()):
                 sys_, _ = sat2prn(sat_)
                 self.fh.write(" {:s}\t".format(sat2id(sat_)))
-                for j, sig in enumerate(self.lc[0].cbias[sat_].keys()):
+                for j, sig in enumerate(self.lc[inet].cbias[sat_].keys()):
                     sig_ = self.ssig2rsig(sys_, uTYP.C, sig)
                     self.fh.write(
                         "{:s}\t{:5.2f}\t".format(sig_.str(),
-                                                 self.lc[0].cbias[sat_][sig]))
+                                                 self.lc[inet].cbias[sat_][sig]))
                 self.fh.write("\n")
 
         if self.subtype == sCSSR.PBIAS or self.subtype == sCSSR.BIAS:
             self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\n"
                           .format("SatID", "SigID", "PBias[m]", "..."))
-            for k, sat_ in enumerate(self.lc[0].pbias.keys()):
+            for k, sat_ in enumerate(self.lc[inet].pbias.keys()):
                 sys_, _ = sat2prn(sat_)
                 self.fh.write(" {:s}\t".format(sat2id(sat_)))
-                for j, sig in enumerate(self.lc[0].pbias[sat_].keys()):
+                for j, sig in enumerate(self.lc[inet].pbias[sat_].keys()):
                     sig_ = self.ssig2rsig(sys_, uTYP.L, sig)
                     self.fh.write(
                         "{:s}\t{:5.2f}\t".format(sig_.str(),
-                                                 self.lc[0].pbias[sat_][sig]))
+                                                 self.lc[inet].pbias[sat_][sig]))
                 self.fh.write("\n")
 
         if self.subtype == sRTCM.ANT_DESC:

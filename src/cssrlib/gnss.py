@@ -4,7 +4,7 @@ module for GNSS processing
 
 from copy import deepcopy
 from enum import IntEnum
-from math import floor, sin, cos, sqrt, asin, atan2, fabs
+from math import floor, sin, cos, sqrt, asin, atan2, fabs, tan
 import numpy as np
 from datetime import datetime, timezone
 
@@ -83,6 +83,7 @@ class rCST():
     P2_5 = 0.03125
     P2_6 = 0.015625
     P2_8 = 0.00390625
+    P2_9 = 0.001953125
     P2_10 = 9.765625000000000E-04
     P2_11 = 4.882812500000000E-04
     P2_12 = 2.441406250000000E-04
@@ -286,6 +287,28 @@ class uSIG(IntEnum):
     L9B = 902
     L9C = 903
     L9X = 924
+
+
+class uTropoModel(IntEnum):
+    """
+    Enumeration for tropo model selection
+    """
+
+    NONE = -1
+    SAAST = 0
+    HOPF = 1
+
+
+class uIonoModel(IntEnum):
+    """
+    Enumeration for iono model selection
+    """
+
+    NONE = -1
+    KLOBUCHAR = 0
+    NEQUICK_G = 1
+    GIM = 2
+    SBAS = 3
 
 
 class rSigRnx():
@@ -694,6 +717,28 @@ class Seph():
         self.sat = sat
 
 
+class Alm():
+    """ class to define almanac """
+    sat = 0
+    af0 = 0.0
+    af1 = 0.0
+    toa = gtime_t()
+    week = 0
+    e = 0.0
+    i0 = 0.0
+    A = 0.0
+    M0 = 0.0
+    OMG0 = 0.0
+    OMGd = 0.0
+    omg = 0.0
+    svh = 0
+    sattype = 0
+    mode = 0
+
+    def __init__(self, sat=0):
+        self.sat = sat
+
+
 class Nav():
     """ class to define the navigation message """
 
@@ -730,6 +775,10 @@ class Nav():
         # Select tropospheric model
         #
         self.trpModel = uTropoModel.SAAST
+
+        # Select iono model
+        #
+        self.ionoModel = uIonoModel.KLOBUCHAR
 
         # 0: use trop-model, 1: estimate, 2: use cssr correction
         self.trop_opt = 0
@@ -962,6 +1011,7 @@ def time2doy(t):
 
 
 def str2time(s, i, n):
+    """ string to time conversion """
     if i < 0 or len(s) < i:
         return -1
     ep = np.array([float(x) for x in s[i:i+n].split()])
@@ -973,18 +1023,31 @@ def str2time(s, i, n):
 
 
 def time2str(t):
+    """ time to string conversion """
     e = time2epoch(t)
     return "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}"\
         .format(e[0], e[1], e[2], e[3], e[4], int(e[5]))
 
 
 def adjtime(t: gtime_t, tref: gtime_t, dt=rCST.WEEK_SEC):
+    """ adjust time for week (day) rollover """
     tt = timediff(t, tref)
     if tt < -dt/2.0:
         return timeadd(t, dt)
     if tt > dt/2.0:
         return timeadd(t, -dt)
     return t
+
+
+def tod2tow(tod: float, time0: gtime_t):
+    """ translate from time-of-day to time-of-week """
+    week, tow0 = time2gpst(time0)
+    tow_ref = tow0//rCST.DAY_SEC*rCST.DAY_SEC
+
+    tow = tow_ref + tod
+    time = adjtime(gpst2time(week, tow), time0, dt=rCST.DAY_SEC)
+
+    return time
 
 
 def prn2sat(sys, prn):
@@ -1256,38 +1319,34 @@ def deg2dms(deg):
     return dms
 
 
+def ionppp(pos, az, el, re, hion):
+    """ ionospheric pierce point (ipp) position and slant factor """
+
+    rp = re/(re+hion)*cos(el)
+    ap = np.PI/2.0-el-asin(rp)
+    sinap = sin(ap)
+    tanap = tan(ap)
+    cosaz = cos(az)
+
+    posp = [0.0, 0.0]
+    posp[0] = asin(sin(pos[0]))*cos(ap)+cos(pos[0]*sinap*cosaz)
+    if (pos[0] > 70.0*rCST.D2R and tanap*cosaz > tan(np.PI/2.0-pos[0])) or \
+            (pos[0] < -70.0*rCST.D2R and -tanap*cosaz > tan(np.PI/2.0+pos[0])):
+        posp[1] = pos[1] + np.PI-asin(sinap*sin(az)/cos(posp[0]))
+    else:
+        posp[1] = pos[1] + asin(sinap*sin(az)/cos(posp[0]))
+
+    sf = 1.0/sqrt(1.0-rp*rp)
+
+    return sf, posp
+
+
 def satazel(pos, e):
     """ calculate az/el from LOS vector in ECEF (e) """
     enu = ecef2enu(pos, e)
     az = atan2(enu[0], enu[1])
     el = asin(enu[2])
     return az, el
-
-
-def ionmodel(t, pos, az, el, ion=None):
-    """ klobuchar model of ionosphere delay estimation """
-    psi = 0.0137/(el/np.pi+0.11)-0.022
-    phi = pos[0]/np.pi+psi*cos(az)
-    phi = np.max((-0.416, np.min((0.416, phi))))
-    lam = pos[1]/np.pi+psi*sin(az)/cos(phi*np.pi)
-    phi += 0.064*cos((lam-1.617)*np.pi)
-    _, tow = time2gpst(t)
-    tt = 43200.0*lam+tow  # local time
-    tt -= np.floor(tt/86400)*86400
-    f = 1.0+16.0*np.power(0.53-el/np.pi, 3.0)  # slant factor
-
-    h = [1, phi, phi**2, phi**3]
-    amp = np.dot(h, ion[0, :])
-    per = np.dot(h, ion[1, :])
-    amp = max(amp, 0)
-    per = max(per, 72000.0)
-    x = 2.0*np.pi*(tt-50400.0)/per
-    if np.abs(x) < 1.57:
-        v = 5e-9+amp*(1.0+x*x*(-0.5+x*x/24.0))
-    else:
-        v = 5e-9
-    diono = rCST.CLIGHT*f*v
-    return diono
 
 
 def interpc(coef, lat):
@@ -1299,16 +1358,6 @@ def interpc(coef, lat):
         return coef[:, 4]
     d = lat/15.0-i
     return coef[:, i-1]*(1.0-d)+coef[:, i]*d
-
-
-class uTropoModel(IntEnum):
-    """
-    Enumeration for tropo model selection
-    """
-
-    NONE = -1
-    SAAST = 0
-    HOPF = 1
 
 
 def tropmapf(t, pos, el, model=uTropoModel.SAAST):

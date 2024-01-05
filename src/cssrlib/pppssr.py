@@ -311,7 +311,7 @@ class pppos():
                 if np.any(self.nav.edt[sat[i]-1, :] > 0):
                     continue
 
-                if self.nav.niono > 0:
+                if self.nav.nf > 1 and self.nav.niono > 0:
                     # Get dual-frequency pseudoranges for this constellation
                     #
                     sig1 = obs.sig[sys[i]][uTYP.C][0]

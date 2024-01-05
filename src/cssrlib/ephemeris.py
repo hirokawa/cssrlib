@@ -11,21 +11,31 @@ from cssrlib.cssrlib import sCType
 MAX_ITER_KEPLER = 30
 RTOL_KEPLER = 1e-13
 
+MAXDTOE_t = {uGNSS.GPS: 7201.0, uGNSS.GAL: 14400.0, uGNSS.QZS: 7201.0,
+             uGNSS.BDS: 21601.0, uGNSS.IRN: 7201.0, uGNSS.GLO: 1800.0,
+             uGNSS.SBS: 360.0}
+
 
 def findeph(nav, t, sat, iode=-1, mode=0):
-    """ find ephemeric for sat """
-    dt_p = 3600*4
+    """ find ephemeris for sat """
+    sys, _ = sat2prn(sat)
     eph = None
+    tmax = MAXDTOE_t[sys]
+    tmin = tmax + 1.0
     for eph_ in nav:
-        if eph_.sat != sat:
+        if eph_.sat != sat or (iode >= 0 and iode != eph_.iode):
             continue
-        dt = timediff(t, eph_.toe)
-        if sat == 43 and eph_.mode == 1:
-            None
-        if (iode < 0 or eph_.iode == iode) and eph_.mode == mode and \
-                abs(dt) < dt_p:
+        if eph_.mode != mode:
+            continue
+        dt = abs(timediff(t, eph_.toe))
+        if dt > tmax or eph_.mode != mode:
+            continue
+        if iode >= 0:
+            return eph_
+        if dt <= tmin:
             eph = eph_
-            break
+            tmin = dt
+
     return eph
 
 
@@ -302,7 +312,7 @@ def satposs(obs, nav, cs=None, orb=None):
                 iode = cs.lc[0].iode[sat]
                 dorb = cs.lc[0].dorb[sat]  # radial,along-track,cross-track
 
-                if cs.cssrmode == sc.PVS_PPP:
+                if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5):
                     dorb += cs.lc[0].dvel[sat] * \
                         (timediff(obs.t, cs.lc[0].t0[sat][sCType.ORBIT]))
 
@@ -335,7 +345,7 @@ def satposs(obs, nav, cs=None, orb=None):
 
                     dclk = cs.lc[0].dclk[sat]
 
-                    if cs.cssrmode == sc.PVS_PPP:
+                    if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5):
                         dclk += cs.lc[0].ddft[sat] * \
                             (timediff(obs.t, cs.lc[0].t0[sat][sCType.CLOCK]))
 
@@ -403,7 +413,7 @@ def satposs(obs, nav, cs=None, orb=None):
                     er = np.cross(ea, ec)
                     A = np.array([er, ea, ec])
 
-                if cs.cssrmode == sc.PVS_PPP:
+                if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5):
                     dorb_e = dorb
                 else:
                     dorb_e = dorb@A
