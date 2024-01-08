@@ -7,7 +7,7 @@ import numpy as np
 from cssrlib.ephemeris import satposs
 from cssrlib.gnss import sat2id, sat2prn, rSigRnx, uTYP, uGNSS, rCST
 from cssrlib.gnss import uTropoModel, ecef2pos, tropmodel, geodist, satazel
-from cssrlib.gnss import time2str, timediff, gpst2utc, tropmapf
+from cssrlib.gnss import time2str, timediff, gpst2utc, tropmapf, uIonoModel
 from cssrlib.ppp import tidedisp, tidedispIERS2010, uTideModel
 from cssrlib.ppp import shapiro, windupcorr
 from cssrlib.peph import antModelRx, antModelTx
@@ -44,6 +44,10 @@ class pppos():
         #
         self.nav.trpModel = uTropoModel.SAAST
 
+        # Select iono model
+        #
+        self.nav.ionoModel = uIonoModel.KLOBUCHAR
+
         # 0: use trop-model, 1: estimate, 2: use cssr correction
         self.nav.trop_opt = trop_opt
 
@@ -52,6 +56,9 @@ class pppos():
 
         # 0: none, 1: full model, 2: local/regional model
         self.nav.phw_opt = phw_opt
+
+        # carrier smoothing
+        self.nav.csmooth = False
 
         # Position (+ optional velocity), zenith tropo delay and
         # slant ionospheric delay states
@@ -205,7 +212,7 @@ class pppos():
 
     def varerr(self, nav, el, f):
         """ variation of measurement """
-        s_el = np.sin(el) if el > np.deg2rad(0.1) else np.sin(np.deg2rad(0.1))
+        s_el = max(np.sin(el), 0.1*rCST.D2R)
         fact = nav.eratio[f-nav.nf] if f >= nav.nf else 1
         a = fact*nav.err[1]
         b = fact*nav.err[2]

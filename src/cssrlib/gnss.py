@@ -40,6 +40,9 @@ class rCST():
     HALFWEEK_SEC = 302400.0
     CENTURY_SEC = DAY_SEC*36525.0
 
+    PI = 3.1415926535898
+    HALFPI = 1.5707963267949
+
     FREQ_G1 = 1575.42e6      # [Hz] GPS L1
     FREQ_G2 = 1227.60e6      # [Hz] GPS L2
     FREQ_G5 = 1176.45e6      # [Hz] GPS L5
@@ -762,6 +765,7 @@ class Nav():
         self.nc = 0
         self.excl_sat = []  # Excluded satellites
         self.rb = [0, 0, 0]  # base station position in ECEF [m]
+        self.baseline = 0    # baseline length [km]
         self.smode = 0  # position mode 0:NONE,1:std,2:DGPS,4:fix,5:float
         self.pmode = 1  # 0: static, 1: kinematic
         self.ephopt = 2  # ephemeris option 0: BRDC, 1: SBAS, 2: SSR-APC,
@@ -1323,16 +1327,17 @@ def ionppp(pos, az, el, re, hion):
     """ ionospheric pierce point (ipp) position and slant factor """
 
     rp = re/(re+hion)*cos(el)
-    ap = np.PI/2.0-el-asin(rp)
+    ap = rCST.HALFPI-el-asin(rp)
     sinap = sin(ap)
     tanap = tan(ap)
     cosaz = cos(az)
 
     posp = [0.0, 0.0]
-    posp[0] = asin(sin(pos[0]))*cos(ap)+cos(pos[0]*sinap*cosaz)
-    if (pos[0] > 70.0*rCST.D2R and tanap*cosaz > tan(np.PI/2.0-pos[0])) or \
-            (pos[0] < -70.0*rCST.D2R and -tanap*cosaz > tan(np.PI/2.0+pos[0])):
-        posp[1] = pos[1] + np.PI-asin(sinap*sin(az)/cos(posp[0]))
+    posp[0] = asin(sin(pos[0])*cos(ap)+cos(pos[0])*sinap*cosaz)
+
+    if (pos[0] > 70.0*rCST.D2R and tanap*cosaz > tan(rCST.HALFPI-pos[0])) or \
+       (pos[0] < -70.0*rCST.D2R and -tanap*cosaz > tan(rCST.HALFPI+pos[0])):
+        posp[1] = pos[1] + rCST.PI-asin(sinap*sin(az)/cos(posp[0]))
     else:
         posp[1] = pos[1] + asin(sinap*sin(az)/cos(posp[0]))
 
@@ -1476,3 +1481,47 @@ def tropmodelHpf():
     trop_wet = (77.6e-6 * 11000.0 * 4810.0 * e/temp**2)/5.0
 
     return trop_dry, trop_wet, None
+
+
+# static variables for carrier smoothing
+n_ = {}
+Ps_ = {}
+Lp_ = {}
+t0_ = {}
+
+
+def csmooth(obs: Obs, ns=100, dt_th=1, cs_th=10):
+    """ Hatch filter for carrier smoothing """
+
+    for i, sat in enumerate(obs.sat):
+        sys, _ = sat2prn(sat)
+
+        if sat not in n_:
+            nsig = len(obs.sig[sys][uTYP.L])
+            n_[sat] = np.ones(nsig)
+            Ps_[sat] = np.zeros(nsig)
+            Lp_[sat] = np.zeros(nsig)
+            t0_[sat] = obs.t
+
+        for k, s in enumerate(obs.sig[sys][uTYP.L]):
+            if obs.P[i][k] == 0.0 or obs.L[i][k] == 0.0:
+                continue
+            if obs.lli[i][k] or timediff(obs.t, t0_[sat]) > dt_th:
+                n_[sat][k] = 1
+            if n_[sat][k] == 1:
+                Ps_[sat][k] = obs.P[i][k]
+            else:
+                dcp = s.wavelength()*(obs.L[i][k]-Lp_[sat][k])
+                Pp = Ps_[sat][k]+dcp  # predicted pseudo-range
+                dP = obs.P[i][k]-Pp
+                if abs(dP) < s.wavelength()*cs_th:
+                    ks = 1/n_[sat][k]
+                    Ps_[sat][k] = ks*obs.P[i][k] + (1-ks)*Pp
+                else:  # reset for cycle-slip
+                    n_[sat][k] = 1
+                    Ps_[sat][k] = obs.P[i][k]
+            n_[sat][k] = min(n_[sat][k]+1, ns)
+            obs.P[i][k] = Ps_[sat][k]
+            Lp_[sat][k] = obs.L[i][k]
+
+        t0_[sat] = obs.t

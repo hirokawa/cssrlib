@@ -297,10 +297,11 @@ def satposs(obs, nav, cs=None, orb=None):
 
             if cs is not None:
 
-                if cs.iodssr_c[sCType.ORBIT] == cs.iodssr:
+                if cs.iodssr >= 0 and cs.iodssr_c[sCType.ORBIT] == cs.iodssr:
                     if sat not in cs.sat_n:
                         continue
-                elif cs.iodssr_c[sCType.ORBIT] == cs.iodssr_p:
+                elif cs.iodssr_p >= 0 and \
+                        cs.iodssr_c[sCType.ORBIT] == cs.iodssr_p:
                     if sat not in cs.sat_n_p:
                         continue
                 else:
@@ -344,6 +345,11 @@ def satposs(obs, nav, cs=None, orb=None):
                                 continue
 
                     dclk = cs.lc[0].dclk[sat]
+
+                    if cs.lc[0].cstat & (1 << sCType.HCLOCK) and \
+                            sat in cs.lc[0].hclk.keys() and \
+                            not np.isnan(cs.lc[0].hclk[sat]):
+                        dclk += cs.lc[0].hclk[sat]
 
                     if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5):
                         dclk += cs.lc[0].ddft[sat] * \
@@ -421,7 +427,8 @@ def satposs(obs, nav, cs=None, orb=None):
                 rs[i, :] -= dorb_e
                 dts[i] += dclk/rCST.CLIGHT
 
-                if cs.cssrmode == sc.PVS_PPP and sys == uGNSS.GPS:
+                if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5,
+                                   sc.DGPS):
                     dts[i] -= eph.tgd
 
                 ers = vnorm(rs[i, :]-nav.x[0: 3])
@@ -435,6 +442,8 @@ def satposs(obs, nav, cs=None, orb=None):
 
                 nav.dorb[sat] = dorb_
                 nav.dclk[sat] = dclk
+            elif nav.smode == 1 and nav.nf == 1:  # standalone positioing
+                dts[i] -= eph.tgd
 
             nsat += 1
 

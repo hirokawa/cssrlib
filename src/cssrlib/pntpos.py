@@ -4,10 +4,12 @@ module for standalone positioning
 import numpy as np
 from cssrlib.gnss import rCST, ecef2pos, geodist, satazel, \
     tropmodel, tropmapf, sat2prn, uGNSS, uTropoModel, uIonoModel, \
-    timediff, time2gpst, dops
-from cssrlib.ephemeris import findeph, satposs
+    timediff, time2gpst, dops, csmooth
+from cssrlib.cssrlib import sCSSRTYPE, sCType
+from cssrlib.ephemeris import satposs
 from cssrlib.pppssr import pppos
 from cssrlib.sbas import ionoSBAS
+from cssrlib.dgps import vardgps
 from math import sin, cos
 
 
@@ -42,23 +44,31 @@ def ionmodel(t, pos, az, el, nav=None, model=uIonoModel.KLOBUCHAR, cs=None):
         diono = ionKlobuchar(t, pos, az, el, nav.ion)
     elif model == uIonoModel.SBAS:
         if cs is None or cs.iodi < 0:
-            return None
+            diono = ionKlobuchar(t, pos, az, el, nav.ion)
+            return diono
         diono, var = ionoSBAS(t, pos, az, el, cs)
+        if diono == 0.0:
+            diono = ionKlobuchar(t, pos, az, el, nav.ion)
 
     return diono  # iono delay at L1 [m]
 
 
 class stdpos(pppos):
     def __init__(self, nav, pos0=np.zeros(3),
-                 logfile=None, trop_opt=1, iono_opt=1, phw_opt=1):
+                 logfile=None, trop_opt=0, iono_opt=0, phw_opt=0):
 
         self.nav = nav
 
         self.nav.nf = 1
+        self.nav.csmooth = True
 
         # Select tropospheric model
         #
         self.nav.trpModel = uTropoModel.SAAST
+
+        # Select iono model
+        #
+        self.ionoModel = uIonoModel.KLOBUCHAR
 
         # 0: use trop-model, 1: estimate, 2: use cssr correction
         self.nav.trop_opt = trop_opt
@@ -97,13 +107,13 @@ class stdpos(pppos):
         # Process noise sigma
         #
         if self.nav.pmode == 0:
-            self.nav.sig_qp = 100.0/np.sqrt(1)     # [m/sqrt(s)]
+            self.nav.sig_qp = 1.0/np.sqrt(1)     # [m/sqrt(s)]
             self.nav.sig_qv = None
         else:
             self.nav.sig_qp = 0.01/np.sqrt(1)      # [m/sqrt(s)]
             self.nav.sig_qv = 1.0/np.sqrt(1)       # [m/s/sqrt(s)]
 
-        self.nav.sig_qcb = 0.1
+        self.nav.sig_qcb = 1.0
         # self.nav.sig_qcd = 0.1
 
         self.nav.elmin = np.deg2rad(10.0)
@@ -147,6 +157,18 @@ class stdpos(pppos):
             self.nav.monlevel = 0
         else:
             self.nav.fout = open(logfile, 'w')
+
+    def varerr(self, nav, el, f):
+        """ variation of measurement """
+        if nav.smode == 2:  # DGPS
+            v_sig = vardgps(el, nav)
+        else:
+            s_el = max(np.sin(el), 0.1*rCST.D2R)
+            fact = nav.eratio[f]
+            a = fact*nav.err[1]
+            b = fact*nav.err[2]
+            v_sig = a**2+(b/s_el)**2
+        return v_sig
 
     def udstate(self, obs):
         """ time propagation of states and initialize """
@@ -198,17 +220,16 @@ class stdpos(pppos):
         #
         pos = ecef2pos(rr_)
 
-        # Zenith tropospheric dry and wet delays at user position
-        #
-        trop_hs, trop_wet, _ = tropmodel(obs.t, pos,
-                                         model=self.nav.trpModel)
+        if self.nav.trop_opt == 0:  # use tropo model
+            # Zenith tropospheric dry and wet delays at user position
+            #
+            trop_hs, trop_wet, _ = tropmodel(obs.t, pos,
+                                             model=self.nav.trpModel)
 
         for i in range(n):
 
             sat = obs.sat[i]
             sys, _ = sat2prn(sat)
-
-            eph = findeph(self.nav.eph, obs.t, sat)
 
             # Skip edited observations
             #
@@ -223,21 +244,30 @@ class stdpos(pppos):
             if el[i] < self.nav.elmin:
                 continue
 
-            # Tropospheric delay mapping functions
-            #
-            mapfh, mapfw = tropmapf(obs.t, pos, el[i],
-                                    model=self.nav.trpModel)
+            if self.nav.trop_opt == 0:  # use model
+                # Tropospheric delay mapping functions
+                #
+                mapfh, mapfw = tropmapf(obs.t, pos, el[i],
+                                        model=self.nav.trpModel)
 
-            # Tropospheric delay
-            #
-            trop = mapfh*trop_hs + mapfw*trop_wet
+                # Tropospheric delay
+                #
+                trop = mapfh*trop_hs + mapfw*trop_wet
+            else:
+                trop = 0.0
 
-            # Ionospheric delay
-            iono = ionmodel(obs.t, pos, az[i], el[i], self.nav)
+            if self.nav.iono_opt == 0:  # use model
+                # Ionospheric delay
+                iono = ionmodel(obs.t, pos, az[i], el[i], self.nav,
+                                model=self.ionoModel, cs=cs)
+            else:
+                iono = 0.0
 
             r += dtr - _c*dts[i]
-            P = obs.P[i, 0] - eph.tgd*rCST.CLIGHT
-            y[i, 0] = P-(r+trop + iono)
+
+            if self.nav.csmooth:  # carrier smoothing for pseudo-range
+                csmooth(obs)
+            y[i, 0] = obs.P[i, 0]-(r+trop + iono)
 
         return y, e, az, el
 
@@ -289,8 +319,6 @@ class stdpos(pppos):
         for sys in obs.sig.keys():
 
             # Loop over twice the number of frequencies
-            #   first for all carrier-phase observations
-            #   second all pseudorange observations
             #
             for f in range(0, nf):
                 # Select satellites from one constellation only
@@ -316,8 +344,7 @@ class stdpos(pppos):
                     H[nv, 0:3] = -e[j, :]
                     H[nv, 3] = 1.0
 
-                    # Rj[nv] = self.varerr(self.nav, el[j], f)
-                    Rj[nv] = 0.01
+                    Rj[nv] = self.varerr(self.nav, el[j], f)
 
                     nb[b] += 1  # counter for single-differences per signal
                     nv += 1  # counter for single-difference observations
@@ -347,6 +374,10 @@ class stdpos(pppos):
         """
         if len(obs.sat) == 0:
             return
+
+        if cs is not None and cs.cssrmode == sCSSRTYPE.DGPS:
+            self.nav.smode = 2  # DGPS
+            self.nav.baseline = cs.set_dgps_corr(self.nav.x[0:3])
 
         # GNSS satellite positions, velocities and clock offsets
         # for all satellite in RINEX observations
@@ -433,7 +464,8 @@ class stdpos(pppos):
         self.nav.x = xp
         self.nav.P = Pp
 
-        self.nav.smode = 1  # 4: fixed ambiguities, 5: float ambiguities
+        self.nav.smode = 1 if cs is None else 2  # standalone positioning
+        # self.nav.smode = 1  # 4: fixed ambiguities, 5: float ambiguities
 
         # Store epoch for solution
         #

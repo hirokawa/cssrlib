@@ -7,7 +7,7 @@ import numpy as np
 import bitstruct as bs
 from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE, prn2sat, sCType
 from cssrlib.cssrlib import sat2id
-from cssrlib.gnss import uGNSS, rCST, timediff, \
+from cssrlib.gnss import uGNSS, rCST, timediff, time2str, \
     time2gpst, Seph, Eph, Alm, tod2tow, gtime_t, ionppp
 
 MAXBAND = 11
@@ -92,18 +92,26 @@ def searchIGP(t, posp, cs):
         elif lat < -85.0:
             lonp[0:4] = (lon-50)//90*90+40
 
+    latp[2] = latp[0]
+    latp[3] = latp[1]
+
     for i in range(4):
         if lonp[i] == 180:
             lonp[i] = -180
     for band in range(MAXBAND):
-        for k, gp in enumerate(cs.igp_t[band]):
-            for i in range(4):
-                if gp[0] == latp[i] and gp[1] == lonp[i] and \
-                        cs.givei[band][k] > 0:
-                    igp[i] = [cs.vtec[band][k], cs.givei[band][k]]
-                    break
-            if 0 in igp and 1 in igp and 2 in igp and 3 in igp:
-                break
+        if band not in cs.vtec or band not in cs.givei:
+            continue
+
+        gp = cs.igp_t[band]
+        for i in range(4):
+            idx = np.where((gp[:, 0] == latp[i]) & (gp[:, 1] == lonp[i]))[0]
+            if len(idx) == 0:
+                continue
+            k = idx[0]
+            if len(cs.givei[band]) < k or cs.givei[band][k] <= 0:
+                continue
+            igp[i] = [cs.vtec[band][k], cs.givei[band][k]]
+            cs.inet = band+1
 
     return igp, x, y
 
@@ -116,7 +124,7 @@ def ionoSBAS(t, pos, az, el, cs):
 
     err = False
     givei_t = [0.0084, 0.0333, 0.0749, 0.1331, 0.2079, 0.2994, 0.4075, 0.5322,
-               0.6735, 0.8315, 1.1974, 1.8709, 3.326, 20.787, 187.0826]
+               0.6735, 0.8315, 1.1974, 1.8709, 3.3260, 20.787, 187.0826, 0.0]
 
     idx_t = [[1, 2, 0], [0, 3, 2], [0, 3, 1], [1, 2, 3]]
 
@@ -127,6 +135,10 @@ def ionoSBAS(t, pos, az, el, cs):
     sf, posp = ionppp(pos, az, el, re, hion)
 
     igp, x, y = searchIGP(t, posp, cs)
+
+    if len(igp) < 3:
+        return diono, var
+
     x1, y1 = 1.0-x, 1.0-y
 
     if 0 in igp and 1 in igp and 2 in igp and 3 in igp:
@@ -162,11 +174,12 @@ class sbasDec(cssr):
     def __init__(self, foutname=None):
         super().__init__(foutname)
         self.MAXNET = 1
-        self.cssrmode = sCSSRTYPE.PVS_PPP
+        self.cssrmode = sCSSRTYPE.SBAS_L1
         self.nsig_max = 0
         self.sat_n = []
 
         self.lc[0].dclk = {}
+        self.lc[0].hclk = {}
         self.lc[0].ddft = {}
         self.lc[0].dorb = {}
         self.lc[0].dvel = {}
@@ -191,7 +204,6 @@ class sbasDec(cssr):
 
         # intrgrity information
         self.cov = {}
-        self.fc = {}
         self.udrei = {}
         self.dRcorr = {}
         self.ai = {}
@@ -364,7 +376,7 @@ class sbasDec(cssr):
             j = type_*13+k
             if j >= len(self.sat):
                 break
-            self.fc[self.sat[j]] = self.sval(fc, 12, 0.125)
+            self.lc[0].hclk[self.sat[j]] = -self.sval(fc, 12, 0.125)
         for k in range(13):
             udrei = bs.unpack_from('u4', msg, i)[0]
             i += 4
@@ -372,7 +384,9 @@ class sbasDec(cssr):
             if j >= len(self.sat):
                 break
             self.udrei[self.sat[j]] = udrei
-            # self.lc[0].t0[self.sat[j]][sCType.HCLOCK] = self.time0
+            self.set_t0(sat=self.sat[j], ctype=sCType.HCLOCK, t=self.time)
+
+        self.lc[0].cstat |= (1 << sCType.HCLOCK)
         return i
 
     def decode_sbas_integrity(self, msg, i):
@@ -416,7 +430,7 @@ class sbasDec(cssr):
             return i
 
         seph = Seph(self.sat_ref)
-        seph.t0 = tod2tow(t0*16.0, self.time0)
+        seph.t0 = tod2tow(t0*16.0, self.time)
         seph.iodn = 0
         seph.svh = 0
         seph.sva = self.ura_t[ura]
@@ -470,7 +484,7 @@ class sbasDec(cssr):
         """ Type 17 GEO almanac message """
 
         ta = bs.unpack_from('u11', msg, 201)[0]*64.0
-        t0 = tod2tow(ta, self.time0)
+        t0 = tod2tow(ta, self.time)
 
         for k in range(3):
             i += 2
@@ -530,22 +544,22 @@ class sbasDec(cssr):
 
         self.lc[0].iode[sat] = iodn
         self.lc[0].dorb[sat] = np.zeros(3)
-        self.lc[0].dorb[sat][0] = self.sval(dx, 11, 0.125)
-        self.lc[0].dorb[sat][1] = self.sval(dy, 11, 0.125)
-        self.lc[0].dorb[sat][2] = self.sval(dz, 11, 0.125)
+        self.lc[0].dorb[sat][0] = -self.sval(dx, 11, 0.125)
+        self.lc[0].dorb[sat][1] = -self.sval(dy, 11, 0.125)
+        self.lc[0].dorb[sat][2] = -self.sval(dz, 11, 0.125)
 
-        self.lc[0].dclk[sat] = self.sval(db, 11, rCST.P2_31*rCST.CLIGHT)
+        self.lc[0].dclk[sat] = -self.sval(db, 11, rCST.P2_31*rCST.CLIGHT)
         self.lc[0].dvel[sat] = np.zeros(3)
-        self.lc[0].dvel[sat][0] = self.sval(dxd, 8, rCST.P2_11)
-        self.lc[0].dvel[sat][1] = self.sval(dyd, 8, rCST.P2_11)
-        self.lc[0].dvel[sat][2] = self.sval(dzd, 8, rCST.P2_11)
+        self.lc[0].dvel[sat][0] = -self.sval(dxd, 8, rCST.P2_11)
+        self.lc[0].dvel[sat][1] = -self.sval(dyd, 8, rCST.P2_11)
+        self.lc[0].dvel[sat][2] = -self.sval(dzd, 8, rCST.P2_11)
 
         self.lc[0].ddft[sat] = self.sval(db, 8, rCST.P2_39*rCST.CLIGHT)
 
         self.lc[0].cstat |= (1 << sCType.CLOCK) | (1 << sCType.ORBIT)
-        self.lc[0].t0[sat] = {
-            sCType.CLOCK: self.time0, sCType.ORBIT: self.time0}
 
+        self.set_t0(sat=sat, ctype=sCType.CLOCK, t=self.time)
+        self.set_t0(sat=sat, ctype=sCType.ORBIT, t=self.time)
         return sat
 
     def decode_sbas_lcorr_half(self, msg, i):
@@ -566,7 +580,7 @@ class sbasDec(cssr):
                 if slot > 0:
                     self.add_sbas_corr(slot, iodn, dx, dy, dz, db)
 
-            iodp = bs.unpack_from('u2', msg, i)[0]
+            # iodp = bs.unpack_from('u2', msg, i)[0]
             i += 3
         else:
             slot, iodn, dx, dy, dz, db, dxd, dyd, dzd, dbd = bs.unpack_from(
@@ -574,7 +588,7 @@ class sbasDec(cssr):
             i += 90
             self.add_sbas_corr(slot, iodn, dx, dy, dz, db, dxd, dyd, dzd, dbd)
 
-            toa, iodp = bs.unpack_from('u13u2', msg, i)
+            toa = bs.unpack_from('u13', msg, i)
             i += 15
 
         self.iodssr_c[sCType.CLOCK] = iodp
@@ -608,7 +622,9 @@ class sbasDec(cssr):
             self.givei[band][j] = givei
         i += 9
 
-        self.t0_igp = self.time0
+        inet = band+1
+        self.set_t0(ctype=sCType.VTEC, inet=inet, t=self.time)
+        self.lc[inet].cstat |= (1 << sCType.VTEC)
 
         return i
 
@@ -832,7 +848,7 @@ class sbasDec(cssr):
         eph.e = e*rCST.P2_30
         eph.a = a*0.02
 
-        eph.toe = tod2tow(te*16.0, self.time0)
+        eph.toe = tod2tow(te*16.0, self.time)
         eph.toc = eph.toe
 
         i, C = self.decode_cov(msg, i)
@@ -867,7 +883,7 @@ class sbasDec(cssr):
             alm.OMG0 = OMG0*rCST.SC2RAD*rCST.P2_13
             alm.OMDd = OMGd*1e-9
             alm.M0 = M0*rCST.SC2RAD*rCST.P2_14
-            alm.toa = tod2tow(ta*1800.0, self.time0)
+            alm.toa = tod2tow(ta*1800.0, self.time)
             self.Alm[sat] = alm
 
         # wnro_c = bs.unpack_from('u4', msg, i)[0]
@@ -897,7 +913,7 @@ class sbasDec(cssr):
 
         self.lc[0].cstat |= (1 << sCType.CLOCK) | (1 << sCType.ORBIT)
         self.lc[0].t0[sat] = {
-            sCType.CLOCK: self.time0, sCType.ORBIT: self.time0}
+            sCType.CLOCK: self.time, sCType.ORBIT: self.time}
 
         return sat
 
@@ -926,9 +942,9 @@ class sbasDec(cssr):
         self.udrei[sat] = dfrei
         self.dRcorr[sat] = dRcorr
 
-        self.time = tod2tow(t0*16.0, self.time0)
+        self.time0 = tod2tow(t0*16.0, self.time)
 
-        self.iodssr = 0
+        # self.iodssr = 0
 
         self.iodssr_c[sCType.CLOCK] = self.iodssr
         self.iodssr_c[sCType.ORBIT] = self.iodssr
@@ -1012,9 +1028,4 @@ class sbasDec(cssr):
             None
 
         if self.monlevel > 3:
-            if self.time != -1:
-                _, tow = time2gpst(self.time)
-            else:
-                tow = -1
-            self.fh.write("mt={:2d} tow={:6.1f}\n"
-                          .format(mt, tow))
+            self.fh.write("{:s} mt={:2d} \n".format(time2str(self.time), mt))
