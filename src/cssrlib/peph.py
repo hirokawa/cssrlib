@@ -7,7 +7,7 @@ Created on Sun Aug 22 21:01:49 2021
 
 from cssrlib.gnss import Nav, id2sat, sat2id, char2sys, sat2prn
 from cssrlib.gnss import epoch2time, time2epoch, timeadd, timediff, gtime_t
-from cssrlib.gnss import str2time, time2str, time2doy
+from cssrlib.gnss import str2time, time2doy
 from cssrlib.gnss import gpst2utc, utc2gpst, time2gpst
 from cssrlib.gnss import ecef2enu
 from cssrlib.gnss import rCST, rSigRnx, uGNSS, uTYP, uSIG
@@ -203,21 +203,28 @@ class peph:
 
         return nav
 
-    def write_sp3(self, fname, nav):
+    def write_sp3(self, fname, nav, sats=None):
         """
         Write data to SP3 file
         """
+
+        # Update accumulated satellite list
+        #
+        if sats is not None:
+            self.nsat = len(sats)
+            self.sat = sorted(list(sats))
 
         with open(fname, "w") as fh:
 
             # Write header section
             #
 
-            # Epoch lines
-            #
             t0 = nav.peph[0].time
             e = time2epoch(t0)
             ne = len(nav.peph)
+
+            # Epoch lines
+            #
 
             fh.write("#dP{:04d} {:02d} {:02d} {:02d} {:02d} {:011.8f} {:7d} d+D {:16s}\n"
                      .format(e[0], e[1], e[2], e[3], e[4], e[5], ne, ' '))
