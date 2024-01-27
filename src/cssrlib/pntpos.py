@@ -54,13 +54,18 @@ def ionmodel(t, pos, az, el, nav=None, model=uIonoModel.KLOBUCHAR, cs=None):
 
 
 class stdpos(pppos):
-    def __init__(self, nav, pos0=np.zeros(3),
-                 logfile=None, trop_opt=0, iono_opt=0, phw_opt=0):
+
+    def ICB(self, s=0):
+        """ return index of clock bias (s=0), clock drift (s=1) """
+        return 3+s if self.nav.pmode == 0 else 6+s
+
+    def __init__(self, nav, pos0=np.zeros(3), logfile=None, trop_opt=0,
+                 iono_opt=0, phw_opt=0, csmooth=False):
 
         self.nav = nav
 
         self.nav.nf = 1
-        self.nav.csmooth = True
+        self.nav.csmooth = csmooth  # carrier-smoothing is enabled/disabled
 
         # Select tropospheric model
         #
@@ -76,12 +81,12 @@ class stdpos(pppos):
         # 0: use iono-model, 1: estimate, 2: use cssr correction
         self.nav.iono_opt = iono_opt
 
-        self.nav.na = (3 if self.nav.pmode == 0 else 6)
-        self.nav.nq = (3 if self.nav.pmode == 0 else 6) + 1
+        self.nav.na = (4 if self.nav.pmode == 0 else 8)
+        self.nav.nq = (4 if self.nav.pmode == 0 else 8)
 
         # State vector dimensions (including slant iono delay and ambiguities)
         #
-        self.nav.nx = self.nav.na + 1
+        self.nav.nx = self.nav.na
 
         self.nav.x = np.zeros(self.nav.nx)
         self.nav.P = np.zeros((self.nav.nx, self.nav.nx))
@@ -102,7 +107,7 @@ class stdpos(pppos):
         self.nav.sig_v0 = 1.0     # [m/s]
 
         self.nav.sig_cb0 = 100.0  # [m]
-        # self.nav.sig_cd0 = 1.0    # [m/s]
+        self.nav.sig_cd0 = 1.0    # [m/s]
 
         # Process noise sigma
         #
@@ -113,8 +118,8 @@ class stdpos(pppos):
             self.nav.sig_qp = 0.01/np.sqrt(1)      # [m/sqrt(s)]
             self.nav.sig_qv = 1.0/np.sqrt(1)       # [m/s/sqrt(s)]
 
-        self.nav.sig_qcb = 1.0
-        # self.nav.sig_qcd = 0.1
+        self.nav.sig_qcb = 0.1
+        self.nav.sig_qcd = 0.01
 
         self.nav.elmin = np.deg2rad(10.0)
 
@@ -135,7 +140,10 @@ class stdpos(pppos):
         # Velocity
         if self.nav.pmode >= 1:  # kinematic
             dP[3:6] = self.nav.sig_v0**2
-        dP[self.nav.na] = self.nav.sig_cb0**2
+            dP[6] = self.nav.sig_cb0**2
+            dP[7] = self.nav.sig_cd0**2
+        else:
+            dP[3] = self.nav.sig_cb0**2
         # dP[self.nav.na+1] = self.nav.sig_cd0**2
 
         # Process noise
@@ -146,9 +154,10 @@ class stdpos(pppos):
         # Velocity
         if self.nav.pmode >= 1:  # kinematic
             self.nav.q[3:6] = self.nav.sig_qv**2
-
-        self.nav.q[self.nav.na] = self.nav.sig_qcb**2
-        # self.nav.q[self.nav.na+1] = self.nav.sig_qcd**2
+            self.nav.q[6] = self.nav.sig_qcb**2
+            self.nav.q[7] = self.nav.sig_qcd**2
+        else:
+            self.nav.q[3] = self.nav.sig_qcb**2
 
         # Logging level
         #
@@ -209,7 +218,7 @@ class stdpos(pppos):
         nf = self.nav.nf
         n = len(obs.P)
         rr = x[0:3]
-        dtr = x[3]
+        dtr = x[self.ICB()]
         y = np.zeros((n, nf))
         el = np.zeros(n)
         az = np.zeros(n)
@@ -342,7 +351,7 @@ class stdpos(pppos):
                     # SD line-of-sight vectors
                     #
                     H[nv, 0:3] = -e[j, :]
-                    H[nv, 3] = 1.0
+                    H[nv, self.ICB()] = 1.0
 
                     Rj[nv] = self.varerr(self.nav, el[j], f)
 
@@ -454,8 +463,9 @@ class stdpos(pppos):
         Pp = self.nav.P.copy()
 
         if abs(np.mean(v)) > 100.0:  # clock bias initialize/reset
-            xp[self.nav.na] = np.mean(v)
-            v -= xp[self.nav.na]
+            ic = (3 if self.nav.pmode == 0 else 6)
+            xp[ic] = np.mean(v)
+            v -= xp[ic]
 
         # Kalman filter measurement update
         #
