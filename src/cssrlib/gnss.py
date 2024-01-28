@@ -726,6 +726,7 @@ class Alm():
     af0 = 0.0
     af1 = 0.0
     toa = gtime_t()
+    toas = 0.0
     week = 0
     e = 0.0
     i0 = 0.0
@@ -770,6 +771,7 @@ class Nav():
         self.pmode = 1  # 0: static, 1: kinematic
         self.ephopt = 2  # ephemeris option 0: BRDC, 1: SBAS, 2: SSR-APC,
         #                  3: SSR-CG, 4: PREC
+        self.rmode = 0  # 0: IF not applied, 1: IF for L1/L2, 2: IF for L1/L5
 
         # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
         self.armode = 0
@@ -1481,47 +1483,3 @@ def tropmodelHpf():
     trop_wet = (77.6e-6 * 11000.0 * 4810.0 * e/temp**2)/5.0
 
     return trop_dry, trop_wet, None
-
-
-# static variables for carrier smoothing
-n_ = {}
-Ps_ = {}
-Lp_ = {}
-t0_ = {}
-
-
-def csmooth(obs: Obs, ns=100, dt_th=1, cs_th=10):
-    """ Hatch filter for carrier smoothing """
-
-    for i, sat in enumerate(obs.sat):
-        sys, _ = sat2prn(sat)
-
-        if sat not in n_:
-            nsig = len(obs.sig[sys][uTYP.L])
-            n_[sat] = np.ones(nsig)
-            Ps_[sat] = np.zeros(nsig)
-            Lp_[sat] = np.zeros(nsig)
-            t0_[sat] = obs.t
-
-        for k, s in enumerate(obs.sig[sys][uTYP.L]):
-            if obs.P[i][k] == 0.0 or obs.L[i][k] == 0.0:
-                continue
-            if obs.lli[i][k] or timediff(obs.t, t0_[sat]) > dt_th:
-                n_[sat][k] = 1
-            if n_[sat][k] == 1:
-                Ps_[sat][k] = obs.P[i][k]
-            else:
-                dcp = s.wavelength()*(obs.L[i][k]-Lp_[sat][k])
-                Pp = Ps_[sat][k]+dcp  # predicted pseudo-range
-                dP = obs.P[i][k]-Pp
-                if abs(dP) < s.wavelength()*cs_th:
-                    ks = 1/n_[sat][k]
-                    Ps_[sat][k] = ks*obs.P[i][k] + (1-ks)*Pp
-                else:  # reset for cycle-slip
-                    n_[sat][k] = 1
-                    Ps_[sat][k] = obs.P[i][k]
-            n_[sat][k] = min(n_[sat][k]+1, ns)
-            obs.P[i][k] = Ps_[sat][k]
-            Lp_[sat][k] = obs.L[i][k]
-
-        t0_[sat] = obs.t

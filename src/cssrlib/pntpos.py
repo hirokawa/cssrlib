@@ -4,8 +4,8 @@ module for standalone positioning
 import numpy as np
 from cssrlib.gnss import rCST, ecef2pos, geodist, satazel, \
     tropmodel, tropmapf, sat2prn, uGNSS, uTropoModel, uIonoModel, \
-    timediff, time2gpst, dops, csmooth
-from cssrlib.cssrlib import sCSSRTYPE, sCType
+    timediff, time2gpst, dops, uTYP, Obs, time2str
+from cssrlib.cssrlib import sCSSRTYPE
 from cssrlib.ephemeris import satposs
 from cssrlib.pppssr import pppos
 from cssrlib.sbas import ionoSBAS
@@ -60,12 +60,18 @@ class stdpos(pppos):
         return 3+s if self.nav.pmode == 0 else 6+s
 
     def __init__(self, nav, pos0=np.zeros(3), logfile=None, trop_opt=0,
-                 iono_opt=0, phw_opt=0, csmooth=False):
+                 iono_opt=0, phw_opt=0, csmooth=False, rmode=0):
 
         self.nav = nav
+        self.monlevel = 0
 
-        self.nav.nf = 1
         self.nav.csmooth = csmooth  # carrier-smoothing is enabled/disabled
+        self.nav.rmode = rmode  # PR measurement mode
+
+        self.cs_cnt = {}
+        self.Lp_ = {}
+        self.Ps_ = {}
+        self.cs_t0 = {}
 
         # Select tropospheric model
         #
@@ -166,6 +172,35 @@ class stdpos(pppos):
             self.nav.monlevel = 0
         else:
             self.nav.fout = open(logfile, 'w')
+
+    def csmooth(self, obs: Obs, sat, Pm, Lm, ns=100, dt_th=1, cs_th=10):
+        """ Hatch filter for carrier smoothing """
+
+        sys, _ = sat2prn(sat)
+
+        if Pm == 0.0 or Lm == 0.0:
+            self.cs_cnt[sat] = 1
+            return Pm
+
+        if sat not in self.cs_cnt or timediff(obs.t, self.cs_t0[sat]) > dt_th:
+            self.cs_cnt[sat] = 1
+
+        if self.cs_cnt[sat] == 1:
+            self.Ps_[sat] = Pm
+        else:
+            Pp = self.Ps_[sat] + (Lm - self.Lp_[sat])  # predicted pseudorange
+            if abs(Pm-Pp) < cs_th:
+                alp = 1/self.cs_cnt[sat]
+                self.Ps_[sat] = alp*Pm + (1-alp)*Pp  # smoothed pseudorange
+            else:
+                if self.monlevel > 0:
+                    print("cycle slip detected, cs reset.")
+                self.cs_cnt[sat] = 1
+                self.Ps_[sat] = Pm
+        self.cs_cnt[sat] = min(self.cs_cnt[sat]+1, ns)
+        self.Lp_[sat] = Lm
+        self.cs_t0[sat] = obs.t
+        return self.Ps_[sat]
 
     def varerr(self, nav, el, f):
         """ variation of measurement """
@@ -274,9 +309,29 @@ class stdpos(pppos):
 
             r += dtr - _c*dts[i]
 
+            sigsCP = obs.sig[sys][uTYP.L]
+            if sys == uGNSS.GLO:
+                lam = np.array([s.wavelength(self.nav.glo_ch[sat])
+                                for s in sigsCP])
+            else:
+                lam = np.array([s.wavelength() for s in sigsCP])
+
+            if self.nav.rmode == 0:
+                PR = obs.P[i, 0]
+                CP = lam[0]*obs.L[i, 0]
+            else:  # iono-free combination
+                iono = 0
+                if self.nav.rmode == 1:  # L1/L2 iono free combination
+                    gam = (rCST.FREQ_G1/rCST.FREQ_G2)**2
+                if self.nav.rmode == 2:  # L1/L5 iono free combination
+                    gam = (rCST.FREQ_S1/rCST.FREQ_S5)**2
+                PR = (obs.P[i, 1]-gam*obs.P[i, 0])/(1-gam)
+                CP = (lam[1]*obs.L[i, 1]-gam*lam[0]*obs.L[i, 0])/(1-gam)
+
             if self.nav.csmooth:  # carrier smoothing for pseudo-range
-                csmooth(obs)
-            y[i, 0] = obs.P[i, 0]-(r+trop + iono)
+                PR = self.csmooth(obs, sat, PR, CP)
+
+            y[i, 0] = PR-(r+trop + iono)
 
         return y, e, az, el
 
@@ -310,7 +365,9 @@ class stdpos(pppos):
             Covariance matrix of single-difference measurements
         """
 
-        nf = self.nav.nf  # number of frequencies (or signals)
+        nf = self.nav.nf if self.nav.rmode == 0 else 1
+        # number of frequencies (or signals)
+
         ns = len(el)  # number of satellites
         nc = len(obs.sig.keys())  # number of constellations
 
@@ -463,9 +520,12 @@ class stdpos(pppos):
         Pp = self.nav.P.copy()
 
         if abs(np.mean(v)) > 100.0:  # clock bias initialize/reset
-            ic = (3 if self.nav.pmode == 0 else 6)
-            xp[ic] = np.mean(v)
-            v -= xp[ic]
+            ic = self.ICB()
+            idx_ = np.where(v != 0.0)[0]
+            xp[ic] = np.mean(v[idx_])
+            v[idx_] -= xp[ic]
+            if self.monlevel > 0:
+                print("{:s} clock reset.".format(time2str(obs.t)))
 
         # Kalman filter measurement update
         #
@@ -481,5 +541,6 @@ class stdpos(pppos):
         #
         self.nav.t = obs.t
         self.dop = dops(az, el)
+        self.nsat = len(el)
 
         return 0

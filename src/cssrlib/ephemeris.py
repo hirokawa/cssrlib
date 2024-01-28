@@ -431,7 +431,7 @@ def satposs(obs, nav, cs=None, orb=None):
                 dts[i] += dclk/rCST.CLIGHT
 
                 if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5,
-                                   sc.DGPS):
+                                   sc.DGPS) and sys == uGNSS.GPS:
                     dts[i] -= eph.tgd
 
                 ers = vnorm(rs[i, :]-nav.x[0: 3])
