@@ -1,12 +1,21 @@
 """
 Raw Navigation Message decoder
+
+[1] IS-GPS-200 Rev.N, 2022
+[2] Quasi-Zenith Satellite System Interface Specification
+    Satellite Positioning, Navigation and Timing Service (IS-QZSS-PNT-005),
+    2022
+[3] Galileo Open Service Signal-in-Space Interface Control Document
+    (OS SIS ICD) Issue 2.1, 2023
+[4] BeiDou Navigation Satellite System Signal In Space Interface Control
+    Document: Open Service Signal B1C (Version 1.0), 2017
+
 """
 
 import numpy as np
-import struct as st
 import bitstruct.c as bs
-from cssrlib.gnss import epoch2time, time2gpst, gpst2time, gst2time, time2bdt, bdt2time, rCST
-from cssrlib.gnss import prn2sat, uGNSS, time2epoch, sat2prn, sat2id, bdt2gpst
+from cssrlib.gnss import gpst2time, gst2time, bdt2time, rCST
+from cssrlib.gnss import prn2sat, uGNSS, sat2prn, bdt2gpst
 from cssrlib.gnss import Eph, uTYP
 from cssrlib.rinex import rnxenc
 
@@ -26,11 +35,13 @@ class RawNav():
             self.gal_inav[k] = bytearray(200)
 
     def urai2sva(self, urai):
-        urai_t = [2.0, 2.8, 4.0, 5.7, 8.0, 11.3, 16,
-                  32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]
+        """ GPS/QZSS SV accuracy [1] 20.3.3.3.1.3, [2] Tab. 5.4.3-2 """
+        urai_t = [2.40, 3.40, 4.85, 6.85, 9.65, 13.65, 24.00, 48.00, 96.00,
+                  192.00, 384.00, 768.00, 1536.00, 3072.00, 6144.00, -1.0]
         return urai_t[urai]
 
     def sisa2sva(self, sisa):
+        """ Galileo SISA Index Values [3] Tab. 89 """
         sva = np.nan
         if sisa < 50:
             sva = sisa*0.01
@@ -46,6 +57,7 @@ class RawNav():
         return sva
 
     def decode_gal_inav(self, week, time, sat, type_, msg):
+        """ Galileo I/NAV message decoder [3] """
         sys, prn = sat2prn(sat)
         eph = Eph(sat)
         # 1:even/odd, 1:page, 112:data1, 6:tail, 1:even/odd, 1:page, 16:page2
@@ -145,6 +157,7 @@ class RawNav():
         return eph
 
     def decode_gps_lnav(self, week, time, sat, msg):
+        """ GPS/QZSS LNAV Message decoder [1], [2] """
 
         sys, prn = sat2prn(sat)
         eph = Eph(sat)
@@ -247,6 +260,7 @@ class RawNav():
         return eph
 
     def decode_bds_cnav_eph1(self, msg, eph, i):
+        """ BDS CNAV message decoder for Ephemeris I """
         toe, sattype, dA, Adot, deln, delnd, M0, ecc, omg = \
             bs.unpack_from('u11u2s26s25s17s23s33u33s33', msg, i)
         i += 203
@@ -265,6 +279,7 @@ class RawNav():
         return i
 
     def decode_bds_cnav_eph2(self, msg, eph, i):
+        """ BDS CNAV message decoder for Ephemeris II """
         OMG0, i0, OMGd, idot, cis, cic, crs, crc, cus, cuc = \
             bs.unpack_from('s33s33s19s15s16s16s24s24s21s21', msg, i)
         i += 222
@@ -282,6 +297,7 @@ class RawNav():
         return i
 
     def decode_bds_cnav_clk(self, msg, eph, i):
+        """ BDS CNAV message decoder for Clock """
         toc, a0, a1, a2 = \
             bs.unpack_from('u11s25s22s11', msg, i)
         i += 69
@@ -293,12 +309,14 @@ class RawNav():
         return i
 
     def decode_bds_cnav_sisa(self, msg, i):
+        """ BDS CNAV message decoder for SISA """
         top, sisai_ocb, sisai_oc1, sisai_oc2 = \
             bs.unpack_from('u11u5u3u3', msg, i)
         i += 22
         return i
 
     def decode_bds_cnav_iono(self, msg, i):
+        """ BDS CNAV message decoder for Ionoephere parameters """
         a1, a2, a3, a4, a5, a6, a7, a8, a9 = \
             bs.unpack_from('u10s8u8u8u8s8s8s8s8', msg, i)
         i += 74
@@ -306,30 +324,35 @@ class RawNav():
         return i
 
     def decode_bds_cnav_utc(self, msg, i):
+        """ BDS CNAV message decoder for UTC parameters """
         a0, a1, a2, dtls, tot, wn_ot, wn_lsf, dn, dt_lsf = \
             bs.unpack_from('s16s13s7s8u16u13u13u3s8', msg, i)
         i += 97
         return i
 
     def decode_bds_cnav_ralm(self, msg, i):
+        """ BDS CNAV message decoder for reduced almanacs """
         prn, sattype, dela, OMG0, Phi0, svh = \
             bs.unpack_from('u6u2s8s7s7u8', msg, i)
         i += 38
         return i
 
     def decode_bds_cnav_eop(self, msg, i):
+        """ BDS CNAV message decoder for Earth Orientation Parameters """
         teop, x, xd, y, yd, dut1, dut1d = \
             bs.unpack_from('u16s21s15s21s15s31s19', msg, i)
         i += 138
         return i
 
     def decode_bds_cnav_ggto(self, msg, i):
+        """ BDS CNAV message decoder for GGTO """
         gnss, wn, t0, a0, a1, a2 = \
             bs.unpack_from('u3u13u16s16s13s7', msg, i)
         i += 38
         return i
 
     def decode_bds_cnav_malm(self, msg, i):
+        """ BDS CNAV message decoder for Midium Almanacs """
         prn, sattype, wn, toa, ecc, inc, sqrta, OMG0, OMGd, omg, M0, \
             af0, af1, svh = bs.unpack_from(
                 'u6u2u13u8u11s11u17s16s11s16s16s11s10u8', msg, i)
@@ -337,6 +360,7 @@ class RawNav():
         return i
 
     def decode_bds_cnav_sisai(self, msg, eph, i):
+        """ BDS CNAV message decoder for SISAI """
         top, eph.sisai[1], eph.sisai[2], eph.sisai[3] = bs.unpack_from(
             'u11u5u3u3', msg, i)
         eph.top = top*300.0
@@ -344,9 +368,12 @@ class RawNav():
         return i
 
     def decode_bds_b1c(self, week, time_, prn, msg):
+        """ BDS B1C (B-CNAV1 message decoder) [4] """
 
         eph = Eph()
         eph.sat = prn2sat(uGNSS.BDS, prn)
+        eph.sisai = np.zeros(4, dtype=int)
+        eph.isc = np.zeros(6)
         # data2: 600b, errCorr2: 8b, data3: 264b, soh: 8b
         # decode Subframe 1
         soh = bs.unpack_from('u8', msg, 600+8+264)[0]*18.0

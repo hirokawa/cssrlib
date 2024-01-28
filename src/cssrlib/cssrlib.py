@@ -18,6 +18,10 @@ class sCSSRTYPE(IntEnum):
     IGS_SSR = 5
     RTCM3_SSR = 6
     PVS_PPP = 7      # PPP via SouthPAN
+    SBAS_L1 = 8      # L1 SBAS
+    SBAS_L5 = 9      # L5 SBAS (DFMC)
+    DGPS = 10        # DGPS (QZSS SLAS)
+    STDPOS = 11
 
 
 class sGNSS(IntEnum):
@@ -61,7 +65,7 @@ class sCType(IntEnum):
     TROP = 6
     URA = 7
     AUTH = 8
-    HCLOCK = 8
+    HCLOCK = 9
     VTEC = 10
     MAX = 11
 
@@ -211,6 +215,7 @@ class local_corr:
         self.iode = None
         self.dorb = None
         self.dclk = None
+        self.hclk = None
         self.stec = None
         self.trph = None
         self.trpw = None
@@ -218,9 +223,8 @@ class local_corr:
         self.ct = None
         self.quality_trp = None
         self.quality_stec = None
-        self.t0 = []
-        for _ in range(sCType.MAX):
-            self.t0.append(gtime_t())
+        self.sat_n = []
+        self.t0 = {}
         self.cstat = 0            # status for receiving CSSR message
 
 
@@ -272,7 +276,7 @@ class cssr:
         self.lc = []
         self.fcnt = -1
         self.flg_net = False
-        self.time = -1
+        self.time = gtime_t()
         self.nsig_max = 0
         self.ngrid = 0
         self.grid_index = []
@@ -441,8 +445,14 @@ class cssr:
 
     def set_t0(self, inet=0, sat=0, ctype=0, t=gtime_t()):
         """ set reference time for correcion to check validity time """
+        sc_t = [sCType.CLOCK, sCType.ORBIT, sCType.CBIAS, sCType.PBIAS,
+                sCType.HCLOCK]
+
         if sat not in self.lc[inet].t0:
             self.lc[inet].t0[sat] = {}
+            for sc in sc_t:
+                self.lc[inet].t0[sat][sc] = gtime_t()
+
         self.lc[inet].t0[sat][ctype] = t
 
     def quality_idx(self, cl, val):

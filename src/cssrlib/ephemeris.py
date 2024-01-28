@@ -2,30 +2,43 @@
 module for ephemeris processing
 """
 
+from cssrlib.cssrlib import sCType
+from cssrlib.cssrlib import sCSSRTYPE as sc
 import numpy as np
 from cssrlib.gnss import uGNSS, rCST, sat2prn, timediff, timeadd, vnorm
-from cssrlib.gnss import gtime_t, Geph
-from cssrlib.cssrlib import sCSSRTYPE as sc
-from cssrlib.cssrlib import sCType
+from cssrlib.gnss import gtime_t, Geph, Eph, Alm, prn2sat, gpst2time, \
+    time2gpst, timeget, time2gst, time2bdt, gst2time, bdt2time, epoch2time
+from datetime import datetime
+import xml.etree.ElementTree as et
 
 MAX_ITER_KEPLER = 30
 RTOL_KEPLER = 1e-13
 
+MAXDTOE_t = {uGNSS.GPS: 7201.0, uGNSS.GAL: 14400.0, uGNSS.QZS: 7201.0,
+             uGNSS.BDS: 21601.0, uGNSS.IRN: 7201.0, uGNSS.GLO: 1800.0,
+             uGNSS.SBS: 360.0}
+
 
 def findeph(nav, t, sat, iode=-1, mode=0):
-    """ find ephemeric for sat """
-    dt_p = 3600*4
+    """ find ephemeris for sat """
+    sys, _ = sat2prn(sat)
     eph = None
+    tmax = MAXDTOE_t[sys]
+    tmin = tmax + 1.0
     for eph_ in nav:
-        if eph_.sat != sat:
+        if eph_.sat != sat or (iode >= 0 and iode != eph_.iode):
             continue
-        dt = timediff(t, eph_.toe)
-        if sat == 43 and eph_.mode == 1:
-            None
-        if (iode < 0 or eph_.iode == iode) and eph_.mode == mode and \
-                abs(dt) < dt_p:
+        if eph_.mode != mode:
+            continue
+        dt = abs(timediff(t, eph_.toe))
+        if dt > tmax or eph_.mode != mode:
+            continue
+        if iode >= 0:
+            return eph_
+        if dt <= tmin:
             eph = eph_
-            break
+            tmin = dt
+
     return eph
 
 
@@ -109,7 +122,7 @@ def geph2clk(time: gtime_t, geph: Geph):
     return -geph.taun + geph.gamn*t
 
 
-def eph2pos(t, eph, flg_v=False):
+def eph2pos(t: gtime_t, eph: Eph, flg_v=False):
     """ calculate satellite position based on ephemeris """
     sys, prn = sat2prn(eph.sat)
     if sys == uGNSS.GAL:
@@ -287,10 +300,11 @@ def satposs(obs, nav, cs=None, orb=None):
 
             if cs is not None:
 
-                if cs.iodssr_c[sCType.ORBIT] == cs.iodssr:
+                if cs.iodssr >= 0 and cs.iodssr_c[sCType.ORBIT] == cs.iodssr:
                     if sat not in cs.sat_n:
                         continue
-                elif cs.iodssr_c[sCType.ORBIT] == cs.iodssr_p:
+                elif cs.iodssr_p >= 0 and \
+                        cs.iodssr_c[sCType.ORBIT] == cs.iodssr_p:
                     if sat not in cs.sat_n_p:
                         continue
                 else:
@@ -302,7 +316,7 @@ def satposs(obs, nav, cs=None, orb=None):
                 iode = cs.lc[0].iode[sat]
                 dorb = cs.lc[0].dorb[sat]  # radial,along-track,cross-track
 
-                if cs.cssrmode == sc.PVS_PPP:
+                if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5):
                     dorb += cs.lc[0].dvel[sat] * \
                         (timediff(obs.t, cs.lc[0].t0[sat][sCType.ORBIT]))
 
@@ -335,7 +349,12 @@ def satposs(obs, nav, cs=None, orb=None):
 
                     dclk = cs.lc[0].dclk[sat]
 
-                    if cs.cssrmode == sc.PVS_PPP:
+                    if cs.lc[0].cstat & (1 << sCType.HCLOCK) and \
+                            sat in cs.lc[0].hclk.keys() and \
+                            not np.isnan(cs.lc[0].hclk[sat]):
+                        dclk += cs.lc[0].hclk[sat]
+
+                    if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5):
                         dclk += cs.lc[0].ddft[sat] * \
                             (timediff(obs.t, cs.lc[0].t0[sat][sCType.CLOCK]))
 
@@ -403,7 +422,7 @@ def satposs(obs, nav, cs=None, orb=None):
                     er = np.cross(ea, ec)
                     A = np.array([er, ea, ec])
 
-                if cs.cssrmode == sc.PVS_PPP:
+                if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5):
                     dorb_e = dorb
                 else:
                     dorb_e = dorb@A
@@ -411,7 +430,8 @@ def satposs(obs, nav, cs=None, orb=None):
                 rs[i, :] -= dorb_e
                 dts[i] += dclk/rCST.CLIGHT
 
-                if cs.cssrmode == sc.PVS_PPP and sys == uGNSS.GPS:
+                if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5,
+                                   sc.DGPS) and sys == uGNSS.GPS:
                     dts[i] -= eph.tgd
 
                 ers = vnorm(rs[i, :]-nav.x[0: 3])
@@ -425,6 +445,8 @@ def satposs(obs, nav, cs=None, orb=None):
 
                 nav.dorb[sat] = dorb_
                 nav.dclk[sat] = dclk
+            elif nav.smode == 1 and nav.nf == 1:  # standalone positioing
+                dts[i] -= eph.tgd
 
             nsat += 1
 
@@ -433,3 +455,181 @@ def satposs(obs, nav, cs=None, orb=None):
             nav.time_p = cs.lc[0].t0[sat][sCType.ORBIT]
 
     return rs, vs, dts, svh, nsat
+
+
+def loadXmlAlmanac(fname, sys=uGNSS.GAL):
+    """ load Galileo Almanac in XML format:
+      https://www.gsc-europa.eu/gsc-products/almanac
+    """
+    alm_t = []
+    root = et.parse(fname).getroot()
+
+    dstr = root.find("./header/GAL-header/issueDate").text
+    d = datetime.fromisoformat(dstr)
+    ep = [d.year, d.month, d.day, d.hour, d.minute, d.second]
+    tref = epoch2time(ep)
+    week_ref, tow_ref = time2gst(tref)
+    week_ref = week_ref//4*4
+
+    h = root.find('body').find('Almanacs')
+    for sv in h.findall('svAlmanac'):
+        prn = int(sv.find('SVID').text)
+
+        sts_fnav = sv.find('svFNavSignalStatus')
+        sts_E5a = int(sts_fnav.find('statusE5a').text)
+
+        sts_inav = sv.find('svINavSignalStatus')
+        sts_E5b = int(sts_inav.find('statusE5b').text)
+        sts_E1B = int(sts_inav.find('statusE1B').text)
+
+        alm_ = sv.find('almanac')
+        sat = prn2sat(sys, prn)
+
+        alm = Alm(sat)
+        rA = float(alm_.find('aSqRoot').text) + np.sqrt(29600e3)
+        alm.A = rA**2
+        alm.e = float(alm_.find('ecc').text)
+        deltai = float(alm_.find('deltai').text)*rCST.SC2RAD
+        alm.i0 = 56.0*rCST.D2R + deltai
+        alm.OMG0 = float(alm_.find('omega0').text)*rCST.SC2RAD
+        alm.OMGd = float(alm_.find('omegaDot').text)*rCST.SC2RAD
+        alm.omg = float(alm_.find('w').text)*rCST.SC2RAD
+        alm.M0 = float(alm_.find('m0').text)*rCST.SC2RAD
+        alm.af0 = float(alm_.find('af0').text)
+        alm.af1 = float(alm_.find('af1').text)
+        alm.ioda = float(alm_.find('iod').text)
+        alm.toas = float(alm_.find('t0a').text)
+        wna = float(alm_.find('wna').text)
+
+        alm.toa = gst2time(week_ref + wna, alm.toas)
+        alm.svh = (sts_E5a << 4) | (sts_E5b << 2) | (sts_E1B)
+
+        alm_t.append(alm)
+
+    return alm_t
+
+
+def loadyuma(fname, sys=uGNSS.GPS):
+    """ load Yuma almanac """
+    alm_t = []
+    if sys == uGNSS.GPS or sys == uGNSS.QZS:
+        week_ref, _ = time2gpst(timeget())
+    elif sys == uGNSS.GAL:
+        week_ref, _ = time2gst(timeget())
+    elif sys == uGNSS.BDS:
+        week_ref, _ = time2bdt(timeget())
+    else:
+        return alm_t
+    flg = False
+
+    with open(fname, 'rt') as fh:
+        for line in fh:
+
+            v = line.split(':')
+            if v[0][0] == '*':  # comment
+                continue
+            elif v[0] == 'ID':
+                prn = int(v[1])
+                sat = prn2sat(sys, prn)
+                alm = Alm(sat)
+                flg = True
+            elif v[0] == 'Health':
+                alm.svh = int(v[1])
+            elif v[0] == 'Eccentricity':
+                alm.e = float(v[1])
+            elif v[0] == 'Time of Applicability(s)':
+                alm.toas = float(v[1])
+            elif v[0] == 'Orbital Inclination(rad)':
+                alm.i0 = float(v[1])
+            elif v[0] == 'Rate of Right Ascen(r/s)':
+                alm.OMGd = float(v[1])
+            elif v[0] == 'SQRT(A)  (m 1/2)':
+                sqrtA = float(v[1])
+                alm.A = sqrtA**2
+            elif v[0] == 'Right Ascen at Week(rad)' or \
+                    v[0] == 'Right Ascen at TOA(rad)':
+                alm.OMG0 = float(v[1])
+            elif v[0] == 'Argument of Perigee(rad)':
+                alm.omg = float(v[1])
+            elif v[0] == 'Mean Anom(rad)':
+                alm.M0 = float(v[1])
+            elif v[0] == 'Af0(s)':
+                alm.af0 = float(v[1])
+            elif v[0] == 'Af1(s/s)':
+                alm.af1 = float(v[1])
+            elif v[0] == 'week':
+                alm.week = int(v[1])
+                alm.week += week_ref//1023*1023
+                if alm.week > week_ref:
+                    alm.week -= 1023
+
+                alm.sattype = 0
+                if sys == uGNSS.GPS or sys == uGNSS.QZS:
+                    alm.toa = gpst2time(alm.week, alm.toas)
+                elif sys == uGNSS.GAL:
+                    alm.toa = gst2time(alm.week, alm.toas)
+                elif sys == uGNSS.BDS:
+                    alm.toa = bdt2time(alm.week, alm.toas)
+
+                if flg:
+                    alm_t.append(alm)
+                    flg = False
+
+    return alm_t
+
+
+def findalm(alm_t, t, sat, tmax=np.inf):
+    """ find almanac for sat """
+    sys, _ = sat2prn(sat)
+    alm = None
+    tmin = tmax + 1.0
+    for alm_ in alm_t:
+        if alm_.sat != sat:
+            continue
+        dt = abs(timediff(t, alm_.toa))
+        if dt > tmax:
+            continue
+        if dt <= tmin:
+            alm = alm_
+            tmin = dt
+
+    return alm
+
+
+def alm2pos(t: gtime_t, alm: Alm):
+    """ calculate satellite position based on ephemeris """
+    sys, prn = sat2prn(alm.sat)
+    if sys == uGNSS.GAL:
+        mu = rCST.MU_GAL
+        omge = rCST.OMGE_GAL
+    elif sys == uGNSS.BDS:
+        mu = rCST.MU_BDS
+        omge = rCST.OMGE_BDS
+    else:  # GPS,QZS
+        mu = rCST.MU_GPS
+        omge = rCST.OMGE
+    dt = dtadjust(t, alm.toa)
+    n0 = np.sqrt(mu/alm.A**3)
+    M = alm.M0+n0*dt
+    E = M
+    for _ in range(10):
+        Eold = E
+        sE = np.sin(E)
+        E = M+alm.e*sE
+        if abs(Eold-E) < 1e-12:
+            break
+    cE = np.cos(E)
+    u = np.arctan2(np.sqrt(1.0-alm.e**2)*sE, cE-alm.e)+alm.omg
+    r = alm.A*(1.0-alm.e*cE)
+    i = alm.i0
+    Omg = alm.OMG0+(alm.OMGd-omge)*dt-omge*alm.toas
+    x, y = r*np.cos(u), r*np.sin(u)
+    cosO, sinO = np.cos(Omg), np.sin(Omg)
+    cosi, sini = np.cos(i), np.sin(i)
+
+    rs = np.array([x*cosO-y*cosi*sinO,
+                   x*sinO+y*cosi*cosO,
+                   y*sini])
+    dts = alm.af0 + alm.af1*dt
+
+    return rs, dts
