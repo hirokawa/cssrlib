@@ -169,6 +169,7 @@ class pppos():
 
         # Logging level
         #
+        self.monlevel = 0
         self.nav.fout = None
         if logfile is None:
             self.nav.monlevel = 0

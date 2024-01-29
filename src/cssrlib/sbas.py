@@ -189,7 +189,7 @@ class sbasDec(cssr):
         self.tmax = {sCType.CLOCK: 120.0, sCType.ORBIT: 120.0}
 
         # GPS LNAV, Galileo F/NAV
-        self.nav_mode = {uGNSS.GPS: 0, uGNSS.GAL: 1}
+        self.nav_mode = {uGNSS.GPS: 0, uGNSS.GAL: 1, uGNSS.QZS: 0}
 
         self.iodp = -1
         self.iodi = -1
@@ -320,6 +320,9 @@ class sbasDec(cssr):
         elif slot >= 159 and slot <= 195:
             prn = slot-158
             sat = prn2sat(uGNSS.BDS, prn)
+        elif slot >= 197 and slot <= 205:  # experimental
+            prn = slot-4
+            sat = prn2sat(uGNSS.QZS, prn)
         return sat
 
     def check_validity(self, time):
@@ -689,33 +692,52 @@ class sbasDec(cssr):
 
     def decode_dfmc_mask(self, msg, i):
         """ Type 31 PRN mask message """
-        self.sat = []
-        for k in range(32):
-            if bs.unpack_from('u1', msg, i+k)[0] == 1:
-                self.sat.append(prn2sat(uGNSS.GPS, k+1))
-        i += 37
-        for k in range(32):
-            if bs.unpack_from('u1', msg, i+k)[0] == 1:
-                self.sat.append(prn2sat(uGNSS.GLO, k+1))
-        i += 37
-        for k in range(36):
-            if bs.unpack_from('u1', msg, i+k)[0] == 1:
-                self.sat.append(prn2sat(uGNSS.GAL, k+1))
-        i += 37
-        i += 8  # skip spare
 
-        for k in range(39):
-            if bs.unpack_from('u1', msg, i+k)[0] == 1:
-                self.sat.append(prn2sat(uGNSS.SBS, k+120))
-        i += 39
-        for k in range(37):
-            if bs.unpack_from('u1', msg, i+k)[0] == 1:
-                self.sat.append(prn2sat(uGNSS.BDS, k+1))
+        mask_gps = bs.unpack_from('u32', msg, i)[0]
         i += 37
-        i += 19  # skip spare
-        self.iodm = bs.unpack_from('u2', msg, i)[0]
+        mask_glo = bs.unpack_from('u32', msg, i)[0]
+        i += 37
+        mask_gal = bs.unpack_from('u36', msg, i)[0]
+        i += 37+8
+        mask_sbs = bs.unpack_from('u39', msg, i)[0]
+        i += 39
+        mask_bds = bs.unpack_from('u37', msg, i)[0]
+        i += 37+1
+        mask_qzs = bs.unpack_from('u9', msg, i)[0]
+        i += 9+9
+
+        iodm = bs.unpack_from('u2', msg, i)[0]
+
+        if iodm != self.iodssr:
+            self.iodssr_p = self.iodssr
+            self.sat_n_p = self.sat_n
+
+        self.iodm = iodm
         self.iodssr = self.iodm
         i += 2
+
+        prn_gps, nsat_gps = self.decode_mask(mask_gps, 32)
+        prn_glo, nsat_glo = self.decode_mask(mask_glo, 32)
+        prn_gal, nsat_gal = self.decode_mask(mask_gal, 36)
+        prn_sbs, nsat_sbs = self.decode_mask(mask_sbs, 39, 120)
+        prn_bds, nsat_bds = self.decode_mask(mask_bds, 37)
+        prn_qzs, nsat_qzs = self.decode_mask(mask_qzs, 9, 193)  # experimental
+
+        self.sat_n = []
+        for prn in prn_gps:
+            self.sat_n.append(prn2sat(uGNSS.GPS, prn))
+        for prn in prn_glo:
+            self.sat_n.append(prn2sat(uGNSS.GLO, prn))
+        for prn in prn_gal:
+            self.sat_n.append(prn2sat(uGNSS.GAL, prn))
+        for prn in prn_sbs:
+            self.sat_n.append(prn2sat(uGNSS.SBS, prn))
+        for prn in prn_bds:
+            self.sat_n.append(prn2sat(uGNSS.BDS, prn))
+        for prn in prn_qzs:
+            self.sat_n.append(prn2sat(uGNSS.QZS, prn))
+        self.nsat = len(self.sat_n)
+
         return i
 
     def decode_dfmc_integrity_mt34(self, msg, i):
@@ -732,10 +754,12 @@ class sbasDec(cssr):
             if dfreci == 1:
                 idx += [k]
             elif dfreci == 2:
-                if self.dfrei[k] < 15:
-                    self.dfrei[k] += 1
+                None
+                # if self.udrei[k] < 15:
+                #    self.udrei[k] += 1
             elif dfreci == 3:
-                self.dfrei[k] = 15
+                None
+                # self.udrei[k] = 15
 
         dfrei = np.zeros(7, dtype=int)
         for k in range(7):
@@ -743,7 +767,7 @@ class sbasDec(cssr):
             i += 4
         j = 0
         for k in idx:
-            self.udrei[k] = dfrei[j]
+            # self.udrei[k] = dfrei[j]
             j += 1
             if j > 7:
                 break
@@ -898,16 +922,16 @@ class sbasDec(cssr):
 
         self.lc[0].iode[sat] = iodn
         self.lc[0].dorb[sat] = np.zeros(3)
-        self.lc[0].dorb[sat][0] = self.sval(dx, 11, 0.0625)
-        self.lc[0].dorb[sat][1] = self.sval(dy, 11, 0.0625)
-        self.lc[0].dorb[sat][2] = self.sval(dz, 11, 0.0625)
+        self.lc[0].dorb[sat][0] = -self.sval(dx, 11, 0.0625)
+        self.lc[0].dorb[sat][1] = -self.sval(dy, 11, 0.0625)
+        self.lc[0].dorb[sat][2] = -self.sval(dz, 11, 0.0625)
 
         self.lc[0].dclk[sat] = self.sval(db, 12, 0.03125)
 
         self.lc[0].dvel[sat] = np.zeros(3)
-        self.lc[0].dvel[sat][0] = self.sval(dxd, 8, rCST.P2_11)
-        self.lc[0].dvel[sat][1] = self.sval(dyd, 8, rCST.P2_11)
-        self.lc[0].dvel[sat][2] = self.sval(dzd, 8, rCST.P2_11)
+        self.lc[0].dvel[sat][0] = -self.sval(dxd, 8, rCST.P2_11)
+        self.lc[0].dvel[sat][1] = -self.sval(dyd, 8, rCST.P2_11)
+        self.lc[0].dvel[sat][2] = -self.sval(dzd, 8, rCST.P2_11)
 
         self.lc[0].ddft[sat] = self.sval(dbd, 9, rCST.P2_12)
 
@@ -938,6 +962,12 @@ class sbasDec(cssr):
         sat = self.add_dfmc_corr(
             slot, iodn, dx, dy, dz, db, dxd, dyd, dzd, dbd)
 
+        if sat == 0:
+            if self.monlevel > 0:
+                self.fh.write("{:s} invalid slot: {:d}\n".
+                              format(time2str(self.time), slot))
+            return i
+
         self.cov[sat] = C
         self.udrei[sat] = dfrei
         self.dRcorr[sat] = dRcorr
@@ -956,14 +986,26 @@ class sbasDec(cssr):
 
         return i
 
+    def decode_tvs_mc(self, pre, mt):
+        mt_t = {0: 34, 2: 32, 3: 63}
+        dt_t = {0x53: 31, 0x9a: 37, 0xc6: 47}
+        mt_ = mt >> 4
+        mt = dt_t[pre] if mt_ == 1 else mt_t[mt_]
+        return mt
+
     def decode_cssr(self, msg, i=0, src=0, prn=0):
         """ decode SBAS/DFMC SBAS messages """
 
-        if src == 0:  # L1 SBAS
-            _, mt = bs.unpack_from('u8u6', msg, i)
+        if src == 1 and prn >= 184 and prn <= 189:  # QZSS TVS
+            pre, mt = bs.unpack_from('u8u6', msg, i)
+            i += 10
+            mt = self.decode_tvs_mc(pre, mt)
+
+        elif src == 0:  # L1 SBAS
+            pre, mt = bs.unpack_from('u8u6', msg, i)
             i += 14
         else:  # L5 DFMC SBAS
-            _, mt = bs.unpack_from('u4u6', msg, i)
+            pre, mt = bs.unpack_from('u4u6', msg, i)
             i += 10
 
         self.msgtype = mt
