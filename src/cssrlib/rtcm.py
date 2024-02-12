@@ -456,6 +456,10 @@ class rtcm(cssr):
                 return uGNSS.SBS
             elif msgtype >= 1258 and msgtype < 1264:
                 return uGNSS.BDS
+            elif msgtype >= 1265 and msgtype < 1271:  # proposed phase bias
+                tbl_t = {1265: uGNSS.GPS, 1266: uGNSS.GLO, 1267: uGNSS.GAL,
+                         1268: uGNSS.QZS, 1269: uGNSS.SBS, 1270: uGNSS.BDS}
+                return tbl_t[msgtype]
 
     def decode_cssr_orb(self, msg, i, inet=0):
         sys = self.get_ssr_sys(self.msgtype)
@@ -1650,6 +1654,9 @@ class rtcm(cssr):
         elif self.msgtype in (1059, 1065, 1242, 1248, 1254, 1260):
             self.subtype = sCSSR.CBIAS
             i = self.decode_cssr_cbias(msg, i)
+        elif self.msgtype in (1265, 1266, 1267, 1268, 1269, 1270):
+            self.subtype = sCSSR.PBIAS
+            i = self.decode_cssr_pbias(msg, i)
         elif self.msgtype in (1060, 1066, 1243, 1249, 1255, 1261):
             self.subtype = sCSSR.COMBINED
             i = self.decode_cssr_comb(msg, i)
