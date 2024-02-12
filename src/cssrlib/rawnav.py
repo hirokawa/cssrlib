@@ -402,6 +402,9 @@ class RawNav():
 
         pre, prn_, sid = bs.unpack_from('u8u6u6', msg, 0)
 
+        if sys == uGNSS.QZS:
+            prn_ += 192
+
         if pre != 0x8b or prn != prn_:
             return None
 
@@ -459,6 +462,7 @@ class RawNav():
         i = 304*2+127
 
         eph.isc = np.zeros(6)
+        sid = id3
 
         if sid in (30, 61):  # clock, iono, group delay
             tgd = bs.unpack_from('s13', buff, i)[0]
@@ -584,6 +588,9 @@ class RawNav():
             None
         elif page == 6:  # Text
             None
+
+        if page not in (1, 61):
+            return None
 
         eph.week = wn
         eph.code = 2
