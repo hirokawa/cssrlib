@@ -469,12 +469,12 @@ class rtcm(cssr):
         self.dorb_n = np.zeros((nsat, 3))
         self.ddorb_n = np.zeros((nsat, 3))
 
-        if timediff(self.time, self.lc[inet].t0[sCType.ORBIT]) > 0:
+        if timediff(self.time, self.lc[inet].t0s[sCType.ORBIT]) > 0:
             self.nsat_n = 0
             self.sys_n = []
             self.sat_n = []
-            self.lc[0].iode = {}
-            self.lc[0].dorb = {}
+            self.lc[inet].iode = {}
+            self.lc[inet].dorb = {}
 
         self.iodssr = v['iodssr']
         sat = []
@@ -482,10 +482,10 @@ class rtcm(cssr):
             i, sat_ = self.decode_sat(msg, i, sys)
             i = self.decode_orb_sat(msg, i, k, sys)
             sat.append(sat_)
-            self.lc[0].iode[sat_] = self.iode_n[k]
-            self.lc[0].dorb[sat_] = self.dorb_n[k, :]
+            self.lc[inet].iode[sat_] = self.iode_n[k]
+            self.lc[inet].dorb[sat_] = self.dorb_n[k, :]
 
-            self.set_t0(0, sat_, sCType.ORBIT, self.time)
+            self.set_t0(inet, sat_, sCType.ORBIT, self.time)
 
         self.nsat_n += nsat
         self.sys_n += [sys]*nsat
@@ -493,6 +493,7 @@ class rtcm(cssr):
 
         self.iodssr_c[sCType.ORBIT] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.ORBIT)
+        self.lc[inet].t0s[sCType.ORBIT] = self.time
 
         return i
 
@@ -503,19 +504,20 @@ class rtcm(cssr):
         # if self.iodssr != v['iodssr']:
         #    return -1
 
-        if timediff(self.time, self.lc[inet].t0[sCType.CLOCK]) > 0:
-            self.lc[0].dclk = {}
+        if timediff(self.time, self.lc[inet].t0s[sCType.CLOCK]) > 0:
+            self.lc[inet].dclk = {}
 
         self.dclk_n = np.zeros(nsat)
         for k in range(nsat):
             i, sat_ = self.decode_sat(msg, i, sys)
             i = self.decode_clk_sat(msg, i, k)
-            self.lc[0].dclk[sat_] = self.dclk_n[k]
+            self.lc[inet].dclk[sat_] = self.dclk_n[k]
 
-            self.set_t0(0, sat_, sCType.CLOCK, self.time)
+            self.set_t0(inet, sat_, sCType.CLOCK, self.time)
 
         self.iodssr_c[sCType.CLOCK] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.CLOCK)
+        self.lc[inet].t0s[sCType.CLOCK] = self.time
 
         return i
 
@@ -527,29 +529,31 @@ class rtcm(cssr):
         # if self.iodssr != v['iodssr']:
         #    return -1
 
-        if timediff(self.time, self.lc[inet].t0[sCType.CBIAS]) > 0:
+        if timediff(self.time, self.lc[inet].t0s[sCType.CBIAS]) > 0:
             self.sat_b = []
-            self.lc[0].cbias = {}
+            self.lc[inet].cbias = {}
 
         for k in range(nsat):
             i, sat_ = self.decode_sat(msg, i, sys)
-            self.set_t0(0, sat_, sCType.CBIAS, self.time)
+            self.set_t0(inet, sat_, sCType.CBIAS, self.time)
 
             nsig = bs.unpack_from('u5', msg, i)[0]
             i += 5
             if sat_ not in self.sat_b:
                 self.sat_b.append(sat_)
-                self.lc[0].cbias[sat_] = {}
+            if sat_ not in self.lc[inet].cbias:
+                self.lc[inet].cbias[sat_] = {}
 
             for j in range(nsig):
                 sig, cb = bs.unpack_from('u5s14', msg, i)
                 i += 19
 
-                rsig = self.ssig2rsig(sys, uTYP.C, sig)
-                self.lc[0].cbias[sat_][rsig] = self.sval(cb, 14, 0.01)
+                rsig = self.ssig2rsig(sys, uTYP.C, sig).str()
+                self.lc[inet].cbias[sat_][rsig] = self.sval(cb, 14, 0.01)
 
         self.iodssr_c[sCType.CBIAS] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.CBIAS)
+        self.lc[inet].t0s[sCType.CBIAS] = self.time
 
         return i
 
@@ -562,13 +566,13 @@ class rtcm(cssr):
         # if self.iodssr != v['iodssr']:
         #    return -1
 
-        if timediff(self.time, self.lc[inet].t0[sCType.PBIAS]) > 0:
+        if timediff(self.time, self.lc[inet].t0s[sCType.PBIAS]) > 0:
             self.sat_b = []
-            self.lc[0].pbias = {}
+            self.lc[inet].pbias = {}
 
         for k in range(nsat):
             i, sat_ = self.decode_sat(msg, i, sys)
-            self.set_t0(0, sat_, sCType.PBIAS, self.time)
+            self.set_t0(inet, sat_, sCType.PBIAS, self.time)
 
             nsig = bs.unpack_from('u5', msg, i)[0]
             i += 5
@@ -579,17 +583,19 @@ class rtcm(cssr):
             i += 17
             if sat_ not in self.sat_b:
                 self.sat_b.append(sat_)
-                self.lc[0].pbias[sat_] = {}
+            if sat_ not in self.lc[inet].pbias:
+                self.lc[inet].pbias[sat_] = {}
 
             for j in range(nsig):
                 sig, si, wl, ci, pb = bs.unpack_from('u5u1u2u4s20', msg, i)
                 i += 32
 
-                rsig = self.ssig2rsig(sys, uTYP.L, sig)
-                self.lc[0].pbias[sat_][rsig] = self.sval(pb, 20, 1e-4)
+                rsig = self.ssig2rsig(sys, uTYP.L, sig).str()
+                self.lc[inet].pbias[sat_][rsig] = self.sval(pb, 20, 1e-4)
 
         self.iodssr_c[sCType.PBIAS] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.PBIAS)
+        self.lc[inet].t0s[sCType.PBIAS] = self.time
 
         return i
 
@@ -602,27 +608,27 @@ class rtcm(cssr):
         self.ddorb_n = np.zeros((nsat, 3))
         self.dclk_n = np.zeros(nsat)
 
-        if timediff(self.time, self.lc[inet].t0[sCType.ORBIT]) > 0:
+        if timediff(self.time, self.lc[inet].t0s[sCType.ORBIT]) > 0:
             self.nsat_n = 0
             self.sys_n = []
             self.sat_n = []
-            self.lc[0].dclk = {}
-            self.lc[0].iode = {}
-            self.lc[0].dorb = {}
+            self.lc[inet].dclk = {}
+            self.lc[inet].iode = {}
+            self.lc[inet].dorb = {}
 
         self.iodssr = v['iodssr']
         sat = []
         for k in range(nsat):
             i, sat_ = self.decode_sat(msg, i, sys)
-            self.set_t0(0, sat_, sCType.ORBIT, self.time)
-            self.set_t0(0, sat_, sCType.CLOCK, self.time)
+            self.set_t0(inet, sat_, sCType.ORBIT, self.time)
+            self.set_t0(inet, sat_, sCType.CLOCK, self.time)
 
             i = self.decode_orb_sat(msg, i, k, sys)
             i = self.decode_clk_sat(msg, i, k)
             sat.append(sat_)
-            self.lc[0].iode[sat_] = self.iode_n[k]
-            self.lc[0].dorb[sat_] = self.dorb_n[k, :]
-            self.lc[0].dclk[sat_] = self.dclk_n[k]
+            self.lc[inet].iode[sat_] = self.iode_n[k]
+            self.lc[inet].dorb[sat_] = self.dorb_n[k, :]
+            self.lc[inet].dclk[sat_] = self.dclk_n[k]
 
         self.nsat_n += nsat
         self.sys_n += [sys]*nsat
@@ -633,15 +639,16 @@ class rtcm(cssr):
 
         self.lc[0].cstat |= (1 << sCType.ORBIT)
         self.lc[0].cstat |= (1 << sCType.CLOCK)
+        self.lc[inet].t0s[sCType.ORBIT] = self.time
 
         return i
 
-    def decode_cssr_ura(self, msg, i):
+    def decode_cssr_ura(self, msg, i, inet=0):
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         nsat = v['nsat']
 
-        if timediff(self.time, self.lc[0].t0[sCType.URA]) > 0:
+        if timediff(self.time, self.lc[inet].t0s[sCType.URA]) > 0:
             self.ura = np.zeros(self.nsat_n)
 
         for k in range(nsat):
@@ -649,10 +656,11 @@ class rtcm(cssr):
             s = self.sat_n.index(sat_)
             cls_, val = bs.unpack_from_dict('u3u3', msg, i)
             self.ura[s] = self.quality_idx(cls_, val)
-            self.set_t0(0, sat_, sCType.URA, self.time)
+            self.set_t0(inet, sat_, sCType.URA, self.time)
 
         self.iodssr_c[sCType.URA] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.URA)
+        self.lc[inet].t0s[sCType.URA] = self.time
 
         return i
 
@@ -662,17 +670,18 @@ class rtcm(cssr):
         # if self.iodssr != v['iodssr']:
         #    return -1
 
-        if timediff(self.time, self.lc[inet].t0[sCType.HCLOCK]) > 0:
-            self.lc[0].dclk = {}
+        if timediff(self.time, self.lc[inet].t0s[sCType.HCLOCK]) > 0:
+            self.lc[inet].dclk = {}
 
         for k in range(v['nsat']):
             i, sat_ = self.decode_sat(msg, i, sys)
             i = self.decode_hclk_sat(msg, i, k)
-            self.lc[0].dclk[sat_] = self.dclk_n[k]
-            self.set_t0(0, sat_, sCType.HCLOCK, self.time)
+            self.lc[inet].dclk[sat_] = self.dclk_n[k]
+            self.set_t0(inet, sat_, sCType.HCLOCK, self.time)
 
         self.iodssr_c[sCType.HCLOCK] = v['iodssr']
         self.lc[0].cstat |= (1 << sCType.HCLOCK)
+        self.lc[inet].t0s[sCType.HCLOCK] = self.time
 
         return i
 
