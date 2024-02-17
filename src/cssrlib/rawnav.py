@@ -17,7 +17,7 @@ import bitstruct.c as bs
 from cssrlib.gnss import gpst2time, gst2time, bdt2time, rCST
 from cssrlib.gnss import prn2sat, uGNSS, sat2prn, bdt2gpst
 from cssrlib.gnss import Eph, uTYP
-from cssrlib.rinex import rnxenc
+from cssrlib.rinex import rnxenc, rSigRnx
 
 
 class RawNav():
@@ -863,9 +863,88 @@ class rcvDec():
     rn = None  # placeholder for Raw Navigation message decoder
     re = None  # placeholder for RINEX encoder
 
-    def __init__(self, opt=None):
+    sig_tab = {}
+
+    def init_sig_tab(self, gnss_t='GEJ'):
+        """ initialize signal table for RINEX output """
+        sig_tab = {}
+
+        if 'G' in gnss_t:
+            sig_tab[uGNSS.GPS] = {
+                uTYP.C: [rSigRnx('GC1C'), rSigRnx('GC2W'), rSigRnx('GC2L'),
+                         rSigRnx('GC5Q')],
+                uTYP.L: [rSigRnx('GL1C'), rSigRnx('GL2W'), rSigRnx('GL2L'),
+                         rSigRnx('GL5Q')],
+                uTYP.D: [rSigRnx('GD1C'), rSigRnx('GD2W'), rSigRnx('GD2L'),
+                         rSigRnx('GD5Q')],
+                uTYP.S: [rSigRnx('GS1C'), rSigRnx('GS2W'), rSigRnx('GS2L'),
+                         rSigRnx('GS5Q')],
+            }
+
+        if 'R' in gnss_t:
+            sig_tab[uGNSS.GLO] = {
+                uTYP.C: [rSigRnx('RC1C'), rSigRnx('RC2C'), rSigRnx('RC2P'),
+                         rSigRnx('RC3Q')],
+                uTYP.L: [rSigRnx('RL1C'), rSigRnx('RL2C'), rSigRnx('RL2P'),
+                         rSigRnx('RL3Q')],
+                uTYP.D: [rSigRnx('RD1C'), rSigRnx('RD2C'), rSigRnx('RD2P'),
+                         rSigRnx('RD3Q')],
+                uTYP.S: [rSigRnx('RS1C'), rSigRnx('RS2C'), rSigRnx('RS2P'),
+                         rSigRnx('RS3Q')],
+            },
+
+        if 'E' in gnss_t:
+            sig_tab[uGNSS.GAL] = {
+                uTYP.C: [rSigRnx('EC1C'), rSigRnx('EC5Q'), rSigRnx('EC7Q'),
+                         rSigRnx('EC8Q'), rSigRnx('EC6C')],
+                uTYP.L: [rSigRnx('EL1C'), rSigRnx('EL5Q'), rSigRnx('EL7Q'),
+                         rSigRnx('EL8Q'), rSigRnx('EL6C')],
+                uTYP.D: [rSigRnx('ED1C'), rSigRnx('ED5Q'), rSigRnx('ED7Q'),
+                         rSigRnx('ED8Q'), rSigRnx('ED6C')],
+                uTYP.S: [rSigRnx('ES1C'), rSigRnx('ES5Q'), rSigRnx('GS7Q'),
+                         rSigRnx('ES8Q'), rSigRnx('ES6C')],
+            }
+
+        if 'C' in gnss_t:
+            sig_tab[uGNSS.BDS] = {
+                uTYP.C: [rSigRnx('CC1P'), rSigRnx('CC2I'), rSigRnx('CC5P'),
+                         rSigRnx('CC6I'), rSigRnx('CC7D'), rSigRnx('CC7I')],
+                uTYP.L: [rSigRnx('CL1P'), rSigRnx('CL2I'), rSigRnx('CL5P'),
+                         rSigRnx('CL6I'), rSigRnx('CL7D'), rSigRnx('CL7I')],
+                uTYP.D: [rSigRnx('CD1P'), rSigRnx('CD2I'), rSigRnx('CD5P'),
+                         rSigRnx('CD6I'), rSigRnx('CD7D'), rSigRnx('CD7I')],
+                uTYP.S: [rSigRnx('CS1P'), rSigRnx('CS2I'), rSigRnx('CS5P'),
+                         rSigRnx('CS6I'), rSigRnx('CS7D'), rSigRnx('CS7I')],
+            }
+
+        if 'J' in gnss_t:
+            sig_tab[uGNSS.QZS] = {
+                uTYP.C: [rSigRnx('JC1C'), rSigRnx('JC2L'), rSigRnx('JC5Q')],
+                uTYP.L: [rSigRnx('JL1C'), rSigRnx('JL2L'), rSigRnx('JL5Q')],
+                uTYP.D: [rSigRnx('JD1C'), rSigRnx('JD2L'), rSigRnx('JD5Q')],
+                uTYP.S: [rSigRnx('JS1C'), rSigRnx('JS2L'), rSigRnx('JS5Q')],
+            }
+
+        if 'S' in gnss_t:
+            sig_tab[uGNSS.SBS] = {
+                uTYP.C: [rSigRnx('SC1C'), rSigRnx('SC5I')],
+                uTYP.L: [rSigRnx('SL1C'), rSigRnx('SL5I')],
+                uTYP.D: [rSigRnx('SD1C'), rSigRnx('SD5I')],
+                uTYP.S: [rSigRnx('SS1C'), rSigRnx('SS5I')],
+            }
+
+        if 'I' in gnss_t:
+            sig_tab[uGNSS.IRN] = {
+                uTYP.C: [rSigRnx('IC5A')], uTYP.L: [rSigRnx('IL5A')],
+                uTYP.D: [rSigRnx('ID5A')], uTYP.S: [rSigRnx('IS5A')],
+            }
+
+        return sig_tab
+
+    def __init__(self, opt=None, prefix='', gnss_t='GECJ'):
+        self.sig_tab = self.init_sig_tab(gnss_t)
         if opt is not None:
-            self.init_param(opt)
+            self.init_param(opt, prefix)
         self.nsig = {uTYP.C: 0, uTYP.L: 0, uTYP.D: 0, uTYP.S: 0}
 
     def init_param(self, opt: rcvOpt, prefix=''):
