@@ -925,23 +925,22 @@ class rnxenc:
             if eph.mode == 1:  # B-CNAV1
                 lbl = "CNV1"
                 v1 = eph.Adot
+                v2 = eph.toes
+            else:
+                return
         elif (sys == uGNSS.GPS or sys == uGNSS.QZS):
             if eph.mode == 0:  # LNAV
                 lbl = "LNAV"
                 v1 = float(eph.iode)
-            elif eph.mode == 1:  # CNAV
-                lbl = "CNAV"
+                v2 = eph.toes
+            else:
+                lbl = "CNAV" if eph.mode == 1 else "CNV2"
                 v1 = float(eph.Adot)
-            elif eph.mode == 2:  # CNAV2
-                lbl = "CNV2"
-                v1 = float(eph.Adot)
+                v2 = eph.tops
         elif sys == uGNSS.GAL:
-            if eph.mode == 0:  # I/NAV
-                lbl = "INAV"
-                v1 = float(eph.iode)
-            elif eph.mode == 1:  # F/NAV
-                lbl = "FNAV"
-                v1 = float(eph.iode)
+            lbl = "INAV" if eph.mode == 0 else "FNAV"
+            v1 = float(eph.iode)
+            v2 = eph.toes
         else:
             return
 
@@ -956,7 +955,7 @@ class rnxenc:
         fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
                  format(eph.cuc, eph.e, eph.cus, np.sqrt(eph.A)))
         fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
-                 format(eph.toes, eph.cic, eph.OMG0, eph.cis))
+                 format(v2, eph.cic, eph.OMG0, eph.cis))
         fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
                  format(eph.i0, eph.crc, eph.omg, eph.OMGd))
 

@@ -505,7 +505,7 @@ class RawNav():
         # eph.sva = self.urai2sva(urai)
 
         # ephemeris
-        top *= 300.0
+        eph.tops = top*300.0
         A0 = 26559710.0 if sys == uGNSS.GPS else 42164200.0
         eph.A = A0 + dA*rCST.P2_9
         eph.Adot = Adot*rCST.P2_21
@@ -522,7 +522,7 @@ class RawNav():
         eph.toes = toe*300.0
         eph.OMG0 = OMG0*rCST.P2_32*rCST.SC2RAD
         eph.i0 = i0*rCST.P2_32*rCST.SC2RAD
-        eph.OMGd = OMGd*rCST.P2_44*rCST.SC2RAD
+        eph.OMGd = (OMGd*rCST.P2_44 - 2.6e-9)*rCST.SC2RAD
         eph.idot = idot*rCST.P2_44*rCST.SC2RAD
 
         eph.cis = cis*rCST.P2_30
@@ -536,7 +536,7 @@ class RawNav():
         eph.toc = gpst2time(eph.week, toc)
         eph.toe = gpst2time(eph.week, eph.toes)
         eph.tot = bdt2time(eph.week, tow)
-        eph.top = gpst2time(eph.wn_op, top)
+        eph.top = gpst2time(eph.wn_op, eph.tops)
 
         return eph
 
@@ -609,7 +609,7 @@ class RawNav():
         eph.isc[5] = isc1*rCST.P2_35  # L1CP
 
         # ephemeris
-        top *= 300.0
+        eph.tops = top*300.0
         A0 = 26559710.0 if sys == uGNSS.GPS else 42164200.0
         eph.A = A0 + dA*rCST.P2_9
         eph.Adot = Adot*rCST.P2_21
@@ -626,7 +626,7 @@ class RawNav():
         eph.toes = toe*300.0
         eph.OMG0 = OMG0*rCST.P2_32*rCST.SC2RAD
         eph.i0 = i0*rCST.P2_32*rCST.SC2RAD
-        eph.OMGd = OMGd*rCST.P2_44*rCST.SC2RAD
+        eph.OMGd = (OMGd*rCST.P2_44 - 2.6e-9)*rCST.SC2RAD
         eph.idot = idot*rCST.P2_44*rCST.SC2RAD
 
         eph.cis = cis*rCST.P2_30
@@ -640,7 +640,7 @@ class RawNav():
         eph.toe = gpst2time(eph.week, eph.toes)
         eph.toc = eph.toe
         eph.tot = bdt2time(eph.week, tow)
-        eph.top = gpst2time(eph.wn_op, top)
+        eph.top = gpst2time(eph.wn_op, eph.tops)
 
         return eph
 
