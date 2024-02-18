@@ -8,7 +8,7 @@ from cssrlib.gnss import bdt2gpst, time2bdt
 from cssrlib.gnss import gpst2time, bdt2time, epoch2time, timediff, gtime_t
 from cssrlib.gnss import prn2sat, char2sys, timeget, utc2gpst, time2epoch
 from cssrlib.gnss import Eph, Geph, Obs, sat2id, sat2prn, gpst2bdt, time2gpst
-from cssrlib.gnss import timeadd, id2sat
+from cssrlib.gnss import timeadd, id2sat, gpst2utc
 
 
 class pclk_t:
@@ -266,9 +266,6 @@ class rnxdec:
                     prn = int(line[1:3])
                     sat = prn2sat(sys, prn)
                     geph = Geph(sat)
-                    geph.pos = np.zeros(3)
-                    geph.vel = np.zeros(3)
-                    geph.acc = np.zeros(3)
 
                     geph.mode = self.mode_nav
                     toc = self.decode_time(line, 4)
@@ -922,12 +919,22 @@ class rnxenc:
             week, tot_ = time2gpst(eph.tot)
 
         if sys == uGNSS.BDS:
-            if eph.mode == 1:  # B-CNAV1
-                lbl = "CNV1"
-                v1 = eph.Adot
+            if eph.mode == 0:  # D1/D2
+                lbl = "D1" if (prn > 5 and prn < 59) else "D2"
+                v1 = float(eph.iode)
                 v2 = eph.toes
             else:
-                return
+                if eph.mode == 1:  # B-CNAV1
+                    lbl = "CNV1"
+                elif eph.mode == 2:  # B-CNAV2
+                    lbl = "CNV2"
+                elif eph.mode == 3:  # B-CNAV3
+                    lbl = "CNV3"
+                else:
+                    return
+                v1 = eph.Adot
+                v2 = eph.toes
+
         elif (sys == uGNSS.GPS or sys == uGNSS.QZS):
             if eph.mode == 0:  # LNAV
                 lbl = "LNAV"
@@ -939,6 +946,10 @@ class rnxenc:
                 v2 = eph.tops
         elif sys == uGNSS.GAL:
             lbl = "INAV" if eph.mode == 0 else "FNAV"
+            v1 = float(eph.iode)
+            v2 = eph.toes
+        elif sys == uGNSS.IRN:
+            lbl = "LNAV"
             v1 = float(eph.iode)
             v2 = eph.toes
         else:
@@ -959,19 +970,41 @@ class rnxenc:
         fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
                  format(eph.i0, eph.crc, eph.omg, eph.OMGd))
 
-        if sys == uGNSS.BDS and eph.mode == 1:  # B-CNAV1
-            fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
-                     format(eph.idot, eph.delnd, eph.sattype, eph.top))
-            fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
-                     format(eph.sisai[0], eph.sisai[1], eph.sisai[2],
-                            eph.sisai[3]))
-            fh.write("    {:19.12E}{:19s}{:19.12E}{:19.12E}\n".
-                     format(eph.isc[0], "", eph.tgd, eph.tgd_b))
-            fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
-                     format(float(eph.sismai), float(eph.svh),
-                            float(eph.integ), float(eph.iodc)))
-            fh.write("    {:19.12E}{:19s}{:19s}{:19.12E}\n".
-                     format(tot_, "", "", float(eph.iode)))
+        if sys == uGNSS.BDS:
+            if eph.mode == 0:  # D1/D2
+                fh.write("    {:19.12E}{:19s}{:19.12E}{:19s}\n".
+                         format(eph.idot, "", eph.week, ""))
+                fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
+                         format(float(eph.sva), float(eph.svh),
+                                eph.tgd, eph.tgd_b))
+                fh.write("    {:19.12E}{:19.12E}{:19s}{:19s}\n".
+                         format(tot_, float(eph.iodc), "", ""))
+
+            else:  # B-CNAV1,2,3
+                fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
+                         format(eph.idot, eph.delnd, eph.sattype, eph.tops))
+                fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
+                         format(eph.sisai[0], eph.sisai[1], eph.sisai[2],
+                                eph.sisai[3]))
+                if eph.mode == 1:
+                    fh.write("    {:19.12E}{:19s}{:19.12E}{:19.12E}\n".
+                             format(eph.isc[0], "", eph.tgd, eph.tgd_b))
+                elif eph.mode == 2:
+                    fh.write("    {:19s}{:19.12E}{:19.12E}{:19.12E}\n".
+                             format("", eph.isc[1], eph.tgd, eph.tgd_b))
+
+                if eph.mode <= 2:
+                    fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
+                             format(float(eph.sismai), float(eph.svh),
+                                    float(eph.integ), float(eph.iodc)))
+                    fh.write("    {:19.12E}{:19s}{:19s}{:19.12E}\n".
+                             format(tot_, "", "", float(eph.iode)))
+                else:  # B-CNAV3
+                    fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
+                             format(float(eph.sismai), float(eph.svh),
+                                    float(eph.integ), eph.tgd))
+                    fh.write("    {:19.12E}{:19s}{:19s}{:19s}\n".
+                             format(tot_, "", "", ""))
 
         if (sys == uGNSS.GPS or sys == uGNSS.QZS):
             if eph.mode == 0:  # LNAV
@@ -1008,3 +1041,52 @@ class rnxenc:
                             float(eph.tgd_b)))
             fh.write("    {:19.12E}{:19s}{:19s}{:19s}\n".
                      format(tot_, "", "", ""))
+
+        if sys == uGNSS.IRN:
+            if eph.mode == 0:  # LNAV
+                fh.write("    {:19.12E}{:19s}{:19.12E}{:19s}\n".
+                         format(eph.idot, "", float(eph.week),
+                                ""))
+                fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19s}\n".
+                         format(float(eph.sva), float(eph.svh), eph.tgd,
+                                ""))
+                fh.write("    {:19.12E}{:19s}{:19s}{:19s}\n".
+                         format(tot_, "", "", ""))
+
+    def rnx_gnav_body(self, geph=None, fh=None):
+        if geph.sat in self.rec_eph.keys():
+            if geph.iode in self.rec_eph[geph.sat].keys() and \
+                    self.rec_eph[geph.sat][geph.iode][0] == geph.mode:
+                return
+        else:
+            self.rec_eph[geph.sat] = {}
+        self.rec_eph[geph.sat][geph.iode] = [geph.mode, geph.toes]
+
+        id_ = sat2id(geph.sat)
+        sys, prn = sat2prn(geph.sat)
+
+        if sys != uGNSS.GLO:
+            return
+
+        lbl = "FDMA"
+        ep = time2epoch(gpst2utc(geph.toe))
+        week, tot_ = time2gpst(geph.tof)
+
+        fh.write("> {:2s} {:3s} {:2s}\n".format("EPH", id_, lbl))
+        fh.write("{:3s} {:4d} {:02d} {:02d} {:02d} {:02d} {:02d}".
+                 format(id_, int(ep[0]), int(ep[1]), int(ep[2]),
+                        int(ep[3]), int(ep[4]), int(ep[5])))
+        fh.write("{:19.12E}{:19.12E}{:19.12E}\n".
+                 format(-geph.taun, geph.gamn, tot_))
+        fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
+                 format(geph.pos[0]*1e-3, geph.vel[0]*1e-3, geph.acc[0]*1e-3,
+                        float(geph.svh)))
+        fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
+                 format(geph.pos[1]*1e-3, geph.vel[1]*1e-3, geph.acc[1]*1e-3,
+                        float(geph.frq)))
+        fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
+                 format(geph.pos[2]*1e-3, geph.vel[2]*1e-3, geph.acc[2]*1e-3,
+                        float(geph.age)))
+        fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19s}\n".
+                 format(float(geph.flag), float(geph.dtaun), float(geph.sva),
+                        ""))
