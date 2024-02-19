@@ -691,9 +691,9 @@ class Geph():
     age = 0.0
     toe = gtime_t()
     tof = gtime_t()
-    pos = None
-    vel = None
-    acc = None
+    pos = np.zeros(3)
+    vel = np.zeros(3)
+    acc = np.zeros(3)
     taun = 0.0         # SV clock bias [s]
     gamn = 0.0         # relative frq bias
     dtaun = 0.0        # delta between L1 and L2 [s]

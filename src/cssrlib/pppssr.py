@@ -96,7 +96,7 @@ class pppos():
         #
         self.nav.sig_p0 = 100.0   # [m]
         self.nav.sig_v0 = 1.0     # [m/s]
-        self.nav.sig_ztd0 = 0.25  # [m]
+        self.nav.sig_ztd0 = 0.1  # [m]
         self.nav.sig_ion0 = 10.0  # [m]
         self.nav.sig_n0 = 30.0    # [cyc]
 
@@ -108,7 +108,7 @@ class pppos():
         else:
             self.nav.sig_qp = 0.01/np.sqrt(1)      # [m/sqrt(s)]
             self.nav.sig_qv = 1.0/np.sqrt(1)       # [m/s/sqrt(s)]
-        self.nav.sig_qztd = 0.1/np.sqrt(3600)      # [m/sqrt(s)]
+        self.nav.sig_qztd = 0.05/np.sqrt(3600)     # [m/sqrt(s)]
         self.nav.sig_qion = 10.0/np.sqrt(1)        # [m/s/sqrt(s)]
 
         # Processing options

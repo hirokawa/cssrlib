@@ -42,6 +42,7 @@ class rtcm(cssr):
         self.monlevel = 1
         self.sysref = -1
         self.nsig_max = 4
+        self.mask_pbias = False
 
         self.nrtk_r = {}
 
@@ -830,6 +831,30 @@ class rtcm(cssr):
 
         return False
 
+    def out_log_ssr_clk(self, sys):
+        self.fh.write(" {:s}\t{:s}\n".format("SatID", "dclk [m]"))
+        for k, sat_ in enumerate(self.lc[0].dclk.keys()):
+            sys_, _ = sat2prn(sat_)
+            if sys_ != sys:
+                continue
+            self.fh.write(" {:s}\t{:5.3f}\n".format(sat2id(sat_),
+                                                    self.lc[0].dclk[sat_]))
+
+    def out_log_ssr_orb(self, sys):
+        self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\t{:s}\n"
+                      .format("SatID", "IODE", "Radial[m]",
+                              "Along[m]", "Cross[m]"))
+        for k, sat_ in enumerate(self.lc[0].dorb.keys()):
+            sys_, _ = sat2prn(sat_)
+            if sys_ != sys:
+                continue
+            self.fh.write(" {:s}\t{:3d}\t{:6.3f}\t{:6.3f}\t{:6.3f}\n".
+                          format(sat2id(sat_),
+                                 self.lc[0].iode[sat_],
+                                 self.lc[0].dorb[sat_][0],
+                                 self.lc[0].dorb[sat_][1],
+                                 self.lc[0].dorb[sat_][2]))
+
     def out_log(self, obs=None, eph=None, geph=None, seph=None):
         sys = self.get_ssr_sys(self.msgtype)
         inet = self.inet
@@ -837,51 +862,26 @@ class rtcm(cssr):
                                              time2str(self.time)))
 
         if self.subtype == sCSSR.CLOCK:
-            self.fh.write(" {:s}\t{:s}\n".format("SatID", "dclk [m]"))
-            for k, sat_ in enumerate(self.lc[0].dclk.keys()):
-                sys_, _ = sat2prn(sat_)
-                self.fh.write(" {:s}\t{:5.3f}\n".format(sat2id(sat_),
-                                                        self.lc[0].dclk[sat_]))
+            self.out_log_ssr_clk(sys)
 
         if self.subtype == sCSSR.ORBIT:
-            self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\t{:s}\n"
-                          .format("SatID", "IODE", "Radial[m]",
-                                  "Along[m]", "Cross[m]"))
-            for k, sat_ in enumerate(self.lc[0].dorb.keys()):
-                sys_, _ = sat2prn(sat_)
-                self.fh.write(" {:s}\t{:3d}\t{:5.3f}\t{:5.3f}\t{:5.3f}\n".
-                              format(sat2id(sat_),
-                                     self.lc[0].iode[sat_],
-                                     self.lc[0].dorb[sat_][0],
-                                     self.lc[0].dorb[sat_][1],
-                                     self.lc[0].dorb[sat_][2]))
+            self.out_log_ssr_orb(sys)
 
         if self.subtype == sCSSR.COMBINED:
-            self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\t{:s}\t{:s}\n"
-                          .format("SatID", "IODE", "Radial[m]",
-                                  "Along[m]", "Cross[m]", "dclk[m]"))
-            for k, sat_ in enumerate(self.lc[0].dorb.keys()):
-                sys_, _ = sat2prn(sat_)
-                self.fh.write(
-                    " {:s}\t{:3d}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\n".
-                    format(sat2id(sat_),
-                           self.lc[0].iode[sat_],
-                           self.lc[0].dorb[sat_][0],
-                           self.lc[0].dorb[sat_][1],
-                           self.lc[0].dorb[sat_][2],
-                           self.lc[0].dclk[sat_]))
+            self.out_log_ssr_clk(sys)
+            self.out_log_ssr_orb(sys)
 
         if self.subtype == sCSSR.CBIAS or self.subtype == sCSSR.BIAS:
             self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\n"
                           .format("SatID", "SigID", "CBias[m]", "..."))
             for k, sat_ in enumerate(self.lc[inet].cbias.keys()):
                 sys_, _ = sat2prn(sat_)
+                if sys_ != sys:
+                    continue
                 self.fh.write(" {:s}\t".format(sat2id(sat_)))
-                for j, sig in enumerate(self.lc[inet].cbias[sat_].keys()):
-                    sig_ = self.ssig2rsig(sys_, uTYP.C, sig)
-                    self.fh.write(
-                        "{:s}\t{:5.2f}\t".format(sig_.str(),
-                                                 self.lc[inet].cbias[sat_][sig]))
+                for sig in self.lc[inet].cbias[sat_].keys():
+                    self.fh.write("{:s}\t{:5.2f}\t"
+                                  .format(sig, self.lc[inet].cbias[sat_][sig]))
                 self.fh.write("\n")
 
         if self.subtype == sCSSR.PBIAS or self.subtype == sCSSR.BIAS:
@@ -889,12 +889,12 @@ class rtcm(cssr):
                           .format("SatID", "SigID", "PBias[m]", "..."))
             for k, sat_ in enumerate(self.lc[inet].pbias.keys()):
                 sys_, _ = sat2prn(sat_)
+                if sys_ != sys:
+                    continue
                 self.fh.write(" {:s}\t".format(sat2id(sat_)))
-                for j, sig in enumerate(self.lc[inet].pbias[sat_].keys()):
-                    sig_ = self.ssig2rsig(sys_, uTYP.L, sig)
-                    self.fh.write(
-                        "{:s}\t{:5.2f}\t".format(sig_.str(),
-                                                 self.lc[inet].pbias[sat_][sig]))
+                for sig in self.lc[inet].pbias[sat_].keys():
+                    self.fh.write("{:s}\t{:5.2f}\t"
+                                  .format(sig, self.lc[inet].pbias[sat_][sig]))
                 self.fh.write("\n")
 
         if self.subtype == sRTCM.ANT_DESC:
@@ -998,6 +998,9 @@ class rtcm(cssr):
                                                          self.sys2str(sys)))
             self.fh.write(" {:20s}{:6d}\n".format("IODN:", seph.iodn))
             self.fh.write(" {:20s}{:6d}\n".format("MODE:", seph.mode))
+
+        if self.msgtype == 1029:  # Unicode Text
+            self.fh.write("{:s}\n".format(self.ustr))
 
     def decode_msm_time(self, sys, week, t):
         if sys == uGNSS.GLO:
@@ -1640,6 +1643,12 @@ class rtcm(cssr):
 
         return i, seph
 
+    def decode_unicode_text(self, msg, i):
+        refid, mjd, sod, nch, ncp = bs.unpack_from('u12u16u17u7u8', msg, i)
+        i += 12+16+17+7+8
+        ic = i//8
+        self.ustr = bytes(msg[ic:ic+ncp]).decode()
+
     def decode(self, msg):
         i = 24
         self.msgtype = bs.unpack_from('u12', msg, i)[0]
@@ -1653,6 +1662,8 @@ class rtcm(cssr):
         geph = None
         seph = None
 
+        self.subtype = None
+
         # Network RTK residual messages
         if self.msgtype in (1057, 1063, 1240, 1246, 1252, 1258):
             self.subtype = sCSSR.ORBIT
@@ -1664,8 +1675,9 @@ class rtcm(cssr):
             self.subtype = sCSSR.CBIAS
             i = self.decode_cssr_cbias(msg, i)
         elif self.msgtype in (1265, 1266, 1267, 1268, 1269, 1270):
-            self.subtype = sCSSR.PBIAS
-            i = self.decode_cssr_pbias(msg, i)
+            if not self.mask_pbias:
+                self.subtype = sCSSR.PBIAS
+                i = self.decode_cssr_pbias(msg, i)
         elif self.msgtype in (1060, 1066, 1243, 1249, 1255, 1261):
             self.subtype = sCSSR.COMBINED
             i = self.decode_cssr_comb(msg, i)
@@ -1713,6 +1725,8 @@ class rtcm(cssr):
         elif self.msgtype == 1045 or self.msgtype == 1046:
             self.subtype = sRTCM.GAL_EPH
             i, eph = self.decode_gal_eph(msg, i)
+        elif self.msgtype == 1029:
+            self.decode_unicode_text(msg, i)
         else:
             self.subtype = -1
 
