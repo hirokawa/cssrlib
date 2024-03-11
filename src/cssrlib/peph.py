@@ -279,17 +279,19 @@ class peph:
 
                 for sat in self.sat:
 
-                    if np.isnan(peph.pos[sat-1][0:3]).any():
-                        continue
+                    pos = [0, 0, 0] \
+                        if np.isnan(peph.pos[sat-1][0:3]).any() \
+                        else peph.pos[sat-1][0:3]
 
                     clk = 0.999999999999 \
-                        if np.isnan(peph.pos[sat-1][3]) else peph.pos[sat-1][3]
+                        if np.isnan(peph.pos[sat-1][3]) \
+                        else peph.pos[sat-1][3]
 
                     fh.write("P{:3s} {:13.6f} {:13.6f} {:13.6f} {:13.6f}\n"
                              .format(sat2id(sat),
-                                     peph.pos[sat-1][0]*1e-3,
-                                     peph.pos[sat-1][1]*1e-3,
-                                     peph.pos[sat-1][2]*1e-3,
+                                     pos[0]*1e-3,
+                                     pos[1]*1e-3,
+                                     pos[2]*1e-3,
                                      clk*1e+6))
 
             # Terminate file
