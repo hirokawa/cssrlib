@@ -104,20 +104,20 @@ def geph2pos(time: gtime_t, geph: Geph, flg_v=False, TSTEP=1.0):
         x = glorbit(tt, x, geph.acc)
         t -= tt
 
-        rs = x[0:3]
-        vs = x[3:6]
+    rs = x[0:3]
+    vs = x[3:6]
 
     if flg_v:
         return rs, vs, dts
-
-    return rs, dts
+    else:
+        return rs, dts
 
 
 def geph2clk(time: gtime_t, geph: Geph):
     """ calculate GLONASS satellite clock offset based on ephemeris """
     ts = timediff(time, geph.toe)
     t = ts
-    for i in range(2):
+    for _ in range(2):
         t = ts - (-geph.taun+geph.gamn*t)
     return -geph.taun + geph.gamn*t
 
