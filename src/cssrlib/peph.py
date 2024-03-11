@@ -916,7 +916,7 @@ def antModelRx(nav, pos, e, sigs, rtype=1):
     return dant
 
 
-def apc2com(nav, sat, time, rs, sigs):
+def apc2com(nav, sat, time, rs, sigs, k=None):
     """
     Satellite position vector correction in ECEF from APC to CoM
     using ANTEX PCO corrections
@@ -932,7 +932,7 @@ def apc2com(nav, sat, time, rs, sigs):
     #
     A = orb2ecef(time, rs)
 
-    freq = [s.frequency() for s in sigs]
+    freq = [s.frequency(k) for s in sigs]
     if len(sigs) == 1:
         facs = (1.0,)
     elif len(sigs) == 2:
