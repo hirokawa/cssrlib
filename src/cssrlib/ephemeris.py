@@ -420,7 +420,7 @@ def satpos(sat, t, nav, cs=None, orb=None):
                                sc.DGPS):
                 dts[i] -= eph.tgd
 
-        elif nav.smode == 1 and nav.nf == 1:  # standalone positioing
+        elif nav.smode == 1 and nav.nf == 1:  # standalone positioning
             dts[i] -= eph.tgd
 
     if cs is not None:
