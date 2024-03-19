@@ -692,7 +692,6 @@ class cssr:
         self.lc[inet].cbias = {}
         for k in range(nsat):
             sat = self.sat_n[k]
-            sys, _ = sat2prn(sat)
             self.lc[inet].cbias[sat] = {}
             for j in range(len(self.sig_n[sat])):
                 rsig = self.sig_n[sat][j].toTyp(uTYP.C)
@@ -713,7 +712,6 @@ class cssr:
         self.lc[inet].di = {}
         for k in range(nsat):
             sat = self.sat_n[k]
-            sys, _ = sat2prn(sat)
             self.lc[inet].pbias[sat] = {}
             self.lc[inet].di[sat] = {}
             for j in range(len(self.sig_n[sat])):
