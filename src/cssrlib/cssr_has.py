@@ -75,7 +75,10 @@ class cssr_has(cssr):
         return head, i
 
     def decode_cssr(self, msg, i=0):
-        if self.msgtype != 1:  # only MT=1 defined
+        # Galileo HAS-SIS only defines MT=1, MT=4073 is CSSR message used in the
+        # Galileo HAS test dataset
+        #
+        if self.msgtype != 1 and self.msgtype != 4073:
             print(f"invalid MT={self.msgtype}")
             return False
         # time of hour
