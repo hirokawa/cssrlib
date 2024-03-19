@@ -912,8 +912,8 @@ class cssr:
     def decode_cssr_comb(self, msg, i, inet=0):
         """decode MT4073,11 Orbit,Clock Combined Correction message """
         head, i = self.decode_head(msg, i)
-        # if self.iodssr != head['iodssr']:
-        #    return -1
+        if self.iodssr != head['iodssr']:
+            return -1
         dfm = bs.unpack_from_dict('b1b1b1', ['orb', 'clk', 'net'], msg, i)
         i += 3
         self.flg_net = dfm['net']
