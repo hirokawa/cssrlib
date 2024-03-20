@@ -428,6 +428,10 @@ class peph:
 
         return dts, varc
 
+    def pephrel(self, rs):
+        """ Relativistic correction based on satellite position and velocity """
+        return - 2.0*(rs[0:3]@rs[3:6])/(rCST.CLIGHT**2)
+
     def peph2pos(self, time, sat, nav, var=False):
         """ Satellite position, velocity and clock offset """
 
@@ -472,7 +476,7 @@ class peph:
         # differentiation
         #
         if dtss[0] != 0.0:
-            dt_rel = - 2.0*(rs[0:3]@rs[3:6])/(rCST.CLIGHT**2)
+            dt_rel = self.pephrel(rs)
             dts[0] = dtss[0] + dt_rel
             dts[1] = (dtst[0]-dtss[0])/tt
         else:
