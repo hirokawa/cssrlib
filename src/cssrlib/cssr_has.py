@@ -83,8 +83,12 @@ class cssr_has(cssr):
             return False
         # time of hour
         # flags: mask,orbit,clock,clock subset,cbias,pbias,mask_id,iodset_id
-        self.toh, flags, res, mask_id, self.iodssr = \
-            bs.unpack_from('u12u6u4u5u5', msg, i)
+        try:
+            self.toh, flags, res, mask_id, self.iodssr = \
+                bs.unpack_from('u12u6u4u5u5', msg, i)
+        except:
+            print(f"invalid content={self.msgtype}")
+            return False
         i += 32
 
         if self.monlevel > 0 and self.fh is not None:
