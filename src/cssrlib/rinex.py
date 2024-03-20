@@ -265,6 +265,9 @@ class rnxdec:
                 if sys == uGNSS.GLO:
                     prn = int(line[1:3])
                     sat = prn2sat(sys, prn)
+                    pos = np.zeros(3)
+                    vel = np.zeros(3)
+                    acc = np.zeros(3)
                     geph = Geph(sat)
 
                     geph.mode = self.mode_nav
@@ -289,26 +292,30 @@ class rnxdec:
                     geph.iode = int(((tocs+10800.0) % 86400)/900.0+0.5)
 
                     line = fnav.readline()  # line #1
-                    geph.pos[0] = self.flt(line, 0)*1e3
-                    geph.vel[0] = self.flt(line, 1)*1e3
-                    geph.acc[0] = self.flt(line, 2)*1e3
+                    pos[0] = self.flt(line, 0)*1e3
+                    vel[0] = self.flt(line, 1)*1e3
+                    acc[0] = self.flt(line, 2)*1e3
                     geph.svh = int(self.flt(line, 3))
 
                     line = fnav.readline()  # line #2
-                    geph.pos[1] = self.flt(line, 0)*1e3
-                    geph.vel[1] = self.flt(line, 1)*1e3
-                    geph.acc[1] = self.flt(line, 2)*1e3
+                    pos[1] = self.flt(line, 0)*1e3
+                    vel[1] = self.flt(line, 1)*1e3
+                    acc[1] = self.flt(line, 2)*1e3
                     geph.frq = int(self.flt(line, 3))
 
                     if geph.frq > 128:
                         geph.frq -= 256
 
                     line = fnav.readline()  # line #3
-                    geph.pos[2] = self.flt(line, 0)*1e3
-                    geph.vel[2] = self.flt(line, 1)*1e3
-                    geph.acc[2] = self.flt(line, 2)*1e3
+                    pos[2] = self.flt(line, 0)*1e3
+                    vel[2] = self.flt(line, 1)*1e3
+                    acc[2] = self.flt(line, 2)*1e3
                     geph.age = int(self.flt(line, 3))
 
+                    geph.pos = pos
+                    geph.vel = vel
+                    geph.acc = acc
+                    
                     # Use GLONASS line #4 only from RINEX v3.05 onwards
                     #
                     if self.ver >= 3.05:
