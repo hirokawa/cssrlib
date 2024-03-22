@@ -25,6 +25,7 @@ jobs:
  
       - name: Execute Python scripts
         run: |
+          export PYTHONPATH="../cssrlib/src:$PATHONPATH"
           cd ./src/cssrlib/test
           for file in $(find . -name "*.py"); do
             echo "# Execute $file"
