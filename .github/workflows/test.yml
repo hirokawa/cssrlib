@@ -23,9 +23,11 @@ jobs:
       - name: Install dependencies from repository
         run: pip install -r requirements.txt
  
+      - name: Install cloned repository
+        run: pip install .
+ 
       - name: Execute Python scripts
         run: |
-          export PYTHONPATH="./src:$PATHONPATH"
           cd ./src/cssrlib/test
           for file in $(find . -name "*.py"); do
             echo "# Execute $file"
