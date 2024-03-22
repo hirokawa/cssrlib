@@ -16,11 +16,11 @@ ep = [2021, 9, 22, 12, 0, 0]
 time = epoch2time(ep)
 doy = int(time2doy(time))
 
-bdir = '../../../../cssrlib-data/data/'
+bdir = '../data/'
 orbfile = bdir+"COD0MGXFIN_{:4d}{:03d}0000_01D_05M_ORB.SP3".format(ep[0], doy)
 clkfile = bdir+"COD0MGXFIN_{:4d}{:03d}0000_01D_30S_CLK.CLK".format(ep[0], doy)
 dcbfile = bdir+"COD0MGXFIN_{:4d}{:03d}0000_01D_01D_OSB.BIA".format(ep[0], doy)
-atxfile = bdir+"igs14.atx"
+atxfile = bdir+"test.atx"
 
 sat = id2sat("G01")
 sig = rSigRnx("GC1C")
@@ -56,7 +56,7 @@ if True:
 
     print()
 
-if False:
+if True:
 
     print("Test ANTEX module")
     print()
@@ -175,7 +175,7 @@ if False:
 
     print()
 
-if False:
+if True:
 
     print("Test Bias-SINEX module")
     print()
@@ -184,20 +184,19 @@ if False:
     bd.parse(dcbfile)
 
     sat = id2sat("G03")
-    sig = rSigRnx("GC1W")
+    sig = rSigRnx("GC1C")
 
-    bias, std, = bd.getosb(sat, time, sig)
-    assert bias == 7.6934
-    assert std == 0.0
+    bias = bd.getosb(sat, time, sig)
 
-    print("{:s} {:s} {:8.5f} {:6.4f}"
-          .format(sat2id(sat), sig.str(), bias, std))
+    print("{:s} {:s} {:8.5f}"
+          .format(sat2id(sat), sig.str(), bias))
+    assert bias == -0.7324
 
     sig = rSigRnx("GL1W")
-    bias, std, = bd.getosb(sat, time, sig)
-    assert bias == 0.00038
-    assert std == 0.0
+    bias = bd.getosb(sat, time, sig)
 
-    print("{:s} {:s} {:8.5f} {:6.4f}"
-          .format(sat2id(sat), sig.str(), bias, std))
+    print("{:s} {:s} {:8.5f}"
+          .format(sat2id(sat), sig.str(), bias))
+    assert bias == 0.67184
+
     print()
