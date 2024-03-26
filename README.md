@@ -23,17 +23,10 @@ Click this button for a quick demo in Google Colab
 
 Prerequisites
 =============
-Additional python packages are required as prerequisites and can be installed via the following commands
+Additional python packages are required as prerequisites and can be installed via the following command
 
 ```
-pip install bitstruct galois crccheck pysolid
-pip install notebook numpy matplotlib
-```
-
-Optionally, on linux, users can install the `cartopy` package and the `PySolid` package
-
-```
-pip install cartopy pysolid
+pip install -r requirements.txt
 ```
 
 If the installation of `cartopy` fails, try installing `libgeos++-dev` first.

@@ -210,8 +210,8 @@ class local_corr:
         self.inet = -1
         self.inet_ref = -1
         self.ng = -1
-        self.pbias = None
-        self.cbias = None
+        self.pbias = {}
+        self.cbias = {}
         self.iode = None
         self.dorb = None
         self.dclk = None

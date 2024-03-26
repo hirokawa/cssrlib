@@ -122,9 +122,26 @@ def geph2clk(time: gtime_t, geph: Geph):
     return -geph.taun + geph.gamn*t
 
 
-def eph2pos(t: gtime_t, eph: Eph, flg_v=False):
-    """ calculate satellite position based on ephemeris """
-    sys, prn = sat2prn(eph.sat)
+def geph2rel(rs, vs):
+    return - 2.0*(rs@vs)/(rCST.CLIGHT**2)
+
+
+def eccentricAnomaly(M, e):
+    """
+    Compute eccentric anomaly based on mean anomaly and eccentricity
+    """
+    E = M
+    for _ in range(10):
+        Eold = E
+        sE = np.sin(E)
+        E = M+e*sE
+        if abs(Eold-E) < 1e-12:
+            break
+
+    return E, sE
+
+
+def sys2MuOmega(sys):
     if sys == uGNSS.GAL:
         mu = rCST.MU_GAL
         omge = rCST.OMGE_GAL
@@ -134,6 +151,13 @@ def eph2pos(t: gtime_t, eph: Eph, flg_v=False):
     else:  # GPS,QZS
         mu = rCST.MU_GPS
         omge = rCST.OMGE
+    return mu, omge
+
+
+def eph2pos(t: gtime_t, eph: Eph, flg_v=False):
+    """ calculate satellite position based on ephemeris """
+    sys, prn = sat2prn(eph.sat)
+    mu, omge = sys2MuOmega(sys)
     dt = dtadjust(t, eph.toe)
     n0 = np.sqrt(mu/eph.A**3)
     dna = eph.deln
@@ -143,13 +167,7 @@ def eph2pos(t: gtime_t, eph: Eph, flg_v=False):
         Ak += dt*eph.Adot
     n = n0+dna
     M = eph.M0+n*dt
-    E = M
-    for _ in range(10):
-        Eold = E
-        sE = np.sin(E)
-        E = M+eph.e*sE
-        if abs(Eold-E) < 1e-12:
-            break
+    E, sE = eccentricAnomaly(M, eph.e)
     cE = np.cos(E)
     dtc = dtadjust(t, eph.toc)
     dtrel = -2.0*np.sqrt(mu*eph.A)*eph.e*sE/rCST.CLIGHT**2
@@ -223,13 +241,29 @@ def eph2clk(time, eph):
     return dts
 
 
+def eph2rel(time, eph):
+    sys, _ = sat2prn(eph.sat)
+    mu, _ = sys2MuOmega(sys)
+    dt = dtadjust(time, eph.toe)
+    n0 = np.sqrt(mu/eph.A**3)
+    dna = eph.deln
+    Ak = eph.A
+    if eph.mode > 0:
+        dna += 0.5*dt*eph.delnd
+        Ak += dt*eph.Adot
+    n = n0+dna
+    M = eph.M0+n*dt
+    _, sE = eccentricAnomaly(M, eph.e)
+    mu, _ = sys2MuOmega(sys)
+    return -2.0*np.sqrt(mu*eph.A)*eph.e*sE/rCST.CLIGHT**2
+
+
 def satpos(sat, t, nav, cs=None, orb=None):
     """
     Calculate pos/vel/clk for single satellite
 
     The satellite position, velocity and clock offset are computed at epoch.
-    The satellite clock is already corrected for the relativistic effects. The
-    satellite health indicator is extracted from the broadcast navigation
+    The satellite health indicator is extracted from the broadcast navigation
     message.
 
     Parameters
@@ -272,15 +306,33 @@ def satpos(sat, t, nav, cs=None, orb=None):
         rs_, dts_, _ = orb.peph2pos(t, sat, nav)
         if rs_ is None or dts_ is None or np.isnan(dts_[0]):
             return rs, vs, dts, svh
-        dt = dts_[0]
 
-        if len(nav.eph) > 0:
+        # Health indicator from BRDC
+        #
+
+        if sys == uGNSS.GLO and len(nav.geph) > 0:
+
+            geph = findeph(nav.geph, t, sat)
+            if geph is None:
+                svh[i] = 1
+                return rs, vs, dts, svh
+
+            svh[i] = geph.svh
+
+            if sat not in nav.glo_ch:
+                nav.glo_ch[sat] = geph.frq
+
+        elif len(nav.eph) > 0:
+
             eph = findeph(nav.eph, t, sat)
             if eph is None:
                 svh[i] = 1
                 return rs, vs, dts, svh
+
             svh[i] = eph.svh
+
         else:
+
             svh[i] = 0
 
     else:
@@ -355,41 +407,41 @@ def satpos(sat, t, nav, cs=None, orb=None):
             mode = 0
 
         if sys == uGNSS.GLO:
+
             geph = findeph(nav.geph, t, sat, iode, mode=mode)
             if geph is None:
                 svh[i] = 1
                 return rs, vs, dts, svh
 
             svh[i] = geph.svh
-            dt = geph2clk(t, geph)
 
             if sat not in nav.glo_ch:
                 nav.glo_ch[sat] = geph.frq
 
         else:
+
             eph = findeph(nav.eph, t, sat, iode, mode=mode)
             if eph is None:
                 svh[i] = 1
                 return rs, vs, dts, svh
 
             svh[i] = eph.svh
-            dt = eph2clk(t, eph)
-
-    t = timeadd(t, -dt)
 
     if nav.ephopt == 4:  # precise ephemeris
 
         rs_, dts_, _ = orb.peph2pos(t, sat, nav)
         rs[i, :] = rs_[0: 3]
         vs[i, :] = rs_[3: 6]
-        dts[i] = dts_[0]
+        dts[i] = dts_[0] - orb.pephrel(rs_)  # Remove relativistic correction!
 
     else:
 
         if sys == uGNSS.GLO:
             rs[i, :], vs[i, :], dts[i] = geph2pos(t, geph, True)
+            dts[i] -= geph2rel(rs[i, :], vs[i, :])
         else:
             rs[i, :], vs[i, :], dts[i] = eph2pos(t, eph, True)
+            dts[i] -= eph2rel(t, eph)
 
         # Apply SSR correction
         #
