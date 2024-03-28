@@ -619,17 +619,30 @@ class pppos():
             sig0 = None
             if cs is not None:
 
-                if cs.cssrmode in (sc.GAL_HAS_SIS, sc.GAL_HAS_IDD,
-                                   sc.QZS_MADOCA):
+                if cs.cssrmode == sc.QZS_MADOCA:
+
+                    if sys == uGNSS.GPS:
+                        sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
+                    elif sys == uGNSS.GLO:
+                        sig0 = (rSigRnx("RC1C"), rSigRnx("RC2C"))
+                    elif sys == uGNSS.GAL:
+                        sig0 = (rSigRnx("EC1C"), rSigRnx("EC7Q"))
+                    elif sys == uGNSS.QZS:
+                        sig0 = (rSigRnx("JC1C"), rSigRnx("JC2S"))
+
+                elif cs.cssrmode == sc.GAL_HAS_SIS:
 
                     if sys == uGNSS.GPS:
                         sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
                     elif sys == uGNSS.GAL:
                         sig0 = (rSigRnx("EC1C"), rSigRnx("EC7Q"))
-                    elif sys == uGNSS.QZS:
-                        sig0 = (rSigRnx("JC1C"), rSigRnx("JC2S"))
-                    elif sys == uGNSS.GLO:
-                        sig0 = (rSigRnx("RC1C"), rSigRnx("RC2C"))
+
+                elif cs.cssrmode == sc.GAL_HAS_IDD:
+
+                    if sys == uGNSS.GPS:
+                        sig0 = (rSigRnx("GC1C"),)
+                    elif sys == uGNSS.GAL:
+                        sig0 = (rSigRnx("EC1C"),)
 
                 elif cs.cssrmode == sc.BDS_PPP:
 
