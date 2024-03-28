@@ -292,9 +292,9 @@ def satpos(sat, t, nav, cs=None, orb=None):
     """
 
     n = 1
-    rs = np.zeros((n, 3))
-    vs = np.zeros((n, 3))
-    dts = np.zeros(n)
+    rs = np.ones((n, 3))*np.nan
+    vs = np.ones((n, 3))*np.nan
+    dts = np.ones(n)*np.nan
     svh = np.zeros(n, dtype=int)
     iode = -1
 
