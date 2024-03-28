@@ -650,10 +650,10 @@ class pppos():
                 antsCP = antModelTx(
                     self.nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
 
-            elif cs is not None and (cs.cssrmode == sc.GAL_HAS_SIS or
-                                     cs.cssrmode == sc.GAL_HAS_IDD or
-                                     cs.cssrmode == sc.QZS_MADOCA or
-                                     cs.cssrmode == sc.BDS_PPP):
+            elif cs is not None and cs.cssrmode in (sc.GAL_HAS_SIS,
+                                                    sc.GAL_HAS_IDD,
+                                                    sc.QZS_MADOCA,
+                                                    sc.BDS_PPP):
 
                 antsPR = antModelTx(self.nav, e[i, :], sigsPR,
                                     sat, obs.t, rs[i, :], sig0)
