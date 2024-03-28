@@ -533,7 +533,7 @@ class pppos():
             cbias = np.zeros(self.nav.nf)
             pbias = np.zeros(self.nav.nf)
 
-            if self.nav.ephopt == 4:
+            if self.nav.ephopt == 4:  # from Bias-SINEX
 
                 # Code and phase signal bias, converted from [ns] to [m]
                 # note: IGS uses sign convention different with RTCM
