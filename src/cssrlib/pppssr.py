@@ -533,7 +533,7 @@ class pppos():
             cbias = np.zeros(self.nav.nf)
             pbias = np.zeros(self.nav.nf)
 
-            if self.nav.ephopt == 4:
+            if self.nav.ephopt == 4:  # from Bias-SINEX
 
                 # Code and phase signal bias, converted from [ns] to [m]
                 # note: IGS uses sign convention different with RTCM
@@ -619,17 +619,30 @@ class pppos():
             sig0 = None
             if cs is not None:
 
-                if cs.cssrmode in (sc.GAL_HAS_SIS, sc.GAL_HAS_IDD,
-                                   sc.QZS_MADOCA):
+                if cs.cssrmode == sc.QZS_MADOCA:
+
+                    if sys == uGNSS.GPS:
+                        sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
+                    elif sys == uGNSS.GLO:
+                        sig0 = (rSigRnx("RC1C"), rSigRnx("RC2C"))
+                    elif sys == uGNSS.GAL:
+                        sig0 = (rSigRnx("EC1C"), rSigRnx("EC7Q"))
+                    elif sys == uGNSS.QZS:
+                        sig0 = (rSigRnx("JC1C"), rSigRnx("JC2S"))
+
+                elif cs.cssrmode == sc.GAL_HAS_SIS:
 
                     if sys == uGNSS.GPS:
                         sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
                     elif sys == uGNSS.GAL:
                         sig0 = (rSigRnx("EC1C"), rSigRnx("EC7Q"))
-                    elif sys == uGNSS.QZS:
-                        sig0 = (rSigRnx("JC1C"), rSigRnx("JC2S"))
-                    elif sys == uGNSS.GLO:
-                        sig0 = (rSigRnx("RC1C"), rSigRnx("RC2C"))
+
+                elif cs.cssrmode == sc.GAL_HAS_IDD:
+
+                    if sys == uGNSS.GPS:
+                        sig0 = (rSigRnx("GC1C"),)
+                    elif sys == uGNSS.GAL:
+                        sig0 = (rSigRnx("EC1C"),)
 
                 elif cs.cssrmode == sc.BDS_PPP:
 
@@ -650,10 +663,10 @@ class pppos():
                 antsCP = antModelTx(
                     self.nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
 
-            elif cs is not None and (cs.cssrmode == sc.GAL_HAS_SIS or
-                                     cs.cssrmode == sc.GAL_HAS_IDD or
-                                     cs.cssrmode == sc.QZS_MADOCA or
-                                     cs.cssrmode == sc.BDS_PPP):
+            elif cs is not None and cs.cssrmode in (sc.GAL_HAS_SIS,
+                                                    sc.GAL_HAS_IDD,
+                                                    sc.QZS_MADOCA,
+                                                    sc.BDS_PPP):
 
                 antsPR = antModelTx(self.nav, e[i, :], sigsPR,
                                     sat, obs.t, rs[i, :], sig0)

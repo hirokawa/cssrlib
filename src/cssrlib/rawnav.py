@@ -1485,7 +1485,7 @@ class rcvDec():
                          rSigRnx('RD3Q')],
                 uTYP.S: [rSigRnx('RS1C'), rSigRnx('RS2C'), rSigRnx('RS2P'),
                          rSigRnx('RS3Q')],
-            },
+            }
 
         if 'E' in gnss_t:
             sig_tab[uGNSS.GAL] = {
