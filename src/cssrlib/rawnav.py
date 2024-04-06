@@ -245,10 +245,8 @@ class RawNav():
             return None
 
         buff = self.gal_fnav[prn-1]
-        i = 0
         for k in range(31):  # copy 244bits
-            buff[(sid-1)*31+k] = bs.unpack_from('u8', msg, i)[0]
-            i += 8
+            buff[(sid-1)*31+k] = msg[k]
 
         buff = bytes(buff)
         sid1, svid1, iodnav1 = bs.unpack_from('u6u6u10', buff, 0)
@@ -300,18 +298,8 @@ class RawNav():
         eph.iodc = iodnav1
 
         eph.sva = self.sisa2sva(sisa)
-
-        if type_ == 0:
-            eph.code = 1
-        elif type_ == 1:
-            eph.code = 2
-        elif type_ == 2:
-            eph.code = 4
-
-        if type_ == 0 or type_ == 2:  # INAV E1B, E5B
-            eph.code |= (1 << 9)  # toc/af0-2, SISA are for E5b, E1
-        elif type_ == 1:  # FNAV E1B, R5A
-            eph.code |= (1 << 8)  # toc/af0-2, SISA are for E5a, E1
+        eph.code = 2  # FNAV
+        eph.code |= (1 << 8)  # toc/af0-2, SISA are for E5a, E1
 
         eph.toe = gst2time(week_gst, eph.toes)
         eph.toc = gst2time(week_gst, toc)
@@ -342,7 +330,7 @@ class RawNav():
             return None
 
         sid = bs.unpack_from('u3', msg, 53)[0]
-        buff[(sid-1)*40:(sid-1)*40+40] = msg
+        buff[(sid-1)*40:(sid-1)*40+40] = msg[0:40]
 
         id1 = bs.unpack_from('u3', buff, 53)[0]
         id2 = bs.unpack_from('u3', buff, 320+53)[0]
@@ -477,10 +465,10 @@ class RawNav():
             return None
 
         if sid in (10, 11):  # ephemeris
-            buff[(sid-10)*38:(sid-10)*38+38] = msg
+            buff[(sid-10)*38:(sid-10)*38+38] = msg[0:38]
         elif (sid >= 30 and sid <= 37) or \
              (sys == uGNSS.QZS and sid == 61):  # clock
-            buff[2*38:2*38+38] = msg
+            buff[2*38:2*38+38] = msg[0:38]
         elif sid == 12:  # QZSS reduced almanac
             None
         elif sid == 15:  # Text
@@ -810,11 +798,11 @@ class RawNav():
         i += 22
         return i
 
-    def decode_bds_b1c(self, week, time_, prn, msg):
+    def decode_bds_b1c(self, week, time_, sat, msg):
         """ BDS B1C (B-CNAV1 message decoder) [4] """
 
         eph = Eph()
-        eph.sat = prn2sat(uGNSS.BDS, prn)
+        eph.sat = sat
         eph.sisai = np.zeros(4, dtype=int)
         eph.isc = np.zeros(6)
         # data2: 600b, errCorr2: 8b, data3: 264b, soh: 8b
@@ -873,7 +861,9 @@ class RawNav():
         msg_t = {10: 0, 11: 1, 30: 2, 34: 3, 40: 4}
         mid = msg_t[sid]
         buff = self.bds_cnv2[prn-1]
-        buff[mid*40:mid*40+40] = msg
+
+        for k in range(len(msg)):
+            buff[mid*40+k] = msg[k]
 
         id1, sow1 = bs.unpack_from('u6u18', buff, 6)
         id2, sow2 = bs.unpack_from('u6u18', buff, 320+6)
@@ -933,11 +923,11 @@ class RawNav():
 
         return eph
 
-    def decode_bds_b2b(self, week, time_, sat, msg):
+    def decode_bds_b2b(self, week, time_, sat, msg, ofst=12):
         """ BDS B2b (B-CNAV3 message decoder) [4] """
 
         sys, prn = sat2prn(sat)
-        sid, sow = bs.unpack_from('u6u20', msg, 12)
+        sid, sow = bs.unpack_from('u6u20', msg, ofst)
 
         if sid not in (10, 30, 40):
             return None
@@ -945,11 +935,12 @@ class RawNav():
         msg_t = {10: 0, 30: 1, 40: 2}
         mid = msg_t[sid]
         buff = self.bds_cnv3[prn-1]
-        buff[mid*64:mid*64+64] = msg
+        for k in range(len(msg)):
+            buff[mid*64+k] = msg[k]
 
-        id1, sow1 = bs.unpack_from('u6u20', buff, 12)
-        id2, sow2 = bs.unpack_from('u6u20', buff, 512+12)
-        id3, sow3 = bs.unpack_from('u6u20', buff, 512*2+12)
+        id1, sow1 = bs.unpack_from('u6u20', buff, ofst)
+        id2, sow2 = bs.unpack_from('u6u20', buff, 512+ofst)
+        id3, sow3 = bs.unpack_from('u6u20', buff, 512*2+ofst)
 
         if id1 != 10 or id2 != 30:
             return None
@@ -962,7 +953,7 @@ class RawNav():
         eph.isc = np.zeros(6)
 
         # decode MT10
-        i = 12+30
+        i = ofst+30
         i = self.decode_bds_cnav_eph1(buff, eph, i)
         i = self.decode_bds_cnav_eph2(buff, eph, i)
 
@@ -970,7 +961,7 @@ class RawNav():
         i += 7
 
         # decode MT30
-        i = 512+12+26
+        i = 512+ofst+26
         eph.week = bs.unpack_from('u13', buff, i)[0]
         i += 13+4
         i = self.decode_bds_cnav_clk(buff, eph, i)
@@ -1000,7 +991,7 @@ class RawNav():
             return None
 
         buff = self.bds_d12[prn-1]
-        buff[(sid-1)*40:(sid-1)*40+40] = msg
+        buff[(sid-1)*40:(sid-1)*40+40] = msg[0:40]
 
         id1 = bs.unpack_from('u3', buff, 15)[0]
         id2 = bs.unpack_from('u3', buff, 320+15)[0]
@@ -1088,7 +1079,7 @@ class RawNav():
 
         if frame == 1 and (page >= 1 and page <= 10):
             buff = self.bds_d12[prn-1]
-            buff[(page-1)*20:(page-1)*20+20] = msg
+            buff[(page-1)*20:(page-1)*20+20] = msg[0:20]
         else:
             return None
 
@@ -1204,7 +1195,7 @@ class RawNav():
         i += 30
 
         buff = self.irn_nav[prn-1]
-        buff[sid*40:sid*40+40] = msg
+        buff[sid*40:sid*40+40] = msg[0:40]
 
         if sid > 2:
             return None
@@ -1300,7 +1291,7 @@ class RawNav():
                 for sid_ in range(4):
                     buff[sid_*12:sid_*12+12] = bytearray(12)
 
-        buff[(sid-1)*12:(sid-1)*12+12] = msg
+        buff[(sid-1)*12:(sid-1)*12+12] = msg[0:12]
 
         id1 = bs.unpack_from('u4', buff, 1)[0]
         id2 = bs.unpack_from('u4', buff, 96+1)[0]
