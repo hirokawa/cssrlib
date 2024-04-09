@@ -626,7 +626,7 @@ class pppos():
                     elif sys == uGNSS.GLO:
                         sig0 = (rSigRnx("RC1C"), rSigRnx("RC2C"))
                     elif sys == uGNSS.GAL:
-                        sig0 = (rSigRnx("EC1C"), rSigRnx("EC7Q"))
+                        sig0 = (rSigRnx("EC1C"), rSigRnx("EC5Q"))
                     elif sys == uGNSS.QZS:
                         sig0 = (rSigRnx("JC1C"), rSigRnx("JC2S"))
 
