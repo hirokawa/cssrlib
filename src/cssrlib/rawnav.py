@@ -1584,6 +1584,8 @@ class rcvDec():
             self.fh_galinav = open(prefix+self.file_galinav, mode='w')
         if opt.flg_galfnav:
             self.flg_galfnav = True
+            self.file_galfnav = "galfnav.txt"
+            self.fh_galfnav = open(prefix+self.file_galfnav, mode='w')
         if opt.flg_bdsb1c:
             self.flg_bdsb1c = True
         if opt.flg_bdsb2a:
