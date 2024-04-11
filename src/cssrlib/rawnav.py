@@ -141,7 +141,7 @@ class RawNav():
         # 64:field1, 24:crc, 8:field2, 6:tail
         # for E1B: field1: reserved1(40) + SAR(22)+spare(2), field2=SSP
         # for E5b: field1: reserved1. field2 = reserved2
-        msg = bytes(msg)
+
         odd, page = bs.unpack_from('u1u1', msg, 0)
         sid, iodnav = bs.unpack_from('u6u10', msg, 2)
 
@@ -238,7 +238,7 @@ class RawNav():
         sys, prn = sat2prn(sat)
         eph = Eph(sat)
         # 244bit => type(6) + svid(6) + iodnav(10) + body () + crc(24)+tail(6)
-        msg = bytes(msg)
+
         sid, svid, iodnav = bs.unpack_from('u6u6u10', msg, 0)
 
         if sid > 4:
@@ -331,6 +331,7 @@ class RawNav():
 
         sid = bs.unpack_from('u3', msg, 53)[0]
         buff[(sid-1)*40:(sid-1)*40+40] = msg[0:40]
+        buff = bytes(buff)
 
         id1 = bs.unpack_from('u3', buff, 53)[0]
         id2 = bs.unpack_from('u3', buff, 320+53)[0]
@@ -474,6 +475,7 @@ class RawNav():
         elif sid == 15:  # Text
             None
 
+        buff = bytes(buff)
         id1 = bs.unpack_from('u6', buff, 14)[0]
         id2 = bs.unpack_from('u6', buff, 304+14)[0]
         id3 = bs.unpack_from('u6', buff, 304*2+14)[0]
@@ -865,6 +867,7 @@ class RawNav():
         for k in range(len(msg)):
             buff[mid*40+k] = msg[k]
 
+        buff = bytes(buff)
         id1, sow1 = bs.unpack_from('u6u18', buff, 6)
         id2, sow2 = bs.unpack_from('u6u18', buff, 320+6)
         id3, sow3 = bs.unpack_from('u6u18', buff, 320*2+6)
@@ -938,6 +941,7 @@ class RawNav():
         for k in range(len(msg)):
             buff[mid*64+k] = msg[k]
 
+        buff = bytes(buff)
         id1, sow1 = bs.unpack_from('u6u20', buff, ofst)
         id2, sow2 = bs.unpack_from('u6u20', buff, 512+ofst)
         id3, sow3 = bs.unpack_from('u6u20', buff, 512*2+ofst)
@@ -993,6 +997,7 @@ class RawNav():
         buff = self.bds_d12[prn-1]
         buff[(sid-1)*40:(sid-1)*40+40] = msg[0:40]
 
+        buff = bytes(buff)
         id1 = bs.unpack_from('u3', buff, 15)[0]
         id2 = bs.unpack_from('u3', buff, 320+15)[0]
         id3 = bs.unpack_from('u3', buff, 320*2+15)[0]
@@ -1085,6 +1090,7 @@ class RawNav():
 
         sow_ = np.zeros(10, dtype=int)
 
+        buff = bytes(buff)
         for k in range(10):
             if k == 1:
                 continue
@@ -1200,6 +1206,7 @@ class RawNav():
         if sid > 2:
             return None
 
+        buff = bytes(buff)
         id1 = bs.unpack_from('u2', buff, 27)[0]
         id2 = bs.unpack_from('u2', buff, 320+27)[0]
 
@@ -1286,12 +1293,13 @@ class RawNav():
 
         if sid == 1:  # when tk is updated, clear buffer
             tk = bs.unpack_from('u12', msg, 9)[0]
-            tk_ = bs.unpack_from('u12', buff, 9)[0]
+            tk_ = bs.unpack_from('u12', bytes(buff), 9)[0]
             if tk != tk_:
                 for sid_ in range(4):
                     buff[sid_*12:sid_*12+12] = bytearray(12)
 
         buff[(sid-1)*12:(sid-1)*12+12] = msg[0:12]
+        buff = bytes(buff)
 
         id1 = bs.unpack_from('u4', buff, 1)[0]
         id2 = bs.unpack_from('u4', buff, 96+1)[0]
