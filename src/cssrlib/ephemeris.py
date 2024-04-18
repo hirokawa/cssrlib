@@ -15,7 +15,7 @@ MAX_ITER_KEPLER = 30
 RTOL_KEPLER = 1e-13
 
 MAXDTOE_t = {uGNSS.GPS: 7201.0, uGNSS.GAL: 14400.0, uGNSS.QZS: 7201.0,
-             uGNSS.BDS: 21601.0, uGNSS.IRN: 7201.0, uGNSS.GLO: 1800.0,
+             uGNSS.BDS: 7201.0, uGNSS.IRN: 7201.0, uGNSS.GLO: 1800.0,
              uGNSS.SBS: 360.0}
 
 
@@ -309,7 +309,6 @@ def satpos(sat, t, nav, cs=None, orb=None):
 
         # Health indicator from BRDC
         #
-
         if sys == uGNSS.GLO and len(nav.geph) > 0:
 
             geph = findeph(nav.geph, t, sat)
@@ -363,11 +362,10 @@ def satpos(sat, t, nav, cs=None, orb=None):
 
                 if cs.lc[0].iodc[sat] == cs.lc[0].iodc_c[sat]:
                     dclk = cs.lc[0].dclk[sat]
+                elif cs.lc[0].iodc[sat] == cs.lc[0].iodc_c_p[sat]:
+                    dclk = cs.lc[0].dclk_p[sat]
                 else:
-                    if cs.lc[0].iodc[sat] == cs.lc[0].iodc_c_p[sat]:
-                        dclk = cs.lc[0].dclk_p[sat]
-                    else:
-                        return rs, vs, dts, svh
+                    return rs, vs, dts, svh
 
             else:
 
@@ -379,12 +377,12 @@ def satpos(sat, t, nav, cs=None, orb=None):
                     if cs.iodssr_c[sCType.CLOCK] == cs.iodssr:
                         if sat not in cs.sat_n:
                             return rs, vs, dts, svh
-                    else:
-                        if cs.iodssr_c[sCType.CLOCK] == cs.iodssr_p:
-                            if sat not in cs.sat_n_p:
-                                return rs, vs, dts, svh
-                        else:
+
+                    elif cs.iodssr_c[sCType.CLOCK] == cs.iodssr_p:
+                        if sat not in cs.sat_n_p:
                             return rs, vs, dts, svh
+                    else:
+                        return rs, vs, dts, svh
 
                 dclk = cs.lc[0].dclk[sat]
 
@@ -400,6 +398,8 @@ def satpos(sat, t, nav, cs=None, orb=None):
             if np.isnan(dclk) or np.isnan(dorb@dorb):
                 return rs, vs, dts, svh
 
+            # Select broadcast navigation type depending on GNSS type
+            #
             mode = cs.nav_mode[sys]
 
         else:
