@@ -637,12 +637,18 @@ class pppos():
                     elif sys == uGNSS.GAL:
                         sig0 = (rSigRnx("EC1C"), rSigRnx("EC7Q"))
 
-                elif cs.cssrmode == sc.GAL_HAS_IDD:
+                elif cs.cssrmode in (sc.GAL_HAS_IDD, sc.IGS_SSR, sc.RTCM3_SSR):
 
                     if sys == uGNSS.GPS:
                         sig0 = (rSigRnx("GC1C"),)
+                    elif sys == uGNSS.GLO:
+                        sig0 = (rSigRnx("RC1C"),)
                     elif sys == uGNSS.GAL:
                         sig0 = (rSigRnx("EC1C"),)
+                    elif sys == uGNSS.BDS:
+                        sig0 = (rSigRnx("CC2I"),)
+                    elif sys == uGNSS.QZS:
+                        sig0 = (rSigRnx("JC1C"),)
 
                 elif cs.cssrmode == sc.BDS_PPP:
 
@@ -663,9 +669,11 @@ class pppos():
                 antsCP = antModelTx(
                     self.nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
 
-            elif cs is not None and cs.cssrmode in (sc.GAL_HAS_SIS,
+            elif cs is not None and cs.cssrmode in (sc.QZS_MADOCA,
+                                                    sc.GAL_HAS_SIS,
                                                     sc.GAL_HAS_IDD,
-                                                    sc.QZS_MADOCA,
+                                                    sc.IGS_SSR,
+                                                    sc.RTCM3_SSR,
                                                     sc.BDS_PPP):
 
                 antsPR = antModelTx(self.nav, e[i, :], sigsPR,
