@@ -837,7 +837,7 @@ class rtcm(cssr):
             sys_, _ = sat2prn(sat_)
             if sys_ != sys:
                 continue
-            self.fh.write(" {:s}\t{:5.3f}\n".format(sat2id(sat_),
+            self.fh.write(" {:s}\t{:8.4f}\n".format(sat2id(sat_),
                                                     self.lc[0].dclk[sat_]))
 
     def out_log_ssr_orb(self, sys):

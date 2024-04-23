@@ -1160,7 +1160,7 @@ class cssr:
                    np.isnan(self.lc[0].dclk[sat_]):
                     continue
                 self.fh.write(
-                    " {:s}\t{:3d}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\n"
+                    " {:s}\t{:3d}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:8.4f}\n"
                     .format(sat2id(sat_),
                             self.lc[0].iode[sat_],
                             self.lc[0].dorb[sat_][0],
