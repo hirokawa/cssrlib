@@ -226,6 +226,11 @@ class local_corr:
         self.sat_n = []
         self.t0 = {}
         self.cstat = 0            # status for receiving CSSR message
+        self.t0s = {}
+        sc_t = [sCType.CLOCK, sCType.ORBIT, sCType.CBIAS, sCType.PBIAS,
+                sCType.HCLOCK]
+        for sc in sc_t:
+            self.t0s[sc] = gtime_t()
 
 
 class cssr:
