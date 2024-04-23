@@ -226,6 +226,11 @@ class local_corr:
         self.sat_n = []
         self.t0 = {}
         self.cstat = 0            # status for receiving CSSR message
+        self.t0s = {}
+        sc_t = [sCType.CLOCK, sCType.ORBIT, sCType.CBIAS, sCType.PBIAS,
+                sCType.HCLOCK]
+        for sc in sc_t:
+            self.t0s[sc] = gtime_t()
 
 
 class cssr:
@@ -444,7 +449,7 @@ class cssr:
         return False
 
     def set_t0(self, inet=0, sat=0, ctype=0, t=gtime_t()):
-        """ set reference time for correcion to check validity time """
+        """ set reference time for correction to check validity time """
         sc_t = [sCType.CLOCK, sCType.ORBIT, sCType.CBIAS, sCType.PBIAS,
                 sCType.HCLOCK]
 
@@ -1160,7 +1165,7 @@ class cssr:
                    np.isnan(self.lc[0].dclk[sat_]):
                     continue
                 self.fh.write(
-                    " {:s}\t{:3d}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\n"
+                    " {:s}\t{:3d}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:8.4f}\n"
                     .format(sat2id(sat_),
                             self.lc[0].iode[sat_],
                             self.lc[0].dorb[sat_][0],
