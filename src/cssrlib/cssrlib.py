@@ -444,7 +444,7 @@ class cssr:
         return False
 
     def set_t0(self, inet=0, sat=0, ctype=0, t=gtime_t()):
-        """ set reference time for correcion to check validity time """
+        """ set reference time for correction to check validity time """
         sc_t = [sCType.CLOCK, sCType.ORBIT, sCType.CBIAS, sCType.PBIAS,
                 sCType.HCLOCK]
 
