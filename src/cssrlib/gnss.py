@@ -98,6 +98,8 @@ class rCST():
     P2_19 = 1.907348632812500E-06
     P2_20 = 9.536743164062500E-07
     P2_21 = 4.768371582031250E-07
+    P2_24 = 5.960464477539063e-08
+    P2_27 = 7.450580596923828e-09
     P2_28 = 3.725290298461914E-09
     P2_29 = 1.862645149230957E-09
     P2_30 = 9.313225746154785E-10
@@ -633,11 +635,12 @@ class Eph():
     af0 = 0.0
     af1 = 0.0
     af2 = 0.0
+    week = 0
     toc = 0
     toe = 0
     tot = 0
+    wn_op = 0
     top = 0
-    week = 0
     crs = 0.0
     crc = 0.0
     cus = 0.0
@@ -688,9 +691,9 @@ class Geph():
     age = 0.0
     toe = gtime_t()
     tof = gtime_t()
-    pos = None
-    vel = None
-    acc = None
+    pos = np.zeros(3)
+    vel = np.zeros(3)
+    acc = np.zeros(3)
     taun = 0.0         # SV clock bias [s]
     gamn = 0.0         # relative frq bias
     dtaun = 0.0        # delta between L1 and L2 [s]

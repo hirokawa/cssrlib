@@ -7,7 +7,7 @@ Created on Sun Aug 22 21:01:49 2021
 
 from cssrlib.gnss import Nav, id2sat, sat2id, char2sys, sat2prn
 from cssrlib.gnss import epoch2time, time2epoch, timeadd, timediff, gtime_t
-from cssrlib.gnss import str2time, time2str, time2doy
+from cssrlib.gnss import str2time, time2doy
 from cssrlib.gnss import gpst2utc, utc2gpst, time2gpst
 from cssrlib.gnss import ecef2enu
 from cssrlib.gnss import rCST, rSigRnx, uGNSS, uTYP, uSIG
@@ -53,7 +53,7 @@ class peph:
         self.nmax = 24*12
 
     def parse_satlist(self, line):
-        n = len(line[9:60])//3
+        n = len(line[9:60].strip())//3
         for k in range(n):
             svid = line[9+3*k:12+3*k]
             if int(svid[1:]) > 0:
@@ -61,7 +61,7 @@ class peph:
                 self.cnt += 1
 
     def parse_acclist(self, line):
-        n = len(line[9:60])//3
+        n = len(line[9:60].strip())//3
         for k in range(n):
             acc = int(line[9+3*k:12+3*k])
             if self.cnt < self.nsat:
@@ -203,21 +203,28 @@ class peph:
 
         return nav
 
-    def write_sp3(self, fname, nav):
+    def write_sp3(self, fname, nav, sats=None):
         """
         Write data to SP3 file
         """
+
+        # Update accumulated satellite list
+        #
+        if sats is not None:
+            self.nsat = len(sats)
+            self.sat = sorted(list(sats))
 
         with open(fname, "w") as fh:
 
             # Write header section
             #
 
-            # Epoch lines
-            #
             t0 = nav.peph[0].time
             e = time2epoch(t0)
             ne = len(nav.peph)
+
+            # Epoch lines
+            #
 
             fh.write("#dP{:04d} {:02d} {:02d} {:02d} {:02d} {:011.8f} {:7d} d+D {:16s}\n"
                      .format(e[0], e[1], e[2], e[3], e[4], e[5], ne, ' '))
@@ -272,17 +279,19 @@ class peph:
 
                 for sat in self.sat:
 
-                    if np.isnan(peph.pos[sat-1][0:3]).any():
-                        continue
+                    pos = [0, 0, 0] \
+                        if np.isnan(peph.pos[sat-1][0:3]).any() \
+                        else peph.pos[sat-1][0:3]
 
                     clk = 0.999999999999 \
-                        if np.isnan(peph.pos[sat-1][3]) else peph.pos[sat-1][3]
+                        if np.isnan(peph.pos[sat-1][3]) \
+                        else peph.pos[sat-1][3]
 
                     fh.write("P{:3s} {:13.6f} {:13.6f} {:13.6f} {:13.6f}\n"
                              .format(sat2id(sat),
-                                     peph.pos[sat-1][0]*1e-3,
-                                     peph.pos[sat-1][1]*1e-3,
-                                     peph.pos[sat-1][2]*1e-3,
+                                     pos[0]*1e-3,
+                                     pos[1]*1e-3,
+                                     pos[2]*1e-3,
                                      clk*1e+6))
 
             # Terminate file
@@ -419,6 +428,10 @@ class peph:
 
         return dts, varc
 
+    def pephrel(self, rs):
+        """ Relativistic correction based on satellite position and velocity """
+        return - 2.0*(rs[0:3]@rs[3:6])/(rCST.CLIGHT**2)
+
     def peph2pos(self, time, sat, nav, var=False):
         """ Satellite position, velocity and clock offset """
 
@@ -463,7 +476,7 @@ class peph:
         # differentiation
         #
         if dtss[0] != 0.0:
-            dt_rel = - 2.0*(rs[0:3]@rs[3:6])/(rCST.CLIGHT**2)
+            dt_rel = self.pephrel(rs)
             dts[0] = dtss[0] + dt_rel
             dts[1] = (dtst[0]-dtss[0])/tt
         else:
@@ -907,7 +920,7 @@ def antModelRx(nav, pos, e, sigs, rtype=1):
     return dant
 
 
-def apc2com(nav, sat, time, rs, sigs):
+def apc2com(nav, sat, time, rs, sigs, k=None):
     """
     Satellite position vector correction in ECEF from APC to CoM
     using ANTEX PCO corrections
@@ -923,7 +936,7 @@ def apc2com(nav, sat, time, rs, sigs):
     #
     A = orb2ecef(time, rs)
 
-    freq = [s.frequency() for s in sigs]
+    freq = [s.frequency(k) for s in sigs]
     if len(sigs) == 1:
         facs = (1.0,)
     elif len(sigs) == 2:

@@ -210,8 +210,8 @@ class local_corr:
         self.inet = -1
         self.inet_ref = -1
         self.ng = -1
-        self.pbias = None
-        self.cbias = None
+        self.pbias = {}
+        self.cbias = {}
         self.iode = None
         self.dorb = None
         self.dclk = None
@@ -226,6 +226,11 @@ class local_corr:
         self.sat_n = []
         self.t0 = {}
         self.cstat = 0            # status for receiving CSSR message
+        self.t0s = {}
+        sc_t = [sCType.CLOCK, sCType.ORBIT, sCType.CBIAS, sCType.PBIAS,
+                sCType.HCLOCK]
+        for sc in sc_t:
+            self.t0s[sc] = gtime_t()
 
 
 class cssr:
@@ -444,7 +449,7 @@ class cssr:
         return False
 
     def set_t0(self, inet=0, sat=0, ctype=0, t=gtime_t()):
-        """ set reference time for correcion to check validity time """
+        """ set reference time for correction to check validity time """
         sc_t = [sCType.CLOCK, sCType.ORBIT, sCType.CBIAS, sCType.PBIAS,
                 sCType.HCLOCK]
 
@@ -692,7 +697,6 @@ class cssr:
         self.lc[inet].cbias = {}
         for k in range(nsat):
             sat = self.sat_n[k]
-            sys, _ = sat2prn(sat)
             self.lc[inet].cbias[sat] = {}
             for j in range(len(self.sig_n[sat])):
                 rsig = self.sig_n[sat][j].toTyp(uTYP.C)
@@ -713,7 +717,6 @@ class cssr:
         self.lc[inet].di = {}
         for k in range(nsat):
             sat = self.sat_n[k]
-            sys, _ = sat2prn(sat)
             self.lc[inet].pbias[sat] = {}
             self.lc[inet].di[sat] = {}
             for j in range(len(self.sig_n[sat])):
@@ -914,8 +917,8 @@ class cssr:
     def decode_cssr_comb(self, msg, i, inet=0):
         """decode MT4073,11 Orbit,Clock Combined Correction message """
         head, i = self.decode_head(msg, i)
-        # if self.iodssr != head['iodssr']:
-        #    return -1
+        if self.iodssr != head['iodssr']:
+            return -1
         dfm = bs.unpack_from_dict('b1b1b1', ['orb', 'clk', 'net'], msg, i)
         i += 3
         self.flg_net = dfm['net']
@@ -1132,7 +1135,7 @@ class cssr:
 
         if self.subtype == sCSSR.CLOCK:
             self.fh.write(" {:s}\t{:s}\n".format("SatID", "dclk [m]"))
-            for k, sat_ in enumerate(self.lc[0].dclk.keys()):
+            for sat_ in self.lc[0].dclk.keys():
                 if np.isnan(self.lc[0].dclk[sat_]):
                     continue
                 self.fh.write(" {:s}\t{:8.4f}\n"
@@ -1143,7 +1146,7 @@ class cssr:
             self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\t{:s}\n"
                           .format("SatID", "IODE", "Radial[m]",
                                   "Along[m]", "Cross[m]"))
-            for k, sat_ in enumerate(self.lc[0].dorb.keys()):
+            for sat_ in self.lc[0].dorb.keys():
                 if np.isnan(self.lc[0].dorb[sat_][0]):
                     continue
                 self.fh.write(" {:s}\t{:3d}\t{:6.3f}\t{:6.3f}\t{:6.3f}\n"
@@ -1157,12 +1160,12 @@ class cssr:
             self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\t{:s}\t{:s}\n"
                           .format("SatID", "IODE", "Radial[m]",
                                   "Along[m]", "Cross[m]", "dclk[m]"))
-            for k, sat_ in enumerate(self.lc[0].dorb.keys()):
+            for sat_ in self.lc[0].dorb.keys():
                 if np.isnan(self.lc[0].dorb[sat_][0]) or \
                    np.isnan(self.lc[0].dclk[sat_]):
                     continue
                 self.fh.write(
-                    " {:s}\t{:3d}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\n"
+                    " {:s}\t{:3d}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:8.4f}\n"
                     .format(sat2id(sat_),
                             self.lc[0].iode[sat_],
                             self.lc[0].dorb[sat_][0],
@@ -1173,9 +1176,9 @@ class cssr:
         elif self.subtype == sCSSR.CBIAS:
             self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\n"
                           .format("SatID", "SigID", "Code Bias[m]", "..."))
-            for k, sat_ in enumerate(self.lc[0].cbias.keys()):
+            for sat_ in self.lc[0].cbias.keys():
                 self.fh.write(" {:s}\t".format(sat2id(sat_)))
-                for sig_ in range(self.lc[0].cbias[sat_].keys()):
+                for sig_ in self.lc[0].cbias[sat_].keys():
                     self.fh.write("{:s}\t{:5.2f}\t"
                                   .format(sig_.str(),
                                           self.lc[0].cbias[sat_][sig_]))
@@ -1184,9 +1187,9 @@ class cssr:
         elif self.subtype == sCSSR.PBIAS:
             self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\n"
                           .format("SatID", "SigID", "Phase Bias[m]", "..."))
-            for k, sat_ in enumerate(self.lc[0].pbias.keys()):
+            for sat_ in self.lc[0].pbias.keys():
                 self.fh.write(" {:s}\t".format(sat2id(sat_)))
-                for sig_ in range(self.lc[0].pbias[sat_].keys()):
+                for sig_ in self.lc[0].pbias[sat_].keys():
                     self.fh.write("{:s}\t{:5.2f}\t"
                                   .format(sig_.str(),
                                           self.lc[0].pbias[sat_][sig_]))
