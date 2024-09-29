@@ -24,7 +24,6 @@ import numpy as np
 import bitstruct.c as bs
 from cssrlib.gnss import gpst2time, gst2time, bdt2time, rCST
 from cssrlib.gnss import prn2sat, uGNSS, sat2prn, bdt2gpst, utc2gpst
-from cssrlib.gnss import time2gpst, gpst2utc
 from cssrlib.gnss import Eph, Geph, uTYP
 from cssrlib.rinex import rnxenc, rSigRnx
 
