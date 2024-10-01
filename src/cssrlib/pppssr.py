@@ -659,8 +659,12 @@ class pppos():
 
             # Receiver/satellite antenna offset
             #
-            antrPR = antModelRx(self.nav, pos, e[i, :], sigsPR, rtype)
-            antrCP = antModelRx(self.nav, pos, e[i, :], sigsCP, rtype)
+            if self.nav.rcv_ant is None:
+                antrPR = [0.0 for _ in sigsPR]
+                antrCP = [0.0 for _ in sigsCP]
+            else:
+                antrPR = antModelRx(self.nav, pos, e[i, :], sigsPR, rtype)
+                antrCP = antModelRx(self.nav, pos, e[i, :], sigsCP, rtype)
 
             if self.nav.ephopt == 4:
 
