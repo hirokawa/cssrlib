@@ -1422,6 +1422,8 @@ class rcvDec():
     flg_gpscnav2 = False
     flg_qzsl6 = False
     flg_gale6 = False
+    flg_qzsl1s = False
+    flg_qzsl5s = False
     flg_galinav = False
     flg_galfnav = False
     flg_bdsb1c = False
@@ -1573,6 +1575,16 @@ class rcvDec():
             self.flg_qzsl6 = True
             self.file_qzsl6 = "qzsl6.txt"
             self.fh_qzsl6 = open(prefix+self.file_qzsl6, mode='w')
+        if opt.flg_qzsl1s:
+            self.flg_qzsl1s = True
+            if self.fh_sbas is None:
+                self.file_sbas = "sbas.txt"
+                self.fh_sbas = open(prefix+self.file_sbas, mode='w')
+        if opt.flg_qzsl5s:
+            self.flg_qzsl5s = True
+            if self.fh_sbas is None:
+                self.file_sbas = "sbas.txt"
+                self.fh_sbas = open(prefix+self.file_sbas, mode='w')
         if opt.flg_gale6:
             self.flg_gale6 = True
             self.file_gale6 = "gale6.txt"
@@ -1601,8 +1613,9 @@ class rcvDec():
             self.flg_irnnav = True
         if opt.flg_sbas:
             self.flg_sbas = True
-            self.file_sbas = "sbas.txt"
-            self.fh_sbas = open(prefix+self.file_sbas, mode='w')
+            if self.fh_sbas is None:
+                self.file_sbas = "sbas.txt"
+                self.fh_sbas = open(prefix+self.file_sbas, mode='w')
         if opt.flg_rnxnav:
             self.flg_rnxnav = True
             self.file_rnxnav = "rnx.nav"
