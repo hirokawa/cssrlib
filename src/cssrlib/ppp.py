@@ -210,7 +210,7 @@ def eci2ecef(tgps, erpv):
     dpsi, deps = nut_iau1980(t_, f)
     N = Rx(-eps-deps)@Rz(-dpsi)@Rx(eps)
 
-    # Greenwich aparent sidereal time [rad]
+    # Greenwich apparent sidereal time [rad]
     gmst = utc2gmst(tutc, erpv[2])
     gast = gmst+dpsi*cos(eps)
     gast += (0.00264*sin(f[4])+0.000063*sin(2.0*f[4]))*gn.rCST.AS2R

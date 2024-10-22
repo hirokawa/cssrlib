@@ -199,7 +199,7 @@ class pppos():
             self.nav.P[j, i] = self.nav.P[i, j] = v0 if i == j else 0
 
     def IB(self, s, f, na=3):
-        """ return index of phase ambguity """
+        """ return index of phase ambiguity """
         idx = na+uGNSS.MAXSAT*f+s-1
         return idx
 
@@ -335,7 +335,7 @@ class pppos():
 
                     if sys[i] == uGNSS.GLO:
                         if sat[i] not in self.nav.glo_ch:
-                            print("glonass channed not found: {:d}"
+                            print("glonass channel not found: {:d}"
                                   .format(sat[i]))
                             continue
                         f1 = sig1.frequency(self.nav.glo_ch[sat[i]])
@@ -659,8 +659,12 @@ class pppos():
 
             # Receiver/satellite antenna offset
             #
-            antrPR = antModelRx(self.nav, pos, e[i, :], sigsPR, rtype)
-            antrCP = antModelRx(self.nav, pos, e[i, :], sigsCP, rtype)
+            if self.nav.rcv_ant is None:
+                antrPR = [0.0 for _ in sigsPR]
+                antrCP = [0.0 for _ in sigsCP]
+            else:
+                antrPR = antModelRx(self.nav, pos, e[i, :], sigsPR, rtype)
+                antrCP = antModelRx(self.nav, pos, e[i, :], sigsCP, rtype)
 
             if self.nav.ephopt == 4:
 
@@ -858,6 +862,7 @@ class pppos():
                                             self.IT(self.nav.na)])))
 
                     if self.nav.niono > 0:  # iono is estimated
+
                         # SD ionosphere
                         #
                         idx_i = self.II(sat[i], self.nav.na)
@@ -930,7 +935,7 @@ class pppos():
                     nb[b] += 1  # counter for single-differences per signal
                     nv += 1  # counter for single-difference observations
 
-                b += 1  # counter for signal (pseudrange+carrier-phase)
+                b += 1  # counter for signal (pseudorange+carrier-phase)
 
         v = np.resize(v, nv)
         H = np.resize(H, (nv, self.nav.nx))
