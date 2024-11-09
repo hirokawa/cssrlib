@@ -336,82 +336,85 @@ class RawNav():
         id2 = bs.unpack_from('u3', buff, 320+53)[0]
         id3 = bs.unpack_from('u3', buff, 320*2+53)[0]
 
-        if id1 == 1 and id2 == 2 and id3 == 3:
-            tow, alert, asf = bs.unpack_from('u17u1u1', buff, 32+2)
-            tow *= 6.0
-            # subfram #1
-            wn, code, urai, svh, iodc_ = bs.unpack_from('u10u2u4u6u2', buff,
-                                                        32*2+2)
-            l2p = bs.unpack_from('u1', buff, 32*3+2)[0]
-            tgd = bs.unpack_from('s8', buff, 32*6+2+16)[0]
-            iodc, toc = bs.unpack_from('u8u16', buff, 32*7+2)
-            af2, af1 = bs.unpack_from('s8s16', buff, 32*8+2)
-            af0 = bs.unpack_from('s22', buff, 32*9+2)[0]
-            iodc |= (iodc_ << 8)
-
-            # subframe #2
-            i0 = 320
-            iode, crs = bs.unpack_from('u8s16', buff, i0+32*2+2)
-            deln, M0_ = bs.unpack_from('s16u8', buff, i0+32*3+2)
-            M0 = bs.unpack_from('u24', buff, i0+32*4+2)[0]
-            M0 = bs.unpack('s32', bs.pack('u8u24', M0_, M0))[0]
-            cuc, e_ = bs.unpack_from('s16u8', buff, i0+32*5+2)
-            e = bs.unpack_from('u24', buff, i0+32*6+2)[0]
-            e = bs.unpack('s32', bs.pack('u8u24', e_, e))[0]
-            cus, sa_ = bs.unpack_from('s16u8', buff, i0+32*7+2)
-            sa = bs.unpack_from('u24', buff, i0+32*8+2)[0]
-            sqrtA = bs.unpack('u32', bs.pack('u8u24', sa_, sa))[0]
-            toe, fit, aodo = bs.unpack_from('u16u1u5', buff, i0+32*9+2)
-
-            # subframe #3
-            i0 = 320*2
-            cic, OMG0_ = bs.unpack_from('s16u8', buff, i0+32*2+2)
-            OMG0 = bs.unpack_from('u24', buff, i0+32*3+2)[0]
-            OMG0 = bs.unpack('s32', bs.pack('u8u24', OMG0_, OMG0))[0]
-            cis, inc0_ = bs.unpack_from('s16u8', buff, i0+32*4+2)
-            inc0 = bs.unpack_from('u24', buff, i0+32*5+2)[0]
-            inc0 = bs.unpack('s32', bs.pack('u8u24', inc0_, inc0))[0]
-            crc, omg_ = bs.unpack_from('s16u8', buff, i0+32*6+2)
-            omg = bs.unpack_from('u24', buff, i0+32*7+2)[0]
-            omg = bs.unpack('s32', bs.pack('u8u24', omg_, omg))[0]
-            OMGd = bs.unpack_from('s24', buff, i0+32*8+2)[0]
-            iode, idot = bs.unpack_from('u8s14', buff, i0+32*9+2)
-
-            eph.week = (week // 1024)*1024 + wn
-            eph.l2p = l2p
-            eph.code = code
-            eph.svh = svh
-            eph.sva = self.urai2sva(urai)
-            eph.tgd = tgd*rCST.P2_31
-            eph.iodc = iodc
-            toc *= 16.0
-            eph.af2 = af2*rCST.P2_55
-            eph.af1 = af1*rCST.P2_43
-            eph.af0 = af0*rCST.P2_31
-            eph.iode = iode
-            eph.crs = crs*rCST.P2_5
-            eph.deln = deln*rCST.P2_43*rCST.SC2RAD
-            eph.M0 = M0*rCST.P2_31*rCST.SC2RAD
-            eph.cuc = cuc*rCST.P2_29
-            eph.e = e*rCST.P2_33
-            eph.cus = cus*rCST.P2_29
-            sqrtA *= rCST.P2_19
-            eph.A = sqrtA**2
-            eph.toes = toe*16.0
-            eph.cic = cic*rCST.P2_29
-            eph.OMG0 = OMG0*rCST.P2_31*rCST.SC2RAD
-            eph.cis = cis*rCST.P2_29
-            eph.i0 = inc0*rCST.P2_31*rCST.SC2RAD
-            eph.crc = crc*rCST.P2_5
-            eph.omg = omg*rCST.P2_31*rCST.SC2RAD
-            eph.OMGd = OMGd*rCST.P2_43*rCST.SC2RAD
-            eph.idot = idot*rCST.P2_43*rCST.SC2RAD
-            eph.mode = 0  # LNAV
-            eph.toc = gpst2time(eph.week, toc)
-            eph.toe = gpst2time(eph.week, eph.toes)
-            eph.tot = bdt2time(eph.week, tow)
-        else:
+        if id1 != 1 or id2 != 2 or id3 != 3:
             return None
+
+        tow, alert, asf = bs.unpack_from('u17u1u1', buff, 32+2)
+        tow *= 6.0
+        # subfram #1
+        wn, code, urai, svh, iodc_ = bs.unpack_from('u10u2u4u6u2', buff,
+                                                    32*2+2)
+        l2p = bs.unpack_from('u1', buff, 32*3+2)[0]
+        tgd = bs.unpack_from('s8', buff, 32*6+2+16)[0]
+        iodc, toc = bs.unpack_from('u8u16', buff, 32*7+2)
+        af2, af1 = bs.unpack_from('s8s16', buff, 32*8+2)
+        af0 = bs.unpack_from('s22', buff, 32*9+2)[0]
+        iodc |= (iodc_ << 8)
+
+        # subframe #2
+        i0 = 320
+        iode, crs = bs.unpack_from('u8s16', buff, i0+32*2+2)
+        deln, M0_ = bs.unpack_from('s16u8', buff, i0+32*3+2)
+        M0 = bs.unpack_from('u24', buff, i0+32*4+2)[0]
+        M0 = bs.unpack('s32', bs.pack('u8u24', M0_, M0))[0]
+        cuc, e_ = bs.unpack_from('s16u8', buff, i0+32*5+2)
+        e = bs.unpack_from('u24', buff, i0+32*6+2)[0]
+        e = bs.unpack('s32', bs.pack('u8u24', e_, e))[0]
+        cus, sa_ = bs.unpack_from('s16u8', buff, i0+32*7+2)
+        sa = bs.unpack_from('u24', buff, i0+32*8+2)[0]
+        sqrtA = bs.unpack('u32', bs.pack('u8u24', sa_, sa))[0]
+        toe, fit, aodo = bs.unpack_from('u16u1u5', buff, i0+32*9+2)
+
+        # subframe #3
+        i0 = 320*2
+        cic, OMG0_ = bs.unpack_from('s16u8', buff, i0+32*2+2)
+        OMG0 = bs.unpack_from('u24', buff, i0+32*3+2)[0]
+        OMG0 = bs.unpack('s32', bs.pack('u8u24', OMG0_, OMG0))[0]
+        cis, inc0_ = bs.unpack_from('s16u8', buff, i0+32*4+2)
+        inc0 = bs.unpack_from('u24', buff, i0+32*5+2)[0]
+        inc0 = bs.unpack('s32', bs.pack('u8u24', inc0_, inc0))[0]
+        crc, omg_ = bs.unpack_from('s16u8', buff, i0+32*6+2)
+        omg = bs.unpack_from('u24', buff, i0+32*7+2)[0]
+        omg = bs.unpack('s32', bs.pack('u8u24', omg_, omg))[0]
+        OMGd = bs.unpack_from('s24', buff, i0+32*8+2)[0]
+        iode2, idot = bs.unpack_from('u8s14', buff, i0+32*9+2)
+
+        if iode != iode2 or iode != (iodc & 0xff):
+            return None
+
+        eph.week = (week // 1024)*1024 + wn
+        eph.l2p = l2p
+        eph.code = code
+        eph.svh = svh
+        eph.sva = self.urai2sva(urai)
+        eph.tgd = tgd*rCST.P2_31
+        eph.iodc = iodc
+        toc *= 16.0
+        eph.af2 = af2*rCST.P2_55
+        eph.af1 = af1*rCST.P2_43
+        eph.af0 = af0*rCST.P2_31
+        eph.iode = iode
+        eph.crs = crs*rCST.P2_5
+        eph.deln = deln*rCST.P2_43*rCST.SC2RAD
+        eph.M0 = M0*rCST.P2_31*rCST.SC2RAD
+        eph.cuc = cuc*rCST.P2_29
+        eph.e = e*rCST.P2_33
+        eph.cus = cus*rCST.P2_29
+        sqrtA *= rCST.P2_19
+        eph.A = sqrtA**2
+        eph.toes = toe*16.0
+        eph.cic = cic*rCST.P2_29
+        eph.OMG0 = OMG0*rCST.P2_31*rCST.SC2RAD
+        eph.cis = cis*rCST.P2_29
+        eph.i0 = inc0*rCST.P2_31*rCST.SC2RAD
+        eph.crc = crc*rCST.P2_5
+        eph.omg = omg*rCST.P2_31*rCST.SC2RAD
+        eph.OMGd = OMGd*rCST.P2_43*rCST.SC2RAD
+        eph.idot = idot*rCST.P2_43*rCST.SC2RAD
+        eph.mode = 0  # LNAV
+        eph.toc = gpst2time(eph.week, toc)
+        eph.toe = gpst2time(eph.week, eph.toes)
+        eph.tot = bdt2time(eph.week, tow)
 
         return eph
 
@@ -479,15 +482,15 @@ class RawNav():
         id2 = bs.unpack_from('u6', buff, 304+14)[0]
         id3 = bs.unpack_from('u6', buff, 304*2+14)[0]
 
-        toe1 = bs.unpack_from('u11', buff, 70)[0]
-        toe2 = bs.unpack_from('u11', buff, 304+38)[0]
-        toc = bs.unpack_from('u11', buff, 304*2+60)[0]
-
-        if id1 != 10 or id2 != 11 or id3 != 30:
+        if id1 != 10 or id2 != 11 or id3//10 != 3:
             if sys == uGNSS.QZS and id3 == 61:
                 None
             else:
                 return None
+
+        toe1 = bs.unpack_from('u11', buff, 70)[0]
+        toe2 = bs.unpack_from('u11', buff, 304+38)[0]
+        toc = bs.unpack_from('u11', buff, 304*2+60)[0]
 
         if toe1 != toe2 or toe1 != toc:
             return None
@@ -1397,6 +1400,8 @@ class rcvOpt():
     flg_gpscnav2 = False
     flg_qzsl6 = False
     flg_gale6 = False
+    flg_qzsl1s = False
+    flg_qzsl5s = False
     flg_galinav = False
     flg_galfnav = False
     flg_bdsb1cc = False
