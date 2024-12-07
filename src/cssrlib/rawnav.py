@@ -142,6 +142,7 @@ class RawNav():
         # for E5b: field1: reserved1. field2 = reserved2
 
         odd, page = bs.unpack_from('u1u1', msg, 0)
+        # odd_, page_ = bs.unpack_from('u1u1', msg, 120)
         sid, iodnav = bs.unpack_from('u6u10', msg, 2)
 
         if sid > 5:
@@ -1409,7 +1410,7 @@ class rcvOpt():
     flg_qzsl5s = False
     flg_galinav = False
     flg_galfnav = False
-    flg_bdsb1cc = False
+    flg_bdsb1c = False
     flg_bdsb2a = False
     flg_bdsb2b = False
     flg_bdsd12 = False
