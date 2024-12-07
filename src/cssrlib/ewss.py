@@ -176,7 +176,7 @@ class ewsDec():
                 s[key] = v[1].strip()
         return s
 
-    def __init__(self, bdir='../data/ews/', year=0):
+    def __init__(self, bdir='../data/ewss/', year=0):
         self.msg_path = bdir
         self.monlevel = 0
         self.year = year
@@ -726,7 +726,7 @@ class jmaDec(ewsDec):
 class camfDec(ewsDec):
     """ Common Alert Message Format (CAMF) Decoder class """
 
-    def __init__(self, bdir='../data/ews/camf/', year=0):
+    def __init__(self, bdir='../data/ewss/camf/', year=0):
         super().__init__(bdir=bdir, year=year)
         self.bdir = bdir
 
