@@ -1,15 +1,22 @@
 """
 RTCM 3 decoder
 
-[1] RTCM Standard 10403.4, 2023
-[2] IGS SSR Format version 1.00, 2020
+[1] RTCM Standard 10403.4 with Amendment 1
+    Differential GNSS (Global Navigation Satellite Systems)
+    Services - Version 3, 2024
+[2] RTCM Standard 13400.11 (Working Draft)
+    Integrity for High Accuracy GNSS based Applications
+    - Version 0.1, 2024
+[3] IGS SSR Format version 1.00, 2020
+
+@author Rui Hirokawa
 
 """
 
 import numpy as np
 import struct as st
 import bitstruct as bs
-from cssrlib.cssrlib import cssr, sCSSR, prn2sat, sCType
+from cssrlib.cssrlib import cssr, sCSSR, prn2sat, sCType, cssre
 from cssrlib.gnss import uGNSS, sat2id, gpst2time, timediff, time2str, sat2prn
 from cssrlib.gnss import uTYP, uSIG, rSigRnx, bdt2time, bdt2gpst, glo2time
 from cssrlib.gnss import time2bdt, gpst2bdt, rCST, time2gpst, utc2gpst, timeadd
@@ -33,6 +40,116 @@ class sRTCM(IntEnum):
     QZS_EPH = 1015
     IRN_EPH = 1016
     SBS_EPH = 1016
+
+    # test messages
+    INTEG_SSR = 11
+    INTEG_SSR_IONO = 12
+    INTEG_SSR_TROP = 13
+
+
+class Integrity():
+    """ class for integrity information in SC-134 """
+    pid = 0  # provider id DFi027 (0-4095)
+    vp = 0  # validity period DFi065 (0-15)
+    uri = 0  # update rate interval DFi067 (b16)
+    tow = 0
+    iod_sys = {}  # issue of GNSS satellite mask DFi010 (b2)
+    sts = {}  # constellation integrity status DFi029 (b16)
+    mst = {}  # constellation monitoring status DFi030 (b16)
+    src = {}
+
+    nid = {}
+    flag = {}
+    sigmask = {}  # GNSS signal mask DFi033 (b32)
+    iod_sig = {}  # issue of GNSS signal mask DFi012 (b2)
+    sig_ists = {}  # signal integrity status DFi031 (b32)
+    sig_msts = {}  # signal monitoring status DFi032 (b32)
+
+    Paug = 0  # Augmentation System Probability Falut DFi049
+
+    nsys = 0
+    nsat = {}
+    sys_t = None
+    sat = {}
+    mask_sys = 0
+
+    sys_tbl = {0: uGNSS.GPS, 1: uGNSS.GLO, 2: uGNSS.GAL, 3: uGNSS.BDS,
+               4: uGNSS.QZS, 5: uGNSS.IRN}
+
+    # Mean Failure Duration (MFD) of the augmentation system indicator (DFi034)
+    mfd_t = [5, 10, 30, 60, 120, 600, 900, 1800, 3600, 7200, 10800, 21600,
+             43200, 86400, 604800, -1]
+    # overbounding standard deviation indicator (DFi036)
+    sig_ob_c_t = [0.02, 0.04, 0.06, 0.08, 0.10, 0.12, 0.14, 0.16, 0.18, 0.20,
+                  0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.60, 0.70, 0.80, 0.90,
+                  1.00, 1.25, 1.50, 1.75, 2.00, 2.50, 3.00, 4.00, 5.00, 7.00,
+                  -1, -1]
+    # overbounding standard deviation of the carrier phase (DFi038)
+    sig_ob_p_t = [0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008,
+                  0.009, 0.010, 0.011, 0.012, 0.013, 0.014, 0.015, 0.016,
+                  0.017, 0.018, 0.019, 0.020, 0.022, 0.024, 0.026, 0.028,
+                  0.030, 0.032, 0.034, 0.036, 0.040, 0.045, 0.050, -1]
+    # overbounding standard deviation of the carrier phase (DFi039)
+    b_ob_p_t = [0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.008, 0.010,
+                0.012, 0.014, 0.016, 0.018, 0.020, 0.025, 0.030, -1]
+    # overbounding standard deviation of the pseudorange (DFi037)
+    b_ob_c_t = [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.075, 0.10,
+                0.20, 0.40, 0.60, 0.80, 1.0, 3.0, 7.0, -1]
+    # duration of augmentation system (MFD) (DFi040)
+    mfd_t = [0, 5, 10, 30, 60, 90, 300, 600, 1800, 3600, 7200, 14400, 28800,
+             57600, 115200, -1]
+    # correlation time of pseudorange error indicator (DFi044)
+    tau_c_t = [0, 5, 10, 20, 30, 45, 60, 120, 180, 300, 600, 1200, 3600, 7200,
+               14400, -1]
+    # correlation time of carrier phase error indicator (DFi045)
+    tau_p_t = [0, 2, 5, 10, 20, 30, 45, 60, 120, 180, 240, 300, 600, 1800,
+               7200, -1]
+    # probability indicator (DFi035, DFi046, DFi047, DFi048, DFi049)
+    tau_p_t = [10**-11, 10**-10, 10**-9, 10**-8, 10**-7, 10**-6.2, 10**-6,
+               10**-5.2, 10**-5, 10**-4.2, 10**-4, 10**-3.3, 10**-3, 10**-2.3,
+               10**-2, -1]
+    # TTT_comm indicator DFi050
+    # ttt_comm_t = 0.1*(i+1), 127 is not provided
+    # stdev indicator of bound on rate of change of PR error DFi120
+    sig_rr_t = [1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 3e-3, 6e-3, 1e-2, 3e-2,
+                6e-2, 0.10, 0.50, 5.0, 0, -1]
+    # stdev indicator of bound on rate of change of phase error DFi121
+    sig_rp_t = [1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 4e-4, 1e-3, 4e-3,
+                0.01, 0.04, 0.10, 0.50, 5.0, -1]
+    # stdev indicator of bound on rate of change of phase error DFi122
+    sig_prre_t = [1e-3, 2e-3, 5e-3, 7.5e-3, 0.010, 0.014, 0.018, 0.025, 0.050,
+                  0.10, 0.15, 0.20, 0.50, 1.0, 20.0, -1]
+    # stdev indicator of bound on rate of change of phase error DFi123
+    sig_dprre_t = [1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3,
+                   0.01, 0.1, 1.0, 10.0, 0, 0, -1]
+    # bounding parameter in iono, tropo error indicator DFi129, DFi131
+    b_datm_t = [5e-4, 1e-3, 2e-3, 4e-3, 0.01, 0.02, 0.05, -1]
+    # bounding pseudorange bias rate error indicator DFi125
+    b_rsdsa_t = [5e-4, 1e-3, 2e-3, 4e-3, 0.01, 0.02, 0.05, -1]
+    # bounding rate of change in satellite orbit/clock error indicator DFi127
+    b_rboc_t = [5e-4, 1e-3, 2e-3, 4e-3, 0.01, 0.02, 0.05, -1]
+    # residual iono error stdev for L1 GPS DFi128
+    sig_di_t = [5e-3, 1e-2, 2e-2, 5e-2, 0.10, 0.25, 1.0, -1]
+    # residual trop error stdev for L1 GPS DFi130
+    sig_dt_t = [0.01, 0.02, 0.03, 0.05, 0.075, 0.10, 0.125, -1]
+    # bounding inter-constellation bias DFi132
+    b_intc_t = [0.00, 0.01, 0.02, 0.05, 0.10, 0.25, 0.50, -1]
+    # bounding inter-frequency bias
+    b_intf_t = [0.00, 0.04, 0.07, 0.10, 0.20, 0.30, 0.50, -1]
+    # GMM component expection
+    mu_k_t = [0.00, 0.04, 0.07, 0.10, 0.20, 0.30, 0.50, 1, 2, 5, 10, 20, 50,
+              80, 100, -1]
+    # GMM component stdev
+    sig_k_t = [0.0, 0.04, 0.07, 0.10, 0.20, 0.25, 0.30, 0.40, 0.50, 0.70,
+               1, 2, 5, 7, 10, -1]
+
+    # Validity Period DFi065
+    vp_tbl = [1, 2, 5, 10, 15, 30, 60, 120, 240,
+              300, 600, 900, 1800, 3600, 7200, 10800]
+
+    def __init__(self):
+        self.sys_r_tbl = {self.sys_tbl[s]: s for s in self.sys_tbl.keys()}
+        None
 
 
 class rtcm(cssr):
@@ -60,6 +177,8 @@ class rtcm(cssr):
             uGNSS.GPS: 1019, uGNSS.GLO: 1020, uGNSS.BDS: 1042,
             uGNSS.QZS: 1044, uGNSS.GAL: 1046
         }
+
+        self.integ = Integrity()
 
     def is_msmtype(self, msgtype):
         for sys_ in self.msm_t.keys():
@@ -762,7 +881,7 @@ class rtcm(cssr):
 
     def nrtktype(self, msgtype):
         gnss_t = {1030: uGNSS.GPS, 1031: uGNSS.GLO,
-                  36: uGNSS.BDS, 37: uGNSS.GAL, 38: uGNSS.QZS}
+                  1303: uGNSS.BDS, 1304: uGNSS.GAL, 1305: uGNSS.QZS}
 
         sys = uGNSS.NONE
         nrtk = 0
@@ -789,16 +908,16 @@ class rtcm(cssr):
         return i, sys, time
 
     def decode_nrtk_residual(self, msg, i=0):
+        """ decode Network RTK Residual Message """
         i, sys, time = self.decode_nrtk_time(msg, i)
+        sz = 6 if sys != uGNSS.QZS else 4
 
         self.refid, self.nrefs, self.nsat = bs.unpack_from('u12u7u5', msg, i)
         i += 24
 
         for k in range(self.nsat):
-            sz = 6 if sys != uGNSS.QZS else 4
             svid = bs.unpack_from('u'+str(sz), msg, i)[0]
             sat = self.svid2sat(sys, svid)
-
             i += sz
             s0c, s0d, s0h, sic, sid = bs.unpack_from('u8u9u6u10u10', msg, i)
             i += 43
@@ -1649,7 +1768,504 @@ class rtcm(cssr):
         ic = i//8
         self.ustr = bytes(msg[ic:ic+ncp]).decode()
 
+    def decode_integrity_min(self, msg, i):
+        """ RTCM SC-134 minimum integrity message (MT3) """
+
+        # augmentation service provider id DFi027
+        # GPS Epoch Time (TOW) DFi008
+        # Constellation Mask DFi013
+        pid, tow, mask_sys = bs.unpack_from('u12u30u16', msg, i)
+        i += 58
+
+        # constellation integirity status DFi029
+        # constellation monitoring status DFi030
+        c_integ, c_status, vp, uri = bs.unpack_from('u16u16u4u16', msg, i)
+        i += 52
+
+        self.integ.vp = vp  # Validity Period DFi065 (0-15)
+        self.integ.uri = uri  # update rate interval DFi067 (0.1)
+
+        sys_t, nsys = self.decode_mask(mask_sys, 16, ofst=0)
+
+        iod_sys = {}
+        sts_tbl = {}
+        mst_tbl = {}
+        src_tbl = {}
+
+        iod_sig = {}
+        sigmask = {}
+        sig_ists = {}
+        sig_msts = {}
+
+        for sys_ in sys_t:
+            sys = self.integ.sys_tbl[sys_]
+
+            # GNSS satellite mask DFi009
+            # Issue of GNSS Satellite Mask DFi010
+            mask_sat, iod = bs.unpack_from('u64u2', msg, i)
+            i += 66
+            # Satellite Integrity Status DFi019
+            # Satellite Monitoring Status DFi018
+            # Satellite Integrity Fault source DFi052
+            sts, mst, src = bs.unpack_from('u64u64u3', msg, i)
+            i += 131
+
+            svid_t, nsat = self.decode_mask(mask_sat, 64)
+
+            iod_sys[sys] = iod
+            sts_tbl[sys] = sts
+            mst_tbl[sys] = mst
+            src_tbl[sys] = src
+
+            iod_sig[sys] = {}
+            sigmask[sys] = {}
+            sig_ists[sys] = {}
+            sig_msts[sys] = {}
+            for svid in svid_t:
+                ofst = 192 if sys == uGNSS.QZS else 0
+                prn = svid+ofst
+
+                # GNSS signal mask DFi033
+                sigmask[sys][prn] = bs.unpack_from('u32', msg, i)[0]
+                i += 32
+                # issue of GNSS signal mask DFi012
+                iod_sig[sys][prn] = bs.unpack_from('u2', msg, i)[0]
+                i += 2
+                # signal integrity status DFi031
+                sig_ists[sys][prn] = bs.unpack_from('u32', msg, i)[0]
+                i += 32
+                # signal monitoring status DFi032
+                sig_msts[sys][prn] = bs.unpack_from('u32', msg, i)[0]
+                i += 32
+
+        self.integ.pid = pid
+        self.integ.tow = tow
+
+        self.integ.iod_sys = iod_sys
+        self.integ.sts = sts_tbl
+        self.integ.mst = mst_tbl
+        self.integ.src = src_tbl
+
+        self.integ.sigmask = sigmask
+        self.integ.iod_sig = iod_sig
+        self.integ.sig_ists = sig_ists
+        self.integ.sig_msts = sig_msts
+
+    def decode_integrity_ext(self, msg, i):
+        """ RTCM SC-134 extended integrity message
+            service levels and overbounding parameters (MT4) """
+
+        # GPS Epoch Time (TOW) DFi008
+        # augmentation service provider id DFi027
+        # Augmentation Integrity Level DFi026
+        # Service Provider Solution Type DFi004
+        tow, pid, ilvl, stype = bs.unpack_from('u30u12u4u4', msg, i)
+        i += 50
+
+        self.integ.pid = pid
+        self.integ.tow = tow
+        self.integ.ilvl = ilvl
+        self.intrg.stype = stype
+
+        # GNSS Constellation Mask DFi013
+        # Validity Period DFi065 (0-15)
+        # update rate interval DFi067 (0.1)
+        # Validity Area Type DFi056
+        mask_sys, vp, uri, atype = bs.unpack_from('u16u4u16u2', msg, i)
+        i += 38
+
+        sys_t, nsys = self.decode_mask(mask_sys, 16, ofst=0)
+        self.integ.vp = vp  # Validity Period DFi065 (0-15)
+        self.integ.uri = uri  # update rate interval DFi067 (0.1)
+        self.integ.atype = atype
+
+        # Paug Bundling flag DFi066
+        f_paug = bs.unpack_from('u1', msg, i)[0]
+        i += 1
+        if f_paug == 1:
+            # Paug Augmentation System Probability Falut DFi049
+            self.integ.Paug = bs.unpack_from('u4', msg, i)[0]
+            i += 4
+
+        # Time correlation integrity/continuity flag DFi137
+        #  0: DFi040-045 are valid only for integrity monitoring
+        #  1: DFi040-045 are valid also for continuity monitoring
+        # integrity parameter IOD DFi006
+        self.integ.fc, self.integ.iod_p = bs.unpack_from('u1u6', msg, i)
+        i += 7
+
+        if atype == 1:  # Validity Area Parameters defined in Table 10.3-5
+            # service area IOD DFi005
+            # number of area points DFi201
+            self.integ.iod_sa, narea = bs.unpack_from('u6u8', msg, i)
+            i += 14
+            self.integ.narea = narea
+            for k in range(narea):
+                # Area Point - Lat DFi202
+                # Area Point - Lon DFi203
+                # Area Point - Height DFi204
+                lat, lon, alt = bs.unpack_from('s34s35s14', msg, i)
+                i += 83
+
+        elif atype == 0:  # Validity Radius Data defined in Table 10.3-6
+            # service area IOD DFi005
+            self.integ.iod_sa = bs.unpack_from('u6', msg, i)[0]
+            i += 6
+            # Augmentation Network Computation Point ECEF - X DFi053
+            # Augmentation Network Computation Point ECEF - Y DFi054
+            # Augmentation Network Computation Point ECEF - Z DFi055
+            # Validity Radius DFi057
+            x, y, z, vr = bs.unpack_from('s34s34s34u20', msg, i)
+            i += 122
+
+        for sys_ in sys_t:
+            sys = self.integ.sys_tbl[sys_]
+
+            # Mean failure duration (MFD) of a single satellite fault DFi034
+            # Mean failure duration (MFD) of a constellation fault DFi040
+            mfd_s, mfd_c = bs.unpack_from('u4u4', msg, i)
+            i += 8
+
+            # Correlation Time of Pseudorange Augmentation Message Error DFi044
+            # Correlation Time of Carrier Phase Augmentation Message Error
+            #  DFi045
+            # Multiple Satellite Pseudorange Augmentation Message Fault
+            # Probability DFi047
+            # Multiple Satellite Carrier Phase Augmentation Message Fault
+            # Probability DFi035
+            tau_p, tau_c, tau_cp, tau_cc = bs.unpack_from('u4u4u4u4', msg, i)
+            i += 16
+
+            # Update rate interval DFi067
+            # GNSS satellite mask DFi009
+            uri, mask_sat = bs.unpack_from('u16u64', msg, i)
+            i += 80
+
+            svid_t, nsat = self.decode_mask(mask_sat, 64)
+
+            for svid in svid_t:
+                ofst = 192 if sys == uGNSS.QZS else 0
+                prn = svid+ofst
+
+                # Single Satellite Pseudorange Augmentation Message Fault
+                # Probability DFi046
+                # Overbounding Standard Deviation of the Pseudorange
+                # Augmentation Message Error under Fault-Free Scenario DFi036
+                # Single Satellite Carrier Phase Augmentation Message
+                # Fault Probability DFi048
+                # Overbounding Bias of the Long-Term Pseudorange Augmentation
+                # Message Bias Error under Fault-Free Scenario DFi037
+                # Overbounding Standard Deviation of the Carrier Phase
+                # Augmentation Message Error under Fault-Free Scenario DFi038
+                # Overbounding Bias of the Long-Term Carrier Phase
+                # Augmentation Message Bias Error under Fault-Free DFi039
+                Pa_sp, sig_a, Pa_sc, ob_p, sig_ob_c, ob_c = \
+                    bs.unpack_from('u4u5u4u4u5u4', msg, i)
+                i += 26
+
+    def decode_integrity_ext_sis_local(self, msg, i):
+        """ RTCM SC-134 extended integrity message
+            signal in space integrity and local error parameters (MT5) """
+
+        # integrity parameter IOD DFi006
+        # augmentation service provider id DFi027
+        # GPS Epoch Time (TOW) DFi008
+        iod_ip, pid, tow = bs.unpack_from('u6u12u30', msg, i)
+        i += 48
+
+        # GNSS Constellation Mask DFi013
+        # Validity Period DFi065 (0-15)
+        # update rate interval DFi067 (0.1)
+        # Validity Area Type DFi056
+        # Time correlation integrity/continuity flag DFi137
+        mask_sys, vp, uri, atype, fc = bs.unpack_from('u16u4u16u2u1', msg, i)
+        i += 39
+
+        sys_t, nsys = self.decode_mask(mask_sys, 16, ofst=0)
+        self.integ.vp = vp  # Validity Period DFi065 (0-15)
+        self.integ.uri = uri  # update rate interval DFi067 (0.1)
+
+        if atype == 1:  # Validity Area Parameters defined in Table 10.3-5
+            # service area IOD DFi005
+            # number of area points DFi201
+            iod_sa, narea = bs.unpack_from('u6u8', msg, i)
+            i += 14
+            for k in range(narea):
+                # Area Point - Lat DFi202
+                # Area Point - Lon DFi203
+                # Area Point - Height DFi204
+                lat, lon, alt = bs.unpack_from('s34s35s14', msg, i)
+                i += 83
+
+        elif atype == 0:  # Validity Radius Data defined in Table 10.3-6
+            # service area IOD DFi005
+            iod_sa = bs.unpack_from('u6', msg, i)[0]
+            i += 6
+            # Augmentation Network Computation Point ECEF - X DFi053
+            # Augmentation Network Computation Point ECEF - Y DFi054
+            # Augmentation Network Computation Point ECEF - Z DFi055
+            # Validity Radius DFi057
+            x, y, z, vr = bs.unpack_from('s34s34s34u20', msg, i)
+            i += 122
+
+        for sys_ in sys_t:
+            sys = self.integ.sys_tbl[sys_]
+
+            # GNSS satellite mask DFi009
+            # issue of GNSS satellite mask DFi010
+            mask_sat, iod_mask = bs.unpack_from('u64u2', msg, i)
+            i += 66
+
+            svid_t, nsat = self.decode_mask(mask_sat, 64)
+
+            for svid in svid_t:
+                ofst = 192 if sys == uGNSS.QZS else 0
+                prn = svid+ofst
+
+                # Pseudorange error rate integrity index DFi120
+                # Phase error rate integrity index DFi121
+                # Nominal pseudorange bias rate of change DFi125
+                # Bounding sigma on phase-range-rate error DFi122
+                # Phase-range-rate error rate integrity index DFi123
+                idx_c, idx_p, cbr, sig_dp, idx_dp =  \
+                    bs.unpack_from('u4u4u3u4u4', msg, i)
+                i += 19
+
+                # Orbit and clock error rate integrity parameter DFi127
+                # Residual ionospheric error standard deviation DFi128
+                # Index of bounding parameter on change in iono error DFi129
+                # Residual tropospheric error standard deviation DFi130
+                # Index of bounding parameter on change in tropo error DFi131
+                oc, sig_ion, idx_ion, sig_trp, idx_trp = \
+                    bs.unpack_from('u3u3u3u3u3', msg, i)
+                i += 15
+
+    def decode_integrity_ext_service_area(self, msg, i):
+        """ RTCM SC-134 Extended Service Area Parameters (MT6) """
+
+        # integrity parameter IOD DFi006
+        # augmentation service provider id DFi027
+        # GPS Epoch Time (TOW) DFi008
+        # augmentation integrity level DFi026
+        iod_sa, tow, pid, alvl = bs.unpack_from('u6u30u12u4', msg, i)
+        i += 52
+
+        # GNSS Constellation Mask DFi013
+        # Validity Period DFi065 (0-15)
+        # update rate interval DFi067 (0.1)
+        # Validity Area Type DFi056
+        mask_sys, vp, uri, atype = bs.unpack_from('u16u4u16u2', msg, i)
+        i += 38
+
+        # Augmentation IR Degradation Factor DFi140
+        # Augmentation TTD Degradation Factor DFi141
+        # Extended Area Time Parameter Degradation Factor DFi138
+        # Extended Area Spatial Parameter Degradation Factor DFi139
+        ir_d, ttd_d, t_d, s_d = bs.unpack_from('u2u2u3u3', msg, i)
+        i += 10
+
+        if atype == 1:  # Validity Area Parameters defined in Table 10.3-5
+            # service area IOD DFi005
+            # number of area points DFi201
+            iod_sa, narea = bs.unpack_from('u6u8', msg, i)
+            i += 14
+            for k in range(narea):
+                # Area Point - Lat DFi202
+                # Area Point - Lon DFi203
+                # Area Point - Height DFi204
+                lat, lon, alt = bs.unpack_from('s34s35s14', msg, i)
+                i += 83
+
+        elif atype == 0:  # Validity Radius Data defined in Table 10.3-6
+            # service area IOD DFi005
+            iod_sa = bs.unpack_from('u6', msg, i)[0]
+            i += 6
+            # Augmentation Network Computation Point ECEF - X DFi053
+            # Augmentation Network Computation Point ECEF - Y DFi054
+            # Augmentation Network Computation Point ECEF - Z DFi055
+            # Validity Radius DFi057
+            x, y, z, vr = bs.unpack_from('s34s34s34u20', msg, i)
+            i += 122
+
+    def decode_integrity_quality(self, msg, i):
+        """ RTCM SC-134 Message Quality Indicator (MT7) """
+
+        # GPS Epoch Time (TOW) DFi008
+        # augmentation service provider id DFi027
+        # Validity Period DFi065 (0-15)
+
+        tow, pid, vp = bs.unpack_from('u30u12u4', msg, i)
+        i += 46
+
+        # update rate interval DFi067 (0.1)
+        # network id DFi071
+        # quality indicator mask DFi061
+        uri, nid, mask_q = bs.unpack_from('u16u8u8', msg, i)
+        i += 32
+
+        idx_q, np = self.decode_mask(mask_q, 8, ofst=0)
+        for k in range(np):
+            qi = bs.unpack_from('u8', msg, i)[0]
+            i += 8
+
+    def decode_integrity_cnr_acg(self, msg, i):
+        """ RTCM SC-134 CNR/ACG Signal In Space Monitoring Message (MT8) """
+
+        # augmentation service provider id DFi027
+        # GPS Epoch Time (TOW) DFi008
+        # number of reference stations DFi072
+        # update rate interval DFi067 (0.1)
+        pid, tow, nst, uri = bs.unpack_from('u12u30u12u16', msg, i)
+        i += 12+30+12+16
+
+        for k in range(nst):
+            # Area Point - Lat DFi202
+            # Area Point - Lon DFi203
+            # Area Point - Height DFi204
+            lat, lon, alt = bs.unpack_from('s34s35s14', msg, i)
+            i += 34+35+14
+            # Constellation Mask DFi013
+            # GNSS Satellite Mask DFi009
+            # Issue of GNSS Satellite Mask DFi010
+            mask_c, mask_s, iod_sat = bs.unpack_from('u16u64u2', msg, i)
+            i += 82
+
+            svid_t, nsat = self.decode_mask(mask_s, 64)
+            for svid in svid_t:
+                # GNSS Signal Mask DFi033
+                # Issue of GNSS Signal Mask DFi012
+                mask_sig, iod_sig = bs.unpack_from('u32u2', msg, i)
+                i += 34
+                sig_t, nsig = self.decode_mask(mask_sig, 32, ofst=0)
+                for sig in sig_t:
+                    # Frequency band ID DFi135
+                    band = bs.unpack_from('u5', msg, i)[0]
+                    i += 5
+                for sig in sig_t:
+                    # CNR carrier to noise ratio DFi133
+                    cnr = bs.unpack_from('u8', msg, i)[0]
+                    i += 8
+                for sig in sig_t:
+                    # AGC, Automatic Gain Control DFi134
+                    agc = bs.unpack_from('u8', msg, i)[0]
+                    i += 8
+
+    def decode_integrity_vmap(self, msg, i):
+        """ RTCM SC-134 Satellite Visibility Map Message (MT9) """
+
+        # GPS Epoch Time (TOW) DFi008
+        # number of area points DFi201
+        tow, narea = bs.unpack_from('u30u8', msg, i)
+        i += 38
+
+        for k in range(narea):
+            # Area Point - Lat DFi202
+            # Area Point - Lon DFi203
+            # Area Point - Height DFi204
+            lat, lon, alt = bs.unpack_from('s34s35s14', msg, i)
+            i += 83
+
+        # Azimuth DFi206
+        # Elevation Mask DFi208
+        az, mask_el = bs.unpack_from('u9u7', msg, i)
+        i += 16
+
+    def decode_integrity_mmap(self, msg, i):
+        """ RTCM SC-134 Multipath Map Message (MT10) """
+
+        # GPS Epoch Time (TOW) DFi008
+        # number of area points DFi201
+        # multipath model ID DFi209
+        tow, narea, mm_id = bs.unpack_from('u30u8u3', msg, i)
+        i += 41
+
+        for k in range(narea):
+            # Area Point - Lat DFi202
+            # Area Point - Lon DFi203
+            # Area Point - Height DFi204
+            lat, lon, alt = bs.unpack_from('s34s35s14', msg, i)
+            i += 83
+
+        if mm_id == 0:
+            # Number of GMM components DFi210
+            # GMM component probability DFi211
+            # GMM component expectation DFi212
+            # GMM component standard deviation DFi213
+            nc, prob, exp, std = bs.unpack_from('u2u4u4u4', msg, i)
+            i += 14
+        elif mm_id == 1:
+            # GNSS signal modulation DFi214
+            # Multipath parameter a DFi215
+            # Multipath parameter b DFi216
+            # Multipath parameter c DFi217
+            smod = bs.unpack_from('u3', msg, i)[0]
+            i += 3
+
+            for k in range(smod):
+                pa = bs.unpack_from('u4', msg, i)[0]
+                i += 4
+
+            for k in range(smod):
+                pb = bs.unpack_from('s5', msg, i)[0]
+                i += 5
+
+            for k in range(smod):
+                pc = bs.unpack_from('s5', msg, i)[0]
+                i += 5
+        elif mm_id == 2:
+            # GNSS signal modulation DFi214
+            # Multipath parameter a DFi215
+            # Multipath parameter b DFi216
+            # Multipath parameter c DFi217
+            # Multipath parameter d DFi218
+            smod, pa, pb, pc, pd = bs.unpack_from('u3u4s5s5u8', msg, i)[0]
+            i += 25
+
+    def decode_integrity_ssr(self, msg, i):
+        """ RTCM SC-134 SSR integrity message (MT11,12,13) """
+        pid, tow, mask_sys = bs.unpack_from('u12u30u16', msg, i)
+        i += 58
+
+        # update rate interval DFi067
+
+        # mask_sys:: DFi013 0:GPS,1:GLO,2:GAL,3:BDS,4:QZS,5:IRN
+
+        if self.msgtype == 11:
+            vp, uri = bs.unpack_from('u4u16', msg, i)
+            i += 20
+            self.integ.vp = vp  # Validity Period DFi065 (0-15)
+            self.integ.uri = uri  # update rate interval DFi067 (0.1)
+
+        sys_t, nsys = self.decode_mask(mask_sys, 16, ofst=0)
+        iod_sys = {}
+        for k in range(nsys):
+            sys = self.integ.sys_tbl[sys_t[k]]
+            iod_sys[sys] = bs.unpack_from('u2', msg, i)[0]
+            i += 2
+
+        flag_t = {}
+        nid = {}
+        for sys_ in sys_t:
+            nid_, mask_sat = bs.unpack_from('u8u64', msg, i)
+            i += 72
+            svid_t, nsat = self.decode_mask(mask_sat, 64)
+            sys = self.integ.sys_tbl[sys_]
+            nid[sys] = nid_
+            flag_t[sys] = {}
+            for svid in svid_t:
+                ofst = 192 if sys == uGNSS.QZS else 0
+                prn = svid+ofst
+                flag_t[sys][prn] = bs.unpack_from('u2', msg, i)[0]
+                i += 2
+
+        self.integ.pid = pid
+        self.integ.tow = tow
+        self.integ.iod_sys = iod_sys
+        self.integ.nid = nid
+        self.integ.flag = flag_t
+
     def decode(self, msg):
+        """ decode RTCM messages """
         i = 24
         self.msgtype = bs.unpack_from('u12', msg, i)[0]
         i += 12
@@ -1689,7 +2305,7 @@ class rtcm(cssr):
             i = self.decode_cssr_hclk(msg, i)
         elif self.msgtype == 4076:  # IGS SSR
             i = self.decode_igsssr(msg, i)
-        elif self.msgtype in (1030, 1031, 36, 37, 38):
+        elif self.msgtype in (1030, 1031, 1303, 1304, 1305):
             self.subtype = sRTCM.NRTK_RES
             i = self.decode_nrtk_residual(msg, i)
         elif self.is_msmtype(self.msgtype):
@@ -1727,6 +2343,26 @@ class rtcm(cssr):
             i, eph = self.decode_gal_eph(msg, i)
         elif self.msgtype == 1029:
             self.decode_unicode_text(msg, i)
+
+        # test messages for SC-134
+        elif self.msgtype == 3:  # minimum integrity
+            self.decode_integrity_min(msg, i)
+        elif self.msgtype == 4:  # extended integrity
+            self.decode_integrity_ext(msg, i)
+        elif self.msgtype == 5:  # sis integrity/local error
+            self.decode_integrity_ext_sis_local(msg, i)
+        elif self.msgtype == 6:  # extended sercice area
+            self.decode_integrity_ext_service_area(msg, i)
+        elif self.msgtype == 7:  # quality indicator
+            self.decode_integrity_quality(msg, i)
+        elif self.msgtype == 8:  # CNR/ACG SIS Monitoring
+            self.decode_integrity_cnr_acg(msg, i)
+        elif self.msgtype == 9:  # satellite visibility map
+            self.decode_integrity_vmap(msg, i)
+        elif self.msgtype == 10:  # multipath map
+            self.decode_integrity_mmap(msg, i)
+        elif self.msgtype in (11, 12, 13):  # SSR integrity
+            self.decode_integrity_ssr(msg, i)
         else:
             self.subtype = -1
 
@@ -1734,3 +2370,96 @@ class rtcm(cssr):
             self.out_log(obs, eph, geph, seph)
 
         return i, obs, eph
+
+
+class rtcme(cssre):
+    """ class for RTCM message encoder """
+
+    def __init__(self):
+        super().__init__()
+        self.integ = Integrity()
+
+    def set_sync(self, msg, k):
+        msg[k] = 0xd3
+
+    def set_len(self, msg, k, len_):
+        st.pack_into('>H', msg, k+1, len_ & 0x3ff)
+        self.len = len_
+        self.dlen = len_+6
+        return len_
+
+    def set_checksum(self, msg, k, maxlen=0):
+        if self.len < 6:
+            return False
+        if maxlen > 0 and k+self.len >= maxlen:
+            return False
+        cs = Crc24LteA.calc(msg[k:k+self.len+3])
+        st.pack_into('>H', msg, k+self.len+3, cs >> 8)
+        st.pack_into('>B', msg, k+self.len+5, cs & 0xff)
+        return cs
+
+    def set_body(self, msg, buff, k, len_):
+        msg[k+3:k+len_] = buff[3:len_]
+
+    def encode_integrity_ssr(self, msg, i):
+        """ RTCM SC-134 SSR integrity message (MT11,12,13) """
+
+        sys_t = self.integ.iod_sys.keys()
+        gnss_t = []
+        for sys in sys_t:
+            gnss_t.append(self.integ.sys_r_tbl[sys])
+
+        mask_sys = self.encode_mask(gnss_t, 16, ofst=0)
+
+        bs.pack_into('u12', msg, i, self.integ.pid)  # provider id DFi027
+        i += 12
+        bs.pack_into('u30', msg, i, self.integ.tow)  # tow DFi008
+        i += 30
+        bs.pack_into('u16', msg, i, mask_sys)  # GNSS constellation mask DFi013
+        i += 16
+
+        # mask_sys:: DFi013 0:GPS,1:GLO,2:GAL,3:BDS,4:QZS,5:IRN
+
+        if self.msgtype == 11:
+            # validity period DFi065
+            # update rate interval DFi067
+            bs.pack_into('u4u16', msg, i, self.integ.vp, self.integ.uri)
+            i += 20
+
+        for sys in sys_t:
+            # issue of GNSS satellite mask DFi010
+            bs.pack_into('u2', msg, i, self.integ.iod_sys[sys])
+            i += 2
+
+        for sys in sys_t:
+            flag = self.integ.flag[sys]
+            prn_t = flag.keys()
+            svid_t = []
+            for prn in prn_t:
+                ofst = 192 if sys == uGNSS.QZS else 0
+                svid_t.append(prn-ofst)
+
+            mask_sat = self.encode_mask(svid_t, 64)
+            nid_ = self.integ.nid[sys]
+            # network id DFi071
+            # GNSS satellite mask DFi009
+            bs.pack_into('u8u64', msg, i, nid_, mask_sat)
+            i += 72
+
+            for f in flag.values():
+                # integrity flag DFi068
+                bs.pack_into('u2', msg, i, f)
+                i += 2
+
+        return i
+
+    def encode(self, msg):
+        """ encode RTCM messages """
+        i = 24
+        bs.pack_into('u12', msg, i, self.msgtype)
+        i += 12
+
+        if self.msgtype in (11, 12, 13):  # SSR integrity (test)
+            i = self.encode_integrity_ssr(msg, i)
+
+        return i
