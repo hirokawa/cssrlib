@@ -12,6 +12,8 @@ from cssrlib.cssrlib import cssr, sCSSRTYPE, prn2sat, sCType
 from cssrlib.gnss import uGNSS, rCST, timediff, time2str, \
     ecef2pos
 
+from cssrlib.ewss import jmaDec, camfDec
+
 
 def vardgps(el, nav):
     """ measurement error varianvce for DGPS [1] """
@@ -30,7 +32,7 @@ class dgpsDec(cssr):
     MAX_ST = 64
     MAX_SAT = 23
 
-    def __init__(self, foutname=None):
+    def __init__(self, foutname=None, year=0):
         super().__init__(foutname)
         self.MAXNET = 1
         self.cssrmode = sCSSRTYPE.DGPS
@@ -82,6 +84,9 @@ class dgpsDec(cssr):
         self.prn_ofst = {uGNSS.GPS: 0, uGNSS.QZS: 192, uGNSS.GLO: 0,
                          uGNSS.GAL: 0, uGNSS.BDS: 0}
 
+        self.dcr = jmaDec(year=year)
+        self.dcx = camfDec(year=year)
+
     def sval(self, u, n, scl):
         """ calculate signed value based on n-bit int, lsb """
         invalid = 2**(n-1)-1
@@ -100,12 +105,17 @@ class dgpsDec(cssr):
 
     def decode_mt43(self, msg, i):
         """ decode DC report by JMA (TBD) """
-        # i = self.dcr.decode_jma(msg)
+        i = self.dcr.decode(msg, i)
         return i
 
     def decode_mt44(self, msg, i):
         """ decode DC report by other organization (TBD) """
-        # i = self.dcr.decode_ews(msg)
+        sdmt, sdm = bs.unpack_from('u1u9', msg, i)
+        i += 10
+        if self.monlevel >= 1:
+            print(f"MT44 DCX sd={sdmt} {sdm}")
+        i = self.dcx.decode(msg, i)
+        i = self.dcx.decode_ext(msg, i)
         return i
 
     def decode_mt47(self, msg, i):
