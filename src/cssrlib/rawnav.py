@@ -521,6 +521,8 @@ class RawNav():
         eph.isc = np.zeros(6)
         sid = id3
 
+        wn_op = -1
+
         if sid in (30, 61):  # clock, iono, group delay
             tgd = bs.unpack_from('s13', buff, i)[0]
             i += 13
@@ -594,6 +596,9 @@ class RawNav():
         eph.toe = gpst2time(eph.week, eph.toes)
         eph.tot = bdt2time(eph.week, tow)
         eph.top = gpst2time(eph.wn_op, eph.tops)
+
+        if wn_op < 0:
+            return None
 
         return eph
 
