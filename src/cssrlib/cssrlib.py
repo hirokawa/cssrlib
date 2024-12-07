@@ -1,5 +1,11 @@
 """
 module for Compact SSR processing
+
+[1] Specification of Compact SSR Messages for Satellite Based Augmentation 
+    Service, v08, DOI: 10.13140/RG.2.2.10749.49129, 2019
+    
+@author Rui Hirokawa
+
 """
 
 import bitstruct as bs
@@ -1315,3 +1321,25 @@ class cssr:
             bs.pack_into(fmt, self.buff, j, b[0])
             j += sz
         self.fcnt = self.fcnt+1
+
+
+class cssre():
+    """ Class to encode the Compact SSR messages (experimental) """
+    monlevel = 0
+    dlen = 0
+    msgtype = 0
+
+    def __init__(self):
+        super().__init__()
+        self.len = 0
+        self.dlen = 0
+        self.msgtype = 0
+
+    def encode_mask(self, v, bitlen, ofst=1):
+        """ encode n-bit mask with offset """
+        d = 0
+        for p in v:
+            k = p-ofst
+            d |= 1 << (bitlen-k-1)
+
+        return d
