@@ -198,7 +198,7 @@ class ewsDec():
 class jmaDec(ewsDec):
     """ JMA DC Report decoder class """
 
-    def __init__(self, bdir='../data/ews/jma/', year=0):
+    def __init__(self, bdir='../data/ewss/jma/', year=0):
         super().__init__(bdir=bdir, year=year)
 
         self.rc_m_t = {3: 'Regular', 7: 'Test'}
