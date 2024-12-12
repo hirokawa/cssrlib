@@ -606,7 +606,10 @@ def satposs(obs, nav, cs=None, orb=None):
                             else:
                                 continue
 
-                    dclk = cs.lc[0].dclk[sat]
+                    if sat in cs.lc[0].dclk:
+                        dclk = cs.lc[0].dclk[sat]
+                    else:
+                        continue
 
                     if cs.lc[0].cstat & (1 << sCType.HCLOCK) and \
                             sat in cs.lc[0].hclk.keys() and \
@@ -704,7 +707,7 @@ def satposs(obs, nav, cs=None, orb=None):
 
                 nav.dorb[sat] = dorb_
                 nav.dclk[sat] = dclk
-            elif nav.smode == 1 and nav.nf == 1:  # standalone positioing
+            elif nav.smode == 1 and nav.nf == 1:  # stand-alone positioning
                 dts[i] -= eph.tgd
 
             nsat += 1
