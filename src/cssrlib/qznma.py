@@ -5,8 +5,8 @@ QZSS Navigation Message Authentication (QZNMA)
     Satellite Positioning, Navigation and Timing Service (IS-QZSS-PNT-006),
     July, 2024
 
-Note: 
-    to use the package for QZSNMA, the user needs to 
+Note:
+    to use the package for QZSNMA, the user needs to
     install the public keys provided by QSS.
 
 @author: Rui Hirokawa
@@ -22,9 +22,8 @@ from cryptography.exceptions import InvalidSignature
 from enum import IntEnum
 import copy
 
-pk = None
-rds = bytearray(89)
-flag_e = 0
+dtype_ = [('wn', 'int'), ('tow', 'float'), ('prn', 'int'),
+          ('type', 'int'), ('len', 'int'), ('nav', 'S512')]
 
 
 class uNavId(IntEnum):
@@ -99,273 +98,14 @@ def copy_buff(src, dst, ofst_s=0, ofst_d=0, blen=0):
         bs.pack_into(fmt, dst, b*32+ofst_d, d)
 
 
-def load_navmsg_lnav(navfile, navmsg):
-    """ load GPS/QZSS LNAV navigation messages """
-    dtype = [('wn', 'int'), ('tow', 'float'), ('prn', 'int'),
-             ('type', 'int'), ('len', 'int'), ('nav', 'S512')]
-    v = np.genfromtxt(navfile, dtype=dtype)
-
-    prn_ = np.unique(v['prn'])
-
-    for prn in prn_:
-        sat = prn2sat(uGNSS.GPS, prn)
-        if sat not in navmsg.keys():
-            navmsg[sat] = {}
-
-        buff = bytearray(120)
-        vi = v[v['prn'] == prn]
-        for msg_ in vi['nav']:
-            msg = unhexlify(msg_)
-
-            sid = bs.unpack_from('u3', msg, 53)[0]
-
-            if sid > 3:
-                continue
-
-            buff[(sid-1)*40:(sid-1)*40+40] = msg[0:40]
-            # buff = bytes(buff)
-
-            id1 = bs.unpack_from('u3', buff, 53)[0]
-            id2 = bs.unpack_from('u3', buff, 320+53)[0]
-            id3 = bs.unpack_from('u3', buff, 320*2+53)[0]
-
-            if id1 != 1 or id2 != 2 or id3 != 3:
-                continue
-
-            # SF1
-            iodc_ = bs.unpack_from('u2', buff, 32*2+2+22)[0]
-            iodc = bs.unpack_from('u8', buff, 32*7+2)[0]
-            iodc |= (iodc_ << 8)
-
-            # SF2
-            iode1 = bs.unpack_from('u8', buff, 320+32*2+2)[0]
-            # SF3
-            iode2 = bs.unpack_from('u8', buff, 320*2+32*9+2)[0]
-
-            if iode1 != iode2 or iode1 != (iodc & 0xff):
-                continue
-
-            if iode1 not in navmsg[sat].keys():
-                navmsg[sat][iode1] = {}
-
-            if uNavId.GPS_LNAV in navmsg[sat][iode1].keys():
-                continue
-
-            tow = bs.unpack_from('u17', buff, 320*0+32+2)[0]
-            toc = bs.unpack_from('u16', buff, 320*0+32*7+8+2)[0]
-            toe = bs.unpack_from('u16', buff, 320*0+32*9+2)[0]
-
-            navmsg[sat][iode1][uNavId.GPS_LNAV] = NavMsg(
-                uGNSS.GPS, uNavId.GPS_LNAV)
-            navmsg[sat][iode1][uNavId.GPS_LNAV].tow = tow
-            navmsg[sat][iode1][uNavId.GPS_LNAV].toe = toe
-            navmsg[sat][iode1][uNavId.GPS_LNAV].toc = toc
-            navmsg[sat][iode1][uNavId.GPS_LNAV].iodn = iode1
-            navmsg[sat][iode1][uNavId.GPS_LNAV].iodc = iodc
-            navmsg[sat][iode1][uNavId.GPS_LNAV].msg = copy.copy(buff)
-
-
-def load_navmsg_cnav(navfile, navmsg):
-    """ load GPS/QZSS CNAV navigation messages """
-    dtype = [('wn', 'int'), ('tow', 'float'), ('prn', 'int'),
-             ('type', 'int'), ('len', 'int'), ('nav', 'S512')]
-    v = np.genfromtxt(navfile, dtype=dtype)
-
-    prn_ = np.unique(v['prn'])
-
-    mt_t = {10: 1, 11: 2, 30: 3, 31: 3, 32: 3, 33: 3,
-            35: 3, 36: 3, 37: 3, 61: 3}
-
-    for prn in prn_:
-        sat = prn2sat(uGNSS.GPS, prn)
-        if sat not in navmsg.keys():
-            navmsg[sat] = {}
-
-        buff = bytearray(114)
-        vi = v[v['prn'] == prn]
-        for msg_ in vi['nav']:
-            msg = unhexlify(msg_)
-
-            prn_, mt = bs.unpack_from('u6u6', msg, 8)
-            if mt not in mt_t.keys():
-                continue
-
-            sid = mt_t[mt]
-
-            if sid > 3:
-                continue
-
-            buff[(sid-1)*38:(sid-1)*38+38] = msg[0:38]
-
-            id1 = bs.unpack_from('u6', buff, 14)[0]
-            id2 = bs.unpack_from('u6', buff, 304+14)[0]
-            id3 = bs.unpack_from('u6', buff, 304*2+14)[0]
-
-            if id1 != 10 or id2 != 11 or id3 not in mt_t.keys():
-                continue
-
-            tow1 = bs.unpack_from('u17', buff, 20)[0]
-            toe1 = bs.unpack_from('u11', buff, 70)[0]
-
-            # type 11
-            toe2 = bs.unpack_from('u11', buff, 304+38)[0]
-            tow2 = bs.unpack_from('u17', buff, 304+20)[0]
-
-            # MT 3x or 61
-            toc = bs.unpack_from('u11', buff, 304*2+60)[0]
-            tow3 = bs.unpack_from('u17', buff, 304*2+20)[0]
-
-            if toe1 != toe2 or toe1 != toc:
-                continue
-
-            if toe1 not in navmsg[sat].keys():
-                navmsg[sat][toe1] = {}
-
-            if uNavId.GPS_CNAV in navmsg[sat][toe1].keys():
-                continue
-
-            navmsg[sat][toe1][uNavId.GPS_CNAV] = NavMsg(
-                uGNSS.GPS, uNavId.GPS_CNAV)
-            navmsg[sat][toe1][uNavId.GPS_CNAV].iodn = toe1
-            navmsg[sat][toe1][uNavId.GPS_CNAV].iodc = toc
-
-            navmsg[sat][toe1][uNavId.GPS_CNAV].tow = [tow1, tow2, tow3]
-            navmsg[sat][toe1][uNavId.GPS_CNAV].toe = toe1
-            navmsg[sat][toe1][uNavId.GPS_CNAV].toc = toc
-
-            navmsg[sat][toe1][uNavId.GPS_CNAV].msg = copy.copy(buff)
-
-
-def load_navmsg_fnav(navfile, navmsg):
-    """ load Galileo F/NAV navigation messages """
-    dtype = [('wn', 'int'), ('tow', 'float'), ('prn', 'int'),
-             ('type', 'int'), ('len', 'int'), ('nav', 'S512')]
-    v = np.genfromtxt(navfile, dtype=dtype)
-
-    prn_ = np.unique(v['prn'])
-
-    for prn in prn_:
-        sat = prn2sat(uGNSS.GAL, prn)
-        if sat not in navmsg.keys():
-            navmsg[sat] = {}
-
-        buff = bytearray(124)
-        vi = v[v['prn'] == prn]
-        for msg_ in vi['nav']:
-            msg = unhexlify(msg_)
-
-            sid = bs.unpack_from('u6', msg, 0)[0]
-            if sid > 4:
-                continue
-
-            for k in range(31):  # copy 244bits
-                buff[(sid-1)*31+k] = msg[k]
-
-            sid1, svid1, iodnav1, toc = bs.unpack_from('u6u6u10u14', buff, 0)
-            sid2, iodnav2 = bs.unpack_from('u6u10', buff, 248*1)
-            sid3, iodnav3 = bs.unpack_from('u6u10', buff, 248*2)
-            sid4, iodnav4 = bs.unpack_from('u6u10', buff, 248*3)
-
-            if sid1 != 1 or sid2 != 2 or sid3 != 3 or sid4 != 4:
-                continue
-            if iodnav1 != iodnav2 or iodnav1 != iodnav3 or iodnav1 != iodnav4:
-                continue
-
-            if iodnav1 not in navmsg[sat].keys():
-                navmsg[sat][iodnav1] = {}
-
-            if uNavId.GAL_FNAV in navmsg[sat][iodnav1].keys():
-                continue
-
-            toe = bs.unpack_from('u14', buff, 248*2+160)[0]
-
-            tow1 = bs.unpack_from('u20', buff, 248*0+167)[0]
-            tow2 = bs.unpack_from('u20', buff, 248*1+194)[0]
-            tow3 = bs.unpack_from('u20', buff, 248*2+186)[0]
-            tow4 = bs.unpack_from('u20', buff, 248*3+189)[0]
-
-            navmsg[sat][iodnav1][uNavId.GAL_FNAV] = NavMsg(
-                uGNSS.GAL, uNavId.GAL_FNAV)
-
-            navmsg[sat][iodnav1][uNavId.GAL_FNAV].tow = [
-                tow1, tow2, tow3, tow4]
-            navmsg[sat][iodnav1][uNavId.GAL_FNAV].toe = toe
-            navmsg[sat][iodnav1][uNavId.GAL_FNAV].toc = toc
-            navmsg[sat][iodnav1][uNavId.GAL_FNAV].iodn = iodnav1
-            navmsg[sat][iodnav1][uNavId.GAL_FNAV].iodc = 0
-            navmsg[sat][iodnav1][uNavId.GAL_FNAV].msg = copy.copy(buff)
-
-
-def load_navmsg_inav(navfile, navmsg):
-    """ load Galileo I/NAV navigation messages """
-    dtype = [('wn', 'int'), ('tow', 'float'), ('prn', 'int'),
-             ('type', 'int'), ('len', 'int'), ('nav', 'S512')]
-    v = np.genfromtxt(navfile, dtype=dtype)
-
-    prn_ = np.unique(v['prn'])
-
-    for prn in prn_:
-        sat = prn2sat(uGNSS.GAL, prn)
-        if sat not in navmsg.keys():
-            navmsg[sat] = {}
-
-        buff = bytearray(80)
-        vi = v[(v['prn'] == prn) & (v['type'] == 0)]  # E1 only
-        tow_t = [0, 0, 0, 0, 0]
-        for j, msg_ in enumerate(vi['nav']):
-            tow_ = int(vi['tow'][j])
-
-            msg = unhexlify(msg_)
-
-            sid, iodnav = bs.unpack_from('u6u10', msg, 2)
-
-            if sid == 0 or sid > 5:
-                continue
-
-            i = 2
-            for k in range(14):
-                buff[(sid-1)*16+k] = bs.unpack_from('u8', msg, i)[0]
-                i += 8
-            i += 8
-            for k in range(2):
-                buff[(sid-1)*16+14+k] = bs.unpack_from('u8', msg, i)[0]
-                i += 8
-
-            sid1, iodnav1 = bs.unpack_from('u6u10', buff, 0)
-            sid2, iodnav2 = bs.unpack_from('u6u10', buff, 128*1)
-            sid3, iodnav3 = bs.unpack_from('u6u10', buff, 128*2)
-            sid4, iodnav4 = bs.unpack_from('u6u10', buff, 128*3)
-            sid5 = bs.unpack_from('u6', buff, 128*4)[0]
-            tow = bs.unpack_from('u20', buff, 128*4+85)[0]
-            toe = bs.unpack_from('u14', buff, 16)[0]
-            toc = bs.unpack_from('u14', buff, 128*3+54)[0]
-
-            tow_t[sid-1] = tow_
-
-            if sid != 5 or sid1 != 1 or sid2 != 2 or sid3 != 3 or sid4 != 4 \
-                    or sid5 != 5:
-                continue
-            if iodnav1 != iodnav2 or iodnav1 != iodnav3 or iodnav1 != iodnav4:
-                continue
-
-            if iodnav1 not in navmsg[sat].keys():
-                navmsg[sat][iodnav1] = {}
-
-            if uNavId.GAL_INAV in navmsg[sat][iodnav1].keys():
-                continue
-
-            if sat == 35:  # debug
-                None
-
-            navmsg[sat][iodnav1][uNavId.GAL_INAV] = NavMsg(
-                uGNSS.GAL, uNavId.GAL_INAV)
-            navmsg[sat][iodnav1][uNavId.GAL_INAV].iodn = iodnav1
-            navmsg[sat][iodnav1][uNavId.GAL_INAV].iodc = 0
-            navmsg[sat][iodnav1][uNavId.GAL_INAV].tow = tow
-            navmsg[sat][iodnav1][uNavId.GAL_INAV].toe = toe
-            navmsg[sat][iodnav1][uNavId.GAL_INAV].toc = toc
-            navmsg[sat][iodnav1][uNavId.GAL_INAV].msg = copy.copy(buff)
-            buff = bytearray(80)
+def load_pubkey(keyid, bdir='../data/qznma/pubkey'):
+    """ load public key information in der format  """
+    pubk_path = f"{bdir}/{keyid:03d}.der"
+    with open(pubk_path, 'rb') as f:
+        pubk = f.read()
+        pk = serialization.load_der_public_key(pubk)
+
+    return pk
 
 
 def raw2der(ds):
@@ -379,341 +119,578 @@ def raw2der(ds):
     return bytes(der)
 
 
-def lnav_to_mnav(msg, sys=uGNSS.QZS):
-    """ genarate MNAV(900b) from LNAV SF1,2,3 """
-    mnav = bytearray(113)
-
-    # RAND
-    if sys == uGNSS.QZS:
-        mask_t = [[0xfffffc, 0xffff80, 0xffffff, 0xffffff,
-                  0xffffff, 0xffffff, 0xffffff, 0xffffff,
-                  0xffffff, 0xfffffc],
-                  [0xfffffc, 0xffff80, 0xffffff, 0xffffff,
-                   0xffffff, 0xffffff, 0xffffff, 0xffffff,
-                   0xffffff, 0xfffffc],
-                  [0xfffffc, 0xffff80, 0xffffff, 0xffffff,
-                   0xffffff, 0xffffff, 0xffffff, 0xffffff,
-                   0xffffff, 0xfffffc]]
-    else:  # GPS
-        mask_t = [[0xff0003, 0xfffffc, 0xffffff, 0xffffff,
-                  0xffffff, 0xffffff, 0xffffff, 0xffffff,
-                  0xffffff, 0xfffffc],
-                  [0xff0003, 0xfffffc, 0xffffff, 0xffffff,
-                   0xffffff, 0xffffff, 0xffffff, 0xffffff,
-                   0xffffff, 0xffff80],
-                  [0xff0003, 0xfffffc, 0xffffff, 0xffffff,
-                   0xffffff, 0xffffff, 0xffffff, 0xffffff,
-                   0xffffff, 0xfffffc]]
-
-    for sid in range(3):
-        for k in range(10):
-            d = bs.unpack_from('u30', msg, sid*320+32*k+2)[0] & \
-                (mask_t[sid][k] << 6)
-            bs.pack_into('u30', mnav, sid*300+30*k, d)
-
-    return mnav
-
-
-def cnav2_to_mnav(toi, msg, sys=uGNSS.QZS):
-    """ genarate MNAV(600b) from CNAV2 SF2 """
-    mnav = bytearray(77)
-
-    mask_t = [0xffffffff, 0x7fffffff, 0xffffffff, 0xffffffff,
-              0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-              0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-              0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-              0xffffffff, 0xfffffbff]
-
-    bs.pack_into('u9', mnav, 0, toi)
-
-    i = 52
-    for k in range(18):
-        d = bs.unpack_from('u32', msg, i)[0] & mask_t[k]
-        i += 32
-        bs.pack_into('u32', mnav, 9+32*k, d)
-
-    return mnav
-
-
-def cnav_to_mnav(msg, sys=uGNSS.QZS):
-    """ genarate MNAV(900b) from CNAV SF1,2,3 """
-    mnav = bytearray(113)
-
-    # RAND
-    if sys == uGNSS.QZS:
-        mask_t = [
-            [0xff03ffff, 0xfbffffff, 0xffffffff, 0xffffffff,
-             0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-             0xfffef000],
-            [0xff03ffff, 0xfbffffff, 0xffffffff, 0xffffffff,
-             0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-             0xfffff000],
-            [0xff03ffff, 0xfbffffff, 0xffffffff, 0xfffffffe,
-             0x00000000, 0x00000000, 0x00000000, 0x00000000,
-             0x00000000]]
-
-    else:  # GPS
-        mask_t = [
-            [0xfffc0fff, 0xffffffff, 0xffffffff, 0xffffffff,
-             0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-             0xfffff000],
-            [0xfffc0fff, 0xffffffff, 0xffffffff, 0xffffffff,
-             0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-             0xfffff000],
-            [0xfffc0fff, 0xffffffff, 0xffffffff, 0xfffffffe,
-             0x00000000, 0x00000000, 0x00000000, 0x00000000,
-             0x00000000]]
-
-    for sid in range(3):
-        for k in range(9):
-            d = bs.unpack_from('u32', msg, sid*304+32*k)[0] & mask_t[sid][k]
-            bs.pack_into('u32', mnav, sid*300+32*k, d)
-
-    return mnav
-
-
-def fnav_to_mnav(msg):
-    """ genarate MNAV(976b) from F/NAV message 1,2,3,4 """
-    mnav = bytearray(122)
-
-    # RAND
-    mask_t = [0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-              0xffffffff, 0xffffffff, 0xfffffc00, 0x0003f]
-
-    for sid in range(4):
-        for k in range(8):
-            fmt = 'u32' if k < 7 else 'u20'
-            d = bs.unpack_from(fmt, msg, sid*248+32*k)[0] & mask_t[k]
-            bs.pack_into(fmt, mnav, sid*244+32*k, d)
-
-    return mnav
-
-
-def inav_to_mnav(msg):
-    """ genarate MNAV(640b) from I/NAV message 1,2,3,4,5 """
-    return copy.copy(msg)
-
-
-def svid2sat(svid):
-    if svid <= 63:
-        sat = prn2sat(uGNSS.GPS, svid)
-    elif svid <= 127:
-        sat = prn2sat(uGNSS.GAL, svid-64)
-    elif svid <= 191:
-        sat = prn2sat(uGNSS.SBS, svid)
-    elif svid <= 202:
-        sat = prn2sat(uGNSS.QZS, svid)
-
-    return sat
-
-
-def decode_gnss_rds(tow, msg, navmsg, i):
-    """ generate RDS for GNSS  """
-    global pk
-    # nid = 0: QZNMA
-    # rtow:
-    #  GPS LNAV/CNAV: tow(17), CNAV2: toi(9),itow(8)
-    # svid: GPS:1-63, Galileo:65-127, SBAS:129-191, QZS:193-202
-    # mt 1: GPS LNAV, 2: GPS CNAV, 3: GPS CNAV2
-    #    4: Galileo F/NAV, 5: Galileo I/NAV
-    nid, rtow, svid, mt = bs.unpack_from('u4u20u8u4', msg, i)
-    i += 36
-    # iode1 GPS LNAV: iode of SF2, GPS CNAV/CNAV2 toe of MT10/SF2
-    #       Galileo F/NAV,I/NAV IODnav
-    # iode2 GPS LNAV: iode of SF3, GPS CNAV toe of MT11, other: zero
-    # iodc GPS LNAV iodc, CNAV toc of MT30-37, other: zero
-    iode1, iode2, iodc, keyid = bs.unpack_from('u11u11u11u8', msg, i)
-    i += 41
-    ds = bytearray(64)
-
-    for k in range(16):
-        d = bs.unpack_from('u32', msg, i)[0]
-        i += 32
-        bs.pack_into('u32', ds, k*32, d)
-
-    salt = bs.unpack_from('u16', msg, i)[0]
-    i += 16
-
-    sat = svid2sat(svid)
-    sys, prn = sat2prn(sat)
-
-    if svid == 0 or sat not in navmsg.keys() or \
-            iode1 not in navmsg[sat].keys() or \
-            mt not in navmsg[sat][iode1].keys():
-        return None, None
-
-    npr = NavParam(keyid, ds, salt, mt, nid, rtow, svid, iode1, iode2, iodc)
-    tow_ = navmsg[sat][iode1][mt].tow
-
-    print(f"tow={tow} rtow={rtow} tow_i={tow_} svid={svid:3d} mt={mt} " +
-          f"iode={iode1:4d} iode2={iode2:4d} iodc={iodc:4d} key={keyid}")
-
-    if mt == uNavId.GPS_LNAV:
-
-        mnav = lnav_to_mnav(navmsg[sat][iode1][mt].msg, sys=uGNSS.GPS)
-
-        bs.pack_into('u17', mnav, 300*0+30, rtow)
-        bs.pack_into('u17', mnav, 300*1+30, rtow+1)
-        bs.pack_into('u17', mnav, 300*2+30, rtow+2)
-
-    elif mt == uNavId.GPS_CNAV:
-
-        mnav = cnav_to_mnav(navmsg[sat][iode1][mt].msg, sys=uGNSS.GPS)
-
-        bs.pack_into('u17', mnav, 300*0+20, rtow)
-        bs.pack_into('u17', mnav, 300*1+20, rtow+1)
-        bs.pack_into('u17', mnav, 300*2+20, rtow+2)
-
-    elif mt == uNavId.GPS_CNAV2:
-
-        mnav = cnav2_to_mnav(navmsg[sat][iode1][mt].msg, sys=uGNSS.GPS)
-
-    elif mt == uNavId.GAL_FNAV:
-
-        mnav = fnav_to_mnav(navmsg[sat][iode1][mt].msg)
-
-        bs.pack_into('u20', mnav, 244*0+167, rtow)
-        bs.pack_into('u20', mnav, 244*1+194, rtow+10)
-        bs.pack_into('u20', mnav, 244*2+186, rtow+20)
-        bs.pack_into('u20', mnav, 244*3+189, rtow+30)
-
-    elif mt == uNavId.GAL_INAV:
-
-        mnav = inav_to_mnav(navmsg[sat][iode1][mt].msg)
-        bs.pack_into('u20', mnav, 128*4+85, rtow)
-
-    return npr, mnav
-
-
-def verify_gnss_nav(npr, mnav):
-    """ verifify the navigation message in MNAV using DS """
-    global pk
-
-    if npr.mt == uNavId.GPS_LNAV:
-        blen, mlen = 125, 900
-    elif npr.mt == uNavId.GPS_CNAV:
-        blen, mlen = 125, 900
-    elif npr.mt == uNavId.GPS_CNAV2:
-        blen, mlen = 89, 609
-    elif npr.mt == uNavId.GAL_FNAV:
-        blen, mlen = 134, 976
-    elif npr.mt == uNavId.GAL_INAV:
-        blen, mlen = 92, 640
-
-    rand_ = bytearray(blen)
-
-    bs.pack_into('u4u20u8u4', rand_, 0, npr.nid, npr.rtow, npr.svid, npr.mt)
-    bs.pack_into('u11u11u11u8', rand_, 36, npr.iode1,
-                 npr.iode2, npr.iodc, npr.keyid)
-    copy_buff(mnav, rand_, 0, 77, mlen)
-    bs.pack_into('u16', rand_, 77+mlen, npr.salt)
-
-    sat = svid2sat(npr.svid)
-    sys, prn = sat2prn(sat)
-
-    if pk is None:
-        pk = load_pubkey(npr.keyid)
-
-    ds_der = raw2der(npr.ds)
-    status = False
-    try:
-        pk.verify(ds_der, bytes(rand_), ec.ECDSA(hashes.SHA256()))
-        print(f'mt={npr.mt} sys={sys} prn={prn} signature OK.')
-        status = True
-    except InvalidSignature:
-        print(f'mt={npr.mt} sys={sys} prn={prn} signature NG.')
-
-    return status
-
-
-def gen_rds(mode, msg, mask):
-    """ prepare RDS from navigation message and parameters  """
-    global rds
-
-    if mode == uNavId.GPS_LNAV:
-        sid, d = bs.unpack_from('u2u14', msg, 32*2+2+8)
-        if sid > 0:
-            i0 = (sid-1)*180
-            bs.pack_into('u14', rds, i0, d)
-
-            for k in range(7):
-                d = bs.unpack_from('u24', msg, 32*(k+3)+2)[0]
-                bs.pack_into('u24', rds, i0+14+24*k, d)
-
-            mask |= (1 << (sid-1))
-
-    elif mode == uNavId.GPS_CNAV:
-        sid = bs.unpack_from('u2', msg, 38)[0]
-        if sid > 0:
-            copy_buff(msg, rds, 40, (sid-1)*236, 236)
-            mask |= (1 << (sid-1))
-
-    elif mode == uNavId.GPS_CNAV2:
-        sid = bs.unpack_from('u2', msg, 1266)[0]
-        if sid > 0:
-            copy_buff(msg, rds, 1268, (sid-1)*234, 234)
-            mask |= (1 << (sid-1))
-
-    keyid = rds[0]
-    ds = rds[1:65]
-    salt = (rds[65] << 8) | rds[66]
-
-    npr = NavParam(keyid, ds, salt)
-
-    return npr, mask
-
-
-def msg2nav(i0, msg, buff, mode):
-    """ prepare navigation message (LNAV/CNAV) from raw nav message """
-    global flag_e
-
-    if mode == uNavId.GPS_LNAV:
-        blen = 40
-    else:
-        blen = 38
-
-    buff[(i0-1)*blen:(i0-1)*blen+blen] = msg[0:blen]
-    flag_e |= (1 << (i0-1))
-    return buff
-
-
-def load_pubkey(keyid, bdir='../data/pubkey'):
-    """ load public key information in der format  """
-    pubk_path = f"{bdir}/{keyid:03d}.der"
-    with open(pubk_path, 'rb') as f:
-        pubk = f.read()
-        pk = serialization.load_der_public_key(pubk)
-
-    return pk
-
-
-def verify_qzss_nav(npr, msg, mode):
-    """ verify the navigation messages for QZSS LNAV/CNAV/CNAV2 """
-    global pk
-
-    if mode == uNavId.GPS_LNAV:
-        blen, mlen = 116, 900
-    elif mode == uNavId.GPS_CNAV:
-        blen, mlen = 137, 900
-    elif mode == uNavId.GPS_CNAV2:
-        blen, mlen = 100, 609
-
-    k1 = (mlen+7)//8
-
-    rand_ = bytearray(blen)
-    rand_[0] = npr.keyid
-    rand_[1:k1+1] = msg
-    bs.pack_into('u16', rand_, 8+mlen, npr.salt)
-
-    if pk is None:
-        pk = load_pubkey(npr.keyid)
-
-    status = False
-    try:
-        pk.verify(raw2der(npr.ds), bytes(rand_),
-                  ec.ECDSA(hashes.SHA256()))
-        status = True
-        print(f'mode={mode} keyid={npr.keyid} signature OK.')
-    except InvalidSignature:
-        print(f'mode={mode} keyid={npr.keyid} signature NG.')
-    return status
+class qznma():
+    """ class for QZNMA processing """
+
+    def __init__(self):
+        self.navmsg = {}
+        self.pk = None
+        self.rds = bytearray(89)
+        self.flag_e = 0
+        self.mask = 0
+        self.tow_p = -1
+        self.buff = bytearray(120)
+
+    def load_navmsg_lnav(self, navfile):
+        """ load GPS/QZSS LNAV navigation messages """
+        v = np.genfromtxt(navfile, dtype=dtype_)
+        prn_ = np.unique(v['prn'])
+
+        for prn in prn_:
+            sat = prn2sat(uGNSS.GPS, prn)
+            if sat not in self.navmsg.keys():
+                self.navmsg[sat] = {}
+
+            buff = bytearray(120)
+            vi = v[v['prn'] == prn]
+            for msg_ in vi['nav']:
+                msg = unhexlify(msg_)
+
+                sid = bs.unpack_from('u3', msg, 53)[0]
+                if sid > 3:
+                    continue
+
+                buff[(sid-1)*40:(sid-1)*40+40] = msg[0:40]
+                # buff = bytes(buff)
+
+                id1 = bs.unpack_from('u3', buff, 53)[0]
+                id2 = bs.unpack_from('u3', buff, 320+53)[0]
+                id3 = bs.unpack_from('u3', buff, 320*2+53)[0]
+
+                if id1 != 1 or id2 != 2 or id3 != 3:
+                    continue
+
+                # SF1
+                iodc_ = bs.unpack_from('u2', buff, 32*2+2+22)[0]
+                iodc = bs.unpack_from('u8', buff, 32*7+2)[0]
+                iodc |= (iodc_ << 8)
+
+                # SF2
+                iode1 = bs.unpack_from('u8', buff, 320+32*2+2)[0]
+                # SF3
+                iode2 = bs.unpack_from('u8', buff, 320*2+32*9+2)[0]
+
+                if iode1 != iode2 or iode1 != (iodc & 0xff):
+                    continue
+
+                if iode1 not in self.navmsg[sat].keys():
+                    self.navmsg[sat][iode1] = {}
+
+                if uNavId.GPS_LNAV in self.navmsg[sat][iode1].keys():
+                    continue
+
+                tow = bs.unpack_from('u17', buff, 320*0+32+2)[0]
+                toc = bs.unpack_from('u16', buff, 320*0+32*7+8+2)[0]
+                toe = bs.unpack_from('u16', buff, 320*0+32*9+2)[0]
+
+                self.navmsg[sat][iode1][uNavId.GPS_LNAV] = NavMsg(
+                    uGNSS.GPS, uNavId.GPS_LNAV)
+                self.navmsg[sat][iode1][uNavId.GPS_LNAV].tow = tow
+                self.navmsg[sat][iode1][uNavId.GPS_LNAV].toe = toe
+                self.navmsg[sat][iode1][uNavId.GPS_LNAV].toc = toc
+                self.navmsg[sat][iode1][uNavId.GPS_LNAV].iodn = iode1
+                self.navmsg[sat][iode1][uNavId.GPS_LNAV].iodc = iodc
+                self.navmsg[sat][iode1][uNavId.GPS_LNAV].msg = copy.copy(buff)
+
+    def load_navmsg_cnav(self, navfile):
+        """ load GPS/QZSS CNAV navigation messages """
+        v = np.genfromtxt(navfile, dtype=dtype_)
+        prn_ = np.unique(v['prn'])
+
+        mt_t = {10: 1, 11: 2, 30: 3, 31: 3, 32: 3, 33: 3,
+                35: 3, 36: 3, 37: 3, 61: 3}
+
+        for prn in prn_:
+            sat = prn2sat(uGNSS.GPS, prn)
+            if sat not in self.navmsg.keys():
+                self.navmsg[sat] = {}
+
+            buff = bytearray(114)
+            vi = v[v['prn'] == prn]
+            for msg_ in vi['nav']:
+                msg = unhexlify(msg_)
+
+                prn_, mt = bs.unpack_from('u6u6', msg, 8)
+                if mt not in mt_t.keys():
+                    continue
+
+                sid = mt_t[mt]
+
+                if sid > 3:
+                    continue
+
+                buff[(sid-1)*38:(sid-1)*38+38] = msg[0:38]
+
+                id1 = bs.unpack_from('u6', buff, 14)[0]
+                id2 = bs.unpack_from('u6', buff, 304+14)[0]
+                id3 = bs.unpack_from('u6', buff, 304*2+14)[0]
+
+                if id1 != 10 or id2 != 11 or id3 not in mt_t.keys():
+                    continue
+
+                tow1 = bs.unpack_from('u17', buff, 20)[0]
+                toe1 = bs.unpack_from('u11', buff, 70)[0]
+
+                # type 11
+                toe2 = bs.unpack_from('u11', buff, 304+38)[0]
+                tow2 = bs.unpack_from('u17', buff, 304+20)[0]
+
+                # MT 3x or 61
+                toc = bs.unpack_from('u11', buff, 304*2+60)[0]
+                tow3 = bs.unpack_from('u17', buff, 304*2+20)[0]
+
+                if toe1 != toe2 or toe1 != toc:
+                    continue
+
+                if toe1 not in self.navmsg[sat].keys():
+                    self.navmsg[sat][toe1] = {}
+
+                if uNavId.GPS_CNAV in self.navmsg[sat][toe1].keys():
+                    continue
+
+                self.navmsg[sat][toe1][uNavId.GPS_CNAV] = NavMsg(
+                    uGNSS.GPS, uNavId.GPS_CNAV)
+                self.navmsg[sat][toe1][uNavId.GPS_CNAV].iodn = toe1
+                self.navmsg[sat][toe1][uNavId.GPS_CNAV].iodc = toc
+                self.navmsg[sat][toe1][uNavId.GPS_CNAV].tow = [
+                    tow1, tow2, tow3]
+                self.navmsg[sat][toe1][uNavId.GPS_CNAV].toe = toe1
+                self.navmsg[sat][toe1][uNavId.GPS_CNAV].toc = toc
+                self.navmsg[sat][toe1][uNavId.GPS_CNAV].msg = copy.copy(buff)
+
+    def load_navmsg_fnav(self, navfile):
+        """ load Galileo F/NAV navigation messages """
+        v = np.genfromtxt(navfile, dtype=dtype_)
+        prn_ = np.unique(v['prn'])
+
+        for prn in prn_:
+            sat = prn2sat(uGNSS.GAL, prn)
+            if sat not in self.navmsg.keys():
+                self.navmsg[sat] = {}
+
+            buff = bytearray(124)
+            vi = v[v['prn'] == prn]
+            for msg_ in vi['nav']:
+                msg = unhexlify(msg_)
+
+                sid = bs.unpack_from('u6', msg, 0)[0]
+                if sid > 4:
+                    continue
+
+                for k in range(31):  # copy 244bits
+                    buff[(sid-1)*31+k] = msg[k]
+
+                sid1, svid1, iodnav1, toc = bs.unpack_from(
+                    'u6u6u10u14', buff, 0)
+                sid2, iodnav2 = bs.unpack_from('u6u10', buff, 248*1)
+                sid3, iodnav3 = bs.unpack_from('u6u10', buff, 248*2)
+                sid4, iodnav4 = bs.unpack_from('u6u10', buff, 248*3)
+
+                if sid1 != 1 or sid2 != 2 or sid3 != 3 or sid4 != 4:
+                    continue
+                if iodnav1 != iodnav2 or iodnav1 != iodnav3 or \
+                        iodnav1 != iodnav4:
+                    continue
+
+                if iodnav1 not in self.navmsg[sat].keys():
+                    self.navmsg[sat][iodnav1] = {}
+
+                if uNavId.GAL_FNAV in self.navmsg[sat][iodnav1].keys():
+                    continue
+
+                toe = bs.unpack_from('u14', buff, 248*2+160)[0]
+
+                tow1 = bs.unpack_from('u20', buff, 248*0+167)[0]
+                tow2 = bs.unpack_from('u20', buff, 248*1+194)[0]
+                tow3 = bs.unpack_from('u20', buff, 248*2+186)[0]
+                tow4 = bs.unpack_from('u20', buff, 248*3+189)[0]
+
+                self.navmsg[sat][iodnav1][uNavId.GAL_FNAV] = \
+                    NavMsg(uGNSS.GAL, uNavId.GAL_FNAV)
+                self.navmsg[sat][iodnav1][uNavId.GAL_FNAV].tow = \
+                    [tow1, tow2, tow3, tow4]
+                self.navmsg[sat][iodnav1][uNavId.GAL_FNAV].toe = toe
+                self.navmsg[sat][iodnav1][uNavId.GAL_FNAV].toc = toc
+                self.navmsg[sat][iodnav1][uNavId.GAL_FNAV].iodn = iodnav1
+                self.navmsg[sat][iodnav1][uNavId.GAL_FNAV].iodc = 0
+                self.navmsg[sat][iodnav1][uNavId.GAL_FNAV].msg = \
+                    copy.copy(buff)
+
+    def load_navmsg_inav(self, navfile):
+        """ load Galileo I/NAV navigation messages """
+        v = np.genfromtxt(navfile, dtype=dtype_)
+        prn_ = np.unique(v['prn'])
+
+        for prn in prn_:
+            sat = prn2sat(uGNSS.GAL, prn)
+            if sat not in self.navmsg.keys():
+                self.navmsg[sat] = {}
+
+            buff = bytearray(80)
+            vi = v[(v['prn'] == prn) & (v['type'] == 0)]  # E1 only
+            tow_t = [0, 0, 0, 0, 0]
+            for j, msg_ in enumerate(vi['nav']):
+                tow_ = int(vi['tow'][j])
+
+                msg = unhexlify(msg_)
+
+                sid, iodnav = bs.unpack_from('u6u10', msg, 2)
+
+                if sid == 0 or sid > 5:
+                    continue
+
+                i = 2
+                for k in range(14):
+                    buff[(sid-1)*16+k] = bs.unpack_from('u8', msg, i)[0]
+                    i += 8
+                i += 8
+                for k in range(2):
+                    buff[(sid-1)*16+14+k] = bs.unpack_from('u8', msg, i)[0]
+                    i += 8
+
+                sid1, iodnav1 = bs.unpack_from('u6u10', buff, 0)
+                sid2, iodnav2 = bs.unpack_from('u6u10', buff, 128*1)
+                sid3, iodnav3 = bs.unpack_from('u6u10', buff, 128*2)
+                sid4, iodnav4 = bs.unpack_from('u6u10', buff, 128*3)
+                sid5 = bs.unpack_from('u6', buff, 128*4)[0]
+                tow = bs.unpack_from('u20', buff, 128*4+85)[0]
+                toe = bs.unpack_from('u14', buff, 16)[0]
+                toc = bs.unpack_from('u14', buff, 128*3+54)[0]
+
+                tow_t[sid-1] = tow_
+
+                if sid != 5 or sid1 != 1 or sid2 != 2 or sid3 != 3 or \
+                        sid4 != 4 or sid5 != 5:
+                    continue
+                if iodnav1 != iodnav2 or iodnav1 != iodnav3 or \
+                        iodnav1 != iodnav4:
+                    continue
+
+                if iodnav1 not in self.navmsg[sat].keys():
+                    self.navmsg[sat][iodnav1] = {}
+
+                if uNavId.GAL_INAV in self.navmsg[sat][iodnav1].keys():
+                    continue
+
+                self.navmsg[sat][iodnav1][uNavId.GAL_INAV] = \
+                    NavMsg(uGNSS.GAL, uNavId.GAL_INAV)
+                self.navmsg[sat][iodnav1][uNavId.GAL_INAV].iodn = iodnav1
+                self.navmsg[sat][iodnav1][uNavId.GAL_INAV].iodc = 0
+                self.navmsg[sat][iodnav1][uNavId.GAL_INAV].tow = tow
+                self.navmsg[sat][iodnav1][uNavId.GAL_INAV].toe = toe
+                self.navmsg[sat][iodnav1][uNavId.GAL_INAV].toc = toc
+                self.navmsg[sat][iodnav1][uNavId.GAL_INAV].msg = \
+                    copy.copy(buff)
+
+    def lnav_to_mnav(self, msg, sys=uGNSS.QZS):
+        """ genarate MNAV(900b) from LNAV SF1,2,3 """
+        mnav = bytearray(113)
+
+        # RAND
+        if sys == uGNSS.QZS:
+            mask_t = [[0xfffffc, 0xffff80, 0xffffff, 0xffffff,
+                      0xffffff, 0xffffff, 0xffffff, 0xffffff,
+                      0xffffff, 0xfffffc],
+                      [0xfffffc, 0xffff80, 0xffffff, 0xffffff,
+                       0xffffff, 0xffffff, 0xffffff, 0xffffff,
+                       0xffffff, 0xfffffc],
+                      [0xfffffc, 0xffff80, 0xffffff, 0xffffff,
+                       0xffffff, 0xffffff, 0xffffff, 0xffffff,
+                       0xffffff, 0xfffffc]]
+        else:  # GPS
+            mask_t = [[0xff0003, 0xfffffc, 0xffffff, 0xffffff,
+                      0xffffff, 0xffffff, 0xffffff, 0xffffff,
+                      0xffffff, 0xfffffc],
+                      [0xff0003, 0xfffffc, 0xffffff, 0xffffff,
+                       0xffffff, 0xffffff, 0xffffff, 0xffffff,
+                       0xffffff, 0xffff80],
+                      [0xff0003, 0xfffffc, 0xffffff, 0xffffff,
+                       0xffffff, 0xffffff, 0xffffff, 0xffffff,
+                       0xffffff, 0xfffffc]]
+
+        for sid in range(3):
+            for k in range(10):
+                d = bs.unpack_from('u30', msg, sid*320+32*k+2)[0] & \
+                    (mask_t[sid][k] << 6)
+                bs.pack_into('u30', mnav, sid*300+30*k, d)
+
+        return mnav
+
+    def cnav2_to_mnav(self, toi, msg, sys=uGNSS.QZS):
+        """ genarate MNAV(600b) from CNAV2 SF2 """
+        mnav = bytearray(77)
+
+        mask_t = [0xffffffff, 0x7fffffff, 0xffffffff, 0xffffffff,
+                  0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                  0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                  0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                  0xffffffff, 0xfffffbff]
+
+        bs.pack_into('u9', mnav, 0, toi)
+
+        i = 52
+        for k in range(18):
+            d = bs.unpack_from('u32', msg, i)[0] & mask_t[k]
+            i += 32
+            bs.pack_into('u32', mnav, 9+32*k, d)
+
+        return mnav
+
+    def cnav_to_mnav(self, msg, sys=uGNSS.QZS):
+        """ genarate MNAV(900b) from CNAV SF1,2,3 """
+        mnav = bytearray(113)
+
+        # RAND
+        if sys == uGNSS.QZS:
+            mask_t = [
+                [0xff03ffff, 0xfbffffff, 0xffffffff, 0xffffffff,
+                 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                 0xfffef000],
+                [0xff03ffff, 0xfbffffff, 0xffffffff, 0xffffffff,
+                 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                 0xfffff000],
+                [0xff03ffff, 0xfbffffff, 0xffffffff, 0xfffffffe,
+                 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+                 0x00000000]]
+
+        else:  # GPS
+            mask_t = [
+                [0xfffc0fff, 0xffffffff, 0xffffffff, 0xffffffff,
+                 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                 0xfffff000],
+                [0xfffc0fff, 0xffffffff, 0xffffffff, 0xffffffff,
+                 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                 0xfffff000],
+                [0xfffc0fff, 0xffffffff, 0xffffffff, 0xfffffffe,
+                 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+                 0x00000000]]
+
+        for sid in range(3):
+            for k in range(9):
+                d = bs.unpack_from('u32', msg, sid*304 +
+                                   32*k)[0] & mask_t[sid][k]
+                bs.pack_into('u32', mnav, sid*300+32*k, d)
+
+        return mnav
+
+    def fnav_to_mnav(self, msg):
+        """ genarate MNAV(976b) from Galileo F/NAV message 1,2,3,4 """
+        mnav = bytearray(122)
+
+        # RAND
+        mask_t = [0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+                  0xffffffff, 0xffffffff, 0xfffffc00, 0x0003f]
+
+        for sid in range(4):
+            for k in range(8):
+                fmt = 'u32' if k < 7 else 'u20'
+                d = bs.unpack_from(fmt, msg, sid*248+32*k)[0] & mask_t[k]
+                bs.pack_into(fmt, mnav, sid*244+32*k, d)
+
+        return mnav
+
+    def inav_to_mnav(self, msg):
+        """ genarate MNAV(640b) from Galileo I/NAV message 1,2,3,4,5 """
+        return copy.copy(msg)
+
+    def svid2sat(self, svid):
+        """ convert svid in QZNMA to sat """
+        if svid <= 63:
+            sat = prn2sat(uGNSS.GPS, svid)
+        elif svid <= 127:
+            sat = prn2sat(uGNSS.GAL, svid-64)
+        elif svid <= 191:
+            sat = prn2sat(uGNSS.SBS, svid)
+        elif svid <= 202:
+            sat = prn2sat(uGNSS.QZS, svid)
+
+        return sat
+
+    def decode_gnss_rds(self, tow, msg, i):
+        """ generate RDS for GNSS  """
+        # nid = 0: QZNMA
+        # rtow:
+        #  GPS LNAV/CNAV: tow(17), CNAV2: toi(9),itow(8)
+        # svid: GPS:1-63, Galileo:65-127, SBAS:129-191, QZS:193-202
+        # mt 1: GPS LNAV, 2: GPS CNAV, 3: GPS CNAV2
+        #    4: Galileo F/NAV, 5: Galileo I/NAV
+        nid, rtow, svid, mt = bs.unpack_from('u4u20u8u4', msg, i)
+        i += 36
+        # iode1 GPS LNAV: iode of SF2, GPS CNAV/CNAV2 toe of MT10/SF2
+        #       Galileo F/NAV,I/NAV IODnav
+        # iode2 GPS LNAV: iode of SF3, GPS CNAV toe of MT11, other: zero
+        # iodc GPS LNAV iodc, CNAV toc of MT30-37, other: zero
+        iode1, iode2, iodc, keyid = bs.unpack_from('u11u11u11u8', msg, i)
+        i += 41
+        ds = bytearray(64)
+
+        for k in range(16):
+            d = bs.unpack_from('u32', msg, i)[0]
+            i += 32
+            bs.pack_into('u32', ds, k*32, d)
+
+        salt = bs.unpack_from('u16', msg, i)[0]
+        i += 16
+
+        sat = self.svid2sat(svid)
+        sys, prn = sat2prn(sat)
+
+        if svid == 0 or sat not in self.navmsg.keys() or \
+                iode1 not in self.navmsg[sat].keys() or \
+                mt not in self.navmsg[sat][iode1].keys():
+            return None, None
+
+        npr = NavParam(keyid, ds, salt, mt, nid,
+                       rtow, svid, iode1, iode2, iodc)
+        tow_ = self.navmsg[sat][iode1][mt].tow
+
+        print(f"tow={tow} rtow={rtow} tow_i={tow_} svid={svid:3d} mt={mt} " +
+              f"iode={iode1:4d} iode2={iode2:4d} iodc={iodc:4d} key={keyid}")
+
+        if mt == uNavId.GPS_LNAV:
+
+            mnav = self.lnav_to_mnav(
+                self.navmsg[sat][iode1][mt].msg, sys=uGNSS.GPS)
+
+            bs.pack_into('u17', mnav, 300*0+30, rtow)
+            bs.pack_into('u17', mnav, 300*1+30, rtow+1)
+            bs.pack_into('u17', mnav, 300*2+30, rtow+2)
+
+        elif mt == uNavId.GPS_CNAV:
+
+            mnav = self.cnav_to_mnav(
+                self.navmsg[sat][iode1][mt].msg, sys=uGNSS.GPS)
+
+            bs.pack_into('u17', mnav, 300*0+20, rtow)
+            bs.pack_into('u17', mnav, 300*1+20, rtow+1)
+            bs.pack_into('u17', mnav, 300*2+20, rtow+2)
+
+        elif mt == uNavId.GPS_CNAV2:
+
+            mnav = self.cnav2_to_mnav(
+                self.navmsg[sat][iode1][mt].msg, sys=uGNSS.GPS)
+
+        elif mt == uNavId.GAL_FNAV:
+
+            mnav = self.fnav_to_mnav(self.navmsg[sat][iode1][mt].msg)
+
+            bs.pack_into('u20', mnav, 244*0+167, rtow)
+            bs.pack_into('u20', mnav, 244*1+194, rtow+10)
+            bs.pack_into('u20', mnav, 244*2+186, rtow+20)
+            bs.pack_into('u20', mnav, 244*3+189, rtow+30)
+
+        elif mt == uNavId.GAL_INAV:
+
+            mnav = self.inav_to_mnav(self.navmsg[sat][iode1][mt].msg)
+            bs.pack_into('u20', mnav, 128*4+85, rtow)
+
+        return npr, mnav
+
+    def verify_gnss_nav(self, npr, mnav):
+        """ verifify the navigation message in MNAV using DS """
+        if npr.mt == uNavId.GPS_LNAV:
+            blen, mlen = 125, 900
+        elif npr.mt == uNavId.GPS_CNAV:
+            blen, mlen = 125, 900
+        elif npr.mt == uNavId.GPS_CNAV2:
+            blen, mlen = 89, 609
+        elif npr.mt == uNavId.GAL_FNAV:
+            blen, mlen = 134, 976
+        elif npr.mt == uNavId.GAL_INAV:
+            blen, mlen = 92, 640
+
+        rand_ = bytearray(blen)
+
+        bs.pack_into('u4u20u8u4', rand_, 0, npr.nid,
+                     npr.rtow, npr.svid, npr.mt)
+        bs.pack_into('u11u11u11u8', rand_, 36, npr.iode1,
+                     npr.iode2, npr.iodc, npr.keyid)
+        copy_buff(mnav, rand_, 0, 77, mlen)
+        bs.pack_into('u16', rand_, 77+mlen, npr.salt)
+
+        sat = self.svid2sat(npr.svid)
+        sys, prn = sat2prn(sat)
+
+        if self.pk is None:
+            self.pk = load_pubkey(npr.keyid)
+
+        ds_der = raw2der(npr.ds)
+        status = False
+        try:
+            self.pk.verify(ds_der, bytes(rand_), ec.ECDSA(hashes.SHA256()))
+            print(f'mt={npr.mt} sys={sys} prn={prn} signature OK.')
+            status = True
+        except InvalidSignature:
+            print(f'mt={npr.mt} sys={sys} prn={prn} signature NG.')
+
+        return status
+
+    def gen_rds(self, mode, msg):
+        """ prepare RDS from navigation message and parameters  """
+
+        if mode == uNavId.GPS_LNAV:  # 540bits (180bitsx3)
+            sid, d = bs.unpack_from('u2u14', msg, 32*2+2+8)
+            if sid > 0:
+                i0 = (sid-1)*180
+                bs.pack_into('u14', self.rds, i0, d)
+
+                for k in range(7):
+                    d = bs.unpack_from('u24', msg, 32*(k+3)+2)[0]
+                    bs.pack_into('u24', self.rds, i0+14+24*k, d)
+
+                self.mask |= (1 << (sid-1))
+
+        elif mode == uNavId.GPS_CNAV:  # 708bits (236bits*3)
+            sid = bs.unpack_from('u2', msg, 38)[0]
+            if sid > 0:
+                copy_buff(msg, self.rds, 40, (sid-1)*236, 236)
+                self.mask |= (1 << (sid-1))
+
+        elif mode == uNavId.GPS_CNAV2:  # 702bits (234bits*3)
+            sid = bs.unpack_from('u2', msg, 1266)[0]
+            if sid > 0:
+                copy_buff(msg, self.rds, 1268, (sid-1)*234, 234)
+                self.mask |= (1 << (sid-1))
+
+        # key ID (8bits), DS (512bits), SALT (16bits)
+        keyid = self.rds[0]
+        ds = self.rds[1:65]
+        salt = (self.rds[65] << 8) | self.rds[66]
+        npr = NavParam(keyid, ds, salt)
+
+        return npr
+
+    def msg2nav(self, i0, msg, mode):
+        """ prepare navigation message (LNAV/CNAV) from raw nav message """
+        blen = 40 if mode == uNavId.GPS_LNAV else 38
+        self.buff[(i0-1)*blen:(i0-1)*blen+blen] = msg[0:blen]
+        self.flag_e |= (1 << (i0-1))
+
+    def verify_qzss_nav(self, npr, msg, mode):
+        """ verify the navigation messages for QZSS LNAV/CNAV/CNAV2 """
+        if mode == uNavId.GPS_LNAV:
+            blen, mlen = 116, 900
+        elif mode == uNavId.GPS_CNAV:
+            blen, mlen = 137, 900
+        elif mode == uNavId.GPS_CNAV2:
+            blen, mlen = 100, 609
+
+        k1 = (mlen+7)//8
+
+        rand_ = bytearray(blen)
+        rand_[0] = npr.keyid
+        rand_[1:k1+1] = msg
+        bs.pack_into('u16', rand_, 8+mlen, npr.salt)
+
+        if self.pk is None:
+            self.pk = load_pubkey(npr.keyid)
+
+        status = False
+        try:
+            self.pk.verify(raw2der(npr.ds), bytes(rand_),
+                           ec.ECDSA(hashes.SHA256()))
+            status = True
+            print(f'mode={mode} keyid={npr.keyid} signature OK.')
+        except InvalidSignature:
+            print(f'mode={mode} keyid={npr.keyid} signature NG.')
+        return status
