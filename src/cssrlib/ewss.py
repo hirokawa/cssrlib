@@ -1276,8 +1276,8 @@ class camfDec(ewsDec):
         self.lat = -90.0+180.0/65535*lati
         self.lon = -180.0+360.0/131071*loni
 
-        self.LM = self.r_t[smai]
-        self.Lm = self.r_t[smii]
+        self.LM = self.r_t[smai]  # semi-major axis [km]
+        self.Lm = self.r_t[smii]  # semi-minor axis [km]
         self.az = -90.0+180.0/64*azi
 
         # 3.7 Main Subject for Specific Settings

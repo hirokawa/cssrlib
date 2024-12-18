@@ -315,7 +315,7 @@ class rnxdec:
                     geph.pos = pos
                     geph.vel = vel
                     geph.acc = acc
-                    
+
                     # Use GLONASS line #4 only from RINEX v3.05 onwards
                     #
                     if self.ver >= 3.05:
