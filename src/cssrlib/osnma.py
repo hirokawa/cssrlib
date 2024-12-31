@@ -22,6 +22,7 @@ from binascii import unhexlify, hexlify
 from enum import IntEnum
 import xml.etree.ElementTree as et
 from cssrlib.gnss import gpst2time, time2gst
+import copy
 
 
 class uOSNMA(IntEnum):
@@ -145,13 +146,16 @@ class osnma():
     tag = bytearray(42)
     mack_p = bytearray(60*GALMAX)  # previous MACK
     mack_c = bytearray(60*GALMAX)  # current MACK
-    subfrm = bytearray(16*10*GALMAX)
     tag_list = []
 
     vcnt_min = 2
     iodnav = np.zeros(GALMAX+1, dtype=int)
     vcnt = np.zeros(GALMAX+1, dtype=int)
     vstatus = np.zeros(GALMAX+1, dtype=bool)
+
+    subfrm_n = None
+    subfrm_p = None
+    subfrm = None
 
     # Public Key in PEM received from GSC OSNMA server
     # note : EC_PARAMETER section should be removed.
@@ -161,6 +165,8 @@ class osnma():
     # mt_path = '../data/pubkey/osnma/OSNMA_MerkleTree_20210920133026.xml'
     mt_path = '../data/pubkey/osnma/OSNMA_MerkleTree_20240115100000_newPKID_1.xml'
     pk_list = []
+
+    flg_slowmac = False
 
     def raw2der(self, ds):
         """ convert digital signature from raw format to der format """
@@ -233,6 +239,14 @@ class osnma():
         for k in range(16):
             self.pk_list.append(pubkey(k))
         self.load_mt(self.mt_path)
+
+        self.flg_dsm = {}
+
+        self.subfrm_n = bytearray(16*10*self.GALMAX)
+        self.subfrm_p = bytearray(16*10*self.GALMAX)
+        self.subfrm = bytearray(16*10*self.GALMAX)
+
+        self.prn_ref = -1
 
     def process_hash(self, msg):
         """ calculate hash """
@@ -394,7 +408,7 @@ class osnma():
             self.status |= uOSNMA.PKR_UPDATED  # PKR updated
         return result
 
-    def decode_hk(self, hk):
+    def decode_hk(self, hk, prn):
         """ decode HKROOT message """
         self.nma_header = hk[0]
         nmas, cid, cpks, _ = bs.unpack_from('u2u2u3u1', hk, 0)
@@ -424,6 +438,9 @@ class osnma():
             self.nb[did] = nb_ + 6  # number of blocks
 
         result = False
+        if self.monlevel > 1:
+            print(f"flg_dsm[did={did}]={self.flg_dsm[did]:2x} "
+                  f"nb={self.nb[did]:2d} bid={bid} prn={prn}")
         if did in self.nb.keys() and \
                 self.flg_dsm[did] == (1 << self.nb[did])-1:
             if did <= 11:  # DSM-KROOT
@@ -532,9 +549,10 @@ class osnma():
         lk = self.klen_t[self.ks]
         self.nt = (480-lk)//(lt+16)  # number of tags
         ltag_b = (lt+16)//8
-        i0 = 60*(prn-1)
-        mack_p = self.mack_p[i0:i0+60]  # previous MACK
-        mack_c = self.mack_c[i0:i0+60]  # current MACK
+        lm_b = 60
+        i0 = (prn-1)*lm_b
+        mack_p = self.mack_p[i0:i0+lm_b]  # previous MACK
+        mack_c = self.mack_c[i0:i0+lm_b]  # current MACK
         i0 = ltag_b*self.nt
         self.tag = mack_p[0:i0]
         self.key_p = mack_p[i0:i0+lk//8]
@@ -590,12 +608,33 @@ class osnma():
 
         return nav, nma_b
 
-    def load_nav(self, nav, prn):
+    def load_nav(self, nav, prn, tow):
         """ load navigation message into subframe buffer """
         mt = bs.unpack_from('u6', nav, 0)[0]
+        j0 = (prn-1)*160
+
+        if tow % 30 == 1:
+            self.subfrm[j0:j0+160] = self.subfrm_p[j0:j0+160]
+            self.subfrm_p[j0:j0+160] = self.subfrm_n[j0:j0+160]
+            # self.subfrm_n[j0:j0+160] = [0]*160
+
         if mt > 0 and mt <= 10:
-            j = (prn-1)*160+(mt-1)*16
-            self.subfrm[j:j+16] = nav
+            j = j0+(mt-1)*16
+            self.subfrm_n[j:j+16] = nav
+
+        if self.monlevel > 0 and prn == self.prn_ref:
+            if mt >= 1 and mt <= 4:
+                iodnav = bs.unpack_from('u10', nav, 6)[0]
+                print(f"tow={tow} prn={prn:2d} mt={mt:2d} iodnav={iodnav}")
+            elif mt == 5:
+                tow_ = bs.unpack_from('u20', nav, 85)[0]
+                print(f"tow={tow} prn={prn:2d} mt={mt:2d} tow={tow_}")
+            elif mt == 6:
+                tow_ = bs.unpack_from('u20', nav, 105)[0]
+                print(f"tow={tow} prn={prn:2d} mt={mt:2d} tow={tow_}")
+            else:
+                print(f"tow={tow} prn={prn:2d} mt={mt:2d}")
+
         return True
 
     def gen_navmsg(self, prn):
@@ -656,7 +695,6 @@ class osnma():
             return None
         if self.monlevel > 0:
             tow = bs.unpack_from('u20', mt6, 105)[0]
-            # bs.pack_into('u20', mt6, 105, tow+self.tofst)  # <- tow-=60
             print(" utc gst_tow=%6d" % (tow))
 
         # 141b MT6 99b, MT10 42b
@@ -667,20 +705,16 @@ class osnma():
             bs.pack_into('u8', msg, j, b)
             j += 8
         j = 99
-        for k in range(5):
-            b = bs.unpack_from('u8', mt10, k*8+86)[0]
-            bs.pack_into('u8', msg, j, b)
-            j += 8
 
-        b = bs.unpack_from('u2', mt10, 40+86)[0]
-        bs.pack_into('u2', msg, j, b)
-        j += 2
+        a0g, a1g, t0g, wn0g = bs.unpack_from('s16s12u8u6', mt10, 86)
+        bs.pack_into('s16s12u8u6', msg, j, a0g, a1g, t0g, wn0g)
 
         return msg
 
     def gen_msg(self, adkd, prn_d, gst_sf, ctr, msg):
         """ generate message for verification of NMA """
         mlen = 141 if adkd == 4 else 549
+        rem_ = mlen-mlen//8*8  # number of remaining bit
         j = 0
         if adkd == 0 and self.prn_a == prn_d:
             mlen += 8+42
@@ -700,13 +734,9 @@ class osnma():
         j += 42
         for k in range(len(msg)):
             b = msg[k]
-            if k == len(msg)-1:
-                if adkd == 4:
-                    bs.pack_into('u3', m, j, b >> 5)
-                    j += 3
-                else:
-                    bs.pack_into('u5', m, j, b >> 3)
-                    j += 5
+            if rem_ != 0 and k == len(msg)-1:
+                bs.pack_into('u'+str(rem_), m, j, b >> (8-rem_))
+                j += rem_
             else:
                 bs.pack_into('u8', m, j, b)
                 j += 8
@@ -765,12 +795,12 @@ class osnma():
             PRN number
         """
         status = False
-        k = (tow % 30)//2
-        if k == 0:  # reset counter
+        ki = (tow % 30)//2
+        if ki == 0:  # reset counter
             self.cnt[prn-1] = 0
             self.hk[prn-1] = bytearray(15)
             self.mack[prn-1][0] = 0
-        elif k < 0:
+        elif ki < 0:
             return
 
         # convert GPS time to Galileo standard time (GST)
@@ -778,13 +808,13 @@ class osnma():
 
         self.gst_tow = (gst_tow//30)*30  # current subframe-time
         # store sub-frame for NMA
-        self.hk[prn-1][k] = nma_b[0]              # HK-ROOT message
-        self.mack[prn-1][k*4:k*4+4] = nma_b[1:5]  # MACK message
-        self.cnt[prn-1] |= (1 << k)
+        self.hk[prn-1][ki] = nma_b[0]              # HK-ROOT message
+        self.mack[prn-1][ki*4:ki*4+4] = nma_b[1:5]  # MACK message
+        self.cnt[prn-1] |= (1 << ki)
         if self.cnt[prn-1] == 0x7fff:  # all(0-14) message loaded
             self.save_mack(self.mack[prn-1], prn)  # store MACK
             # decode HK-ROOT messages
-            result = self.decode_hk(self.hk[prn-1])
+            result = self.decode_hk(self.hk[prn-1], prn)
             if self.monlevel > 0:
                 s = "wn=%4d tow=%d gst_tow=%6d prn=%d did=%d" % \
                     (wn, tow, self.gst_tow, prn, self.did0)
@@ -865,13 +895,16 @@ class osnma():
                             tag, macseq, cop = self.decode_tags_info(0)
                         else:
                             tag, prn_d, adkd, cop = self.decode_tags_info(k)
-                            if adkd == 12:  # delayed tag loading
+                            if adkd == 12 and self.flg_slowmac:
+                                # delayed tag loading
                                 navmsg = self.gen_navmsg(prn_d)
-                                tag_ = taginfo(self.gst_sf, prn_d, adkd, cop,
+                                tag_ = taginfo(self.gst_sf_p, prn_d, adkd, cop,
                                                tag, ctr, navmsg)
                                 self.tag_list.append(tag_)
 
                         if adkd == 12:
+                            print(f"{ctr} prn_d={prn_d} adkd={adkd} slow-MAC "
+                                  "is skipped")
                             continue
                         elif adkd == 0:
                             navmsg = self.gen_navmsg(prn_d)
@@ -879,6 +912,12 @@ class osnma():
                             navmsg = self.gen_utcmsg()
                         else:
                             navmsg = None
+
+                        if navmsg is None:
+                            print(f"{ctr} prn_d={prn_d} adkd={adkd} navmsg is "
+                                  "not available.")
+                            continue
+
                         tag_ = taginfo(self.gst_sf_p, prn_d,
                                        adkd, cop, tag, ctr, navmsg)
                         result = self.verify_navmsg(tag_)
@@ -893,15 +932,16 @@ class osnma():
                                 print(f"{ctr} prn_d={prn_d} adkd={
                                       adkd} tag not verified")
                     # slow MAC
-                    for tag_ in self.tag_list:
-                        dt = self.difftime(self.gst_sf, tag_.gst_sf)
-                        if dt == 300:
-                            result = self.verify_navmsg(tag_)
-                            if self.monlevel > 0 and result:
-                                print("SLOW-MAC# %d prn_d=%2d adkd=%2d tag verified"
-                                      % (tag_.cnt, tag_.prn, tag_.adkd))
-                        elif dt > 300:
-                            tag_ = None
+                    if self.flg_slowmac:
+                        for tag_ in self.tag_list:
+                            dt = self.difftime(self.gst_sf, tag_.gst_sf)
+                            if dt == 300:
+                                result = self.verify_navmsg(tag_)
+                                if self.monlevel > 0 and result:
+                                    print("SLOW-MAC# %d prn_d=%2d adkd=%2d tag verified"
+                                          % (tag_.cnt, tag_.prn, tag_.adkd))
+                            elif dt > 300:
+                                tag_ = None
 
             self.cnt[prn-1] = 0
         return status
