@@ -22,7 +22,6 @@ from binascii import unhexlify, hexlify
 from enum import IntEnum
 import xml.etree.ElementTree as et
 from cssrlib.gnss import gpst2time, time2gst
-import copy
 
 
 class uOSNMA(IntEnum):
@@ -50,18 +49,20 @@ class pubkey():
 class taginfo():
     """ class to store tag """
     gst_sf = bytearray(4)
-    prn = -1
+    prn_d = -1
+    prn_a = -1
     adkd = -1
     cnt = 0
     tag = None
     navmsg = None
     iodnav = -1
 
-    def __init__(self, gst_sf, prn, adkd, cop, tag, cnt, navmsg=None):
+    def __init__(self, gst_sf, prn_d, prn_a, adkd, cop, tag, cnt, navmsg=None):
         if navmsg is False:
             return None
         self.gst_sf = gst_sf
-        self.prn = prn
+        self.prn_d = prn_d
+        self.prn_a = prn_a
         self.adkd = adkd
         self.cop = cop
         self.tag = tag
@@ -126,7 +127,6 @@ class osnma():
     maclt = -1
     wn = -1  # reference week number of root key
     towh = -1  # reference hour of week of root key
-    tofst = -60  # time offset for time authentication
     alp = bytearray(6)  # seed
     ds = bytearray(64)  # digital signature
     kroot = bytearray(16)  # root key
@@ -148,11 +148,6 @@ class osnma():
     mack_c = bytearray(60*GALMAX)  # current MACK
     tag_list = []
 
-    vcnt_min = 2
-    iodnav = np.zeros(GALMAX+1, dtype=int)
-    vcnt = np.zeros(GALMAX+1, dtype=int)
-    vstatus = np.zeros(GALMAX+1, dtype=bool)
-
     subfrm_n = None
     subfrm_p = None
     subfrm = None
@@ -162,11 +157,12 @@ class osnma():
     # pubk_path = '../data/OSNMA_PublicKey_20210920133026_s.pem'
     pubk_path = None
     # Merkle tree root (received from GSC OSNMA server)
-    # mt_path = '../data/pubkey/osnma/OSNMA_MerkleTree_20210920133026.xml'
-    mt_path = '../data/pubkey/osnma/OSNMA_MerkleTree_20240115100000_newPKID_1.xml'
+    bdir = '../data/pubkey/osnma/'
+    mt_path = bdir + 'OSNMA_MerkleTree_20240115100000_newPKID_1.xml'
     pk_list = []
 
     flg_slowmac = False
+    nsat = 0
 
     def raw2der(self, ds):
         """ convert digital signature from raw format to der format """
@@ -231,6 +227,8 @@ class osnma():
 
     def __init__(self):
         self.monlevel = 1       # debug monitor level
+        self.vcnt_min = 1
+
         self.cnt = np.zeros(self.GALMAX, dtype=int)
         for prn in range(self.GALMAX):
             self.hk.append(bytearray(15))
@@ -247,6 +245,15 @@ class osnma():
         self.subfrm = bytearray(16*10*self.GALMAX)
 
         self.prn_ref = -1
+        self.tag_list = []
+
+        self.status = 0
+
+        self.key_p = bytearray(16)
+        self.key_c = bytearray(16)
+        self.key = bytearray(16)
+
+        self.vstatus = {}  # validation status [prn][iodnav]
 
     def process_hash(self, msg):
         """ calculate hash """
@@ -316,7 +323,7 @@ class osnma():
             key = self.process_hash(msg)[0:klen_b]
         return key
 
-    def verify_key_chain(self, key, gst_wn, gst_tow0, ki=1):
+    def verify_key_chain(self, key, gst_wn, gst_tow0):
         """ verify key chaning """
         if not self.status & uOSNMA.ROOTKEY_VERIFIED:  # root-key verified
             return False
@@ -324,10 +331,16 @@ class osnma():
             key = self.update_key_chain(key, gst_wn, gst_tow0, 1)
             result = (key == self.key_p)
         else:
+            ki = ((gst_wn-self.wn)*86400*7 +
+                  (self.gst_tow-self.towh*3600))//30+1
             key = self.update_key_chain(key, gst_wn, gst_tow0, ki)
             result = (key == self.kroot)
         if result:
             self.status |= uOSNMA.KEYCHAIN_VERIFIED  # key-chain verified
+        else:
+            if self.status & uOSNMA.KEYCHAIN_VERIFIED:
+                self.status ^= uOSNMA.KEYCHAIN_VERIFIED
+
         return result
 
     def decode_dsm_kroot(self, did):
@@ -622,19 +635,6 @@ class osnma():
             j = j0+(mt-1)*16
             self.subfrm_n[j:j+16] = nav
 
-        if self.monlevel > 0 and prn == self.prn_ref:
-            if mt >= 1 and mt <= 4:
-                iodnav = bs.unpack_from('u10', nav, 6)[0]
-                print(f"tow={tow} prn={prn:2d} mt={mt:2d} iodnav={iodnav}")
-            elif mt == 5:
-                tow_ = bs.unpack_from('u20', nav, 85)[0]
-                print(f"tow={tow} prn={prn:2d} mt={mt:2d} tow={tow_}")
-            elif mt == 6:
-                tow_ = bs.unpack_from('u20', nav, 105)[0]
-                print(f"tow={tow} prn={prn:2d} mt={mt:2d} tow={tow_}")
-            else:
-                print(f"tow={tow} prn={prn:2d} mt={mt:2d}")
-
         return True
 
     def gen_navmsg(self, prn):
@@ -656,7 +656,7 @@ class osnma():
                           (k+1, iodnav1, iodnav_))
                 return None
 
-        if self.monlevel > 0:
+        if self.monlevel > 1:
             svid = bs.unpack_from('u6', self.subfrm, j0+16+3*16*8)[0]
             wn, tow = bs.unpack_from('u12u20', self.subfrm, j0+73+4*16*8)
             print(f" svid={svid:2d} iodnav={
@@ -693,9 +693,9 @@ class osnma():
         t2 = bs.unpack_from('u6', mt10, 0)[0]  # MT10
         if t1 != 6 or t2 != 10:
             return None
-        if self.monlevel > 0:
+        if self.monlevel > 1:
             tow = bs.unpack_from('u20', mt6, 105)[0]
-            print(" utc gst_tow=%6d" % (tow))
+            print(f" utc gst_tow={tow:6d}")
 
         # 141b MT6 99b, MT10 42b
         msg = bytearray(18)
@@ -744,42 +744,58 @@ class osnma():
 
     def verify_navmsg(self, tag_):
         """ verify nav/utc message """
-        prn_d = tag_.prn
-        adkd = tag_.adkd
         msg = tag_.navmsg
 
-        if prn_d == -1 or not msg:
+        if tag_.prn_d == -1 or not msg:
             return False
 
-        m = self.gen_msg(adkd, prn_d, tag_.gst_sf, tag_.cnt, msg)
+        m = self.gen_msg(tag_.adkd, tag_.prn_d, tag_.gst_sf, tag_.cnt, msg)
 
         tag_c = self.process_mac(m)
         lt_b = self.tag_len_t[self.ts]//8
         result = (tag_c[:lt_b] == tag_.tag)
         return result
 
-    def chk_nav(self, result, tag_):
-        """ judge authentication status of message """
+    def save_auth_nav(self, result, tag_):
+        """ record authentication status of message """
 
         if not result:
             return False
 
-        if tag_.adkd == 4:
-            i = self.GALMAX
-        else:
-            i = tag_.prn-1
+        prn = tag_.prn_d if tag_.adkd != 4 else self.GALMAX+1
+        iodn = tag_.iodnav if tag_.adkd != 4 else 0
 
-        if self.iodnav[i] != tag_.iodnav:
-            self.vcnt[i] = 1
-        else:
-            self.vcnt[i] += 1
-        self.iodnav[i] = tag_.iodnav
+        if prn not in self.vstatus.keys():
+            self.vstatus[prn] = {}
 
-        if self.vcnt[i] >= self.vcnt_min:
-            self.vstatus[i] = True
+        if iodn not in self.vstatus[prn].keys():
+            self.vstatus[prn][iodn] = 1
         else:
-            self.vstatus[i] = False
-        return self.vstatus[i]
+            self.vstatus[prn][iodn] += 1
+
+        return self.vstatus[prn][iodn] >= self.vcnt_min
+
+    def chk_nav(self, prn, iodnav):
+        """ check if navigation message with iodnav is authenticated """
+        if prn not in self.vstatus.keys():
+            return False
+        if iodnav not in self.vstatus[prn].keys():
+            return False
+        return self.vstatus[prn][iodnav] >= self.vcnt_min
+
+    def count_valid_sat(self):
+        nsat = 0
+        for prn in self.vstatus.keys():
+            if prn == self.GALMAX+1:  # skip UTC
+                continue
+            for iodn in self.vstatus[prn].keys():
+                if self.vstatus[prn][iodn] >= self.vcnt_min:
+                    nsat += 1
+                    break
+        if nsat >= 4:
+            self.status |= uOSNMA.POS_AUTH
+
+        return nsat
 
     def decode(self, nma_b, wn, tow, prn):
         """ decode OSNMA message
@@ -801,147 +817,153 @@ class osnma():
             self.hk[prn-1] = bytearray(15)
             self.mack[prn-1][0] = 0
         elif ki < 0:
-            return
+            return status
 
         # convert GPS time to Galileo standard time (GST)
         gst_wn, gst_tow = time2gst(gpst2time(wn, tow))
-
         self.gst_tow = (gst_tow//30)*30  # current subframe-time
+        self.gst_sf = self.set_gst_sf(gst_wn, self.gst_tow)
+
         # store sub-frame for NMA
         self.hk[prn-1][ki] = nma_b[0]              # HK-ROOT message
         self.mack[prn-1][ki*4:ki*4+4] = nma_b[1:5]  # MACK message
         self.cnt[prn-1] |= (1 << ki)
+
         if self.cnt[prn-1] == 0x7fff:  # all(0-14) message loaded
             self.save_mack(self.mack[prn-1], prn)  # store MACK
             # decode HK-ROOT messages
             result = self.decode_hk(self.hk[prn-1], prn)
             if self.monlevel > 0:
-                s = "wn=%4d tow=%d gst_tow=%6d prn=%d did=%d" % \
-                    (wn, tow, self.gst_tow, prn, self.did0)
+                s = f"{wn:4d}/{tow:6d} prn={prn} gst_tow={self.gst_tow} "\
+                    f"did={self.did0}"
                 if result:
-                    print("decode_hk succeeded %s" % (s))
+                    print(f"decode_hk succeeded {s}")
 
             if self.status & uOSNMA.ROOTKEY_LOADED and \
                     not (self.status & uOSNMA.ROOTKEY_VERIFIED):
                 result = self.verify_root_key()
                 if self.monlevel > 0:
-                    s = "wn=%4d tow=%d gst_tow=%6d prn=%d" % \
-                        (wn, tow, self.gst_tow, prn)
+                    s = f"{wn:4d}/{tow:6d} prn={prn} gst_tow={self.gst_tow}"
                     if result:
-                        print("root-key verified %s" % (s))
+                        print(f"root-key verified {s}")
                     else:
-                        print("root-key not verified %s" % (s))
+                        print(f"root-key not verified {s}")
 
-            if self.decode_mack(prn):
-                self.gst_sf = self.set_gst_sf(gst_wn, self.gst_tow)
-                # key-chain verification
-                # skip if key-chain is already verified at t=gst_sf
-                # if self.gst_sf != self.gst_sf_c and \
-                #        self.status & uOSNMA.KEYCHAIN_VERIFIED:
-                #    self.status ^= uOSNMA.KEYCHAIN_VERIFIED
-                if self.status & uOSNMA.ROOTKEY_VERIFIED and \
-                        self.gst_sf != self.gst_sf_c:  # root-key verified
+            # decode MACK section, get Tags and Key
+            if not self.decode_mack(prn):
+                return status
 
-                    if self.status & uOSNMA.KEYCHAIN_VERIFIED:
-                        ki = 1
-                    else:
-                        ki = ((gst_wn-self.wn)*86400*7 +
-                              (self.gst_tow-self.towh*3600))//30+1
-                    result = self.verify_key_chain(
-                        self.key_c, gst_wn, self.gst_tow, ki)
+            # key-chain verification
+            # skip if key-chain is already verified at t=gst_sf
+            if self.status & uOSNMA.ROOTKEY_VERIFIED and \
+                    self.gst_sf != self.gst_sf_c:  # root-key verified
+                result = self.verify_key_chain(
+                    self.key_c, gst_wn, self.gst_tow)
+                if result:
+                    self.gst_sf_c = self.gst_sf
+                    self.key = self.key_c
+                if self.monlevel > 0:
+                    s = f"{wn:4d}/{tow:6d} prn={prn} gst_tow={self.gst_tow}"
                     if result:
-                        self.gst_sf_c = self.gst_sf
-                        self.key = self.key_c
-                    if self.monlevel > 0:
-                        s = "wn=%4d tow=%6d ki=%d prn=%d gst_tow=%d" % \
-                            (wn, tow, ki, prn, self.gst_tow)
-                        if result:
-                            print("Key chain verified     %s" % (s))
+                        print(f"Key chain verified     {s}")
 
-                        else:
-                            print("Key chain not verified %s" % (s))
-
-                if self.status & uOSNMA.KEYCHAIN_VERIFIED:
-                    # 6.5 MAC Look-up Table Verification
-                    self.gst_tow_p = self.gst_tow-30
-                    self.gst_sf_p = self.set_gst_sf(gst_wn, self.gst_tow_p)
-                    result = self.verify_maclt()
-                    if self.monlevel > 0:
-                        s = "on %4d/%6d gst_tow=%d prn=%d" % \
-                            (wn, tow, self.gst_tow_p, prn)
-                        if result:
-                            print("MAC Look-up Table verified %s" % (s))
-                        else:
-                            print("MAC Look-up Table not verified %s" % (s))
-                    if not result:
-                        return False
-                    # 6.6 MACSEQ Verification
-                    # prn_a|gst_sf
-                    result = self.verify_macseq()
-                    if result and self.monlevel > 0:
-                        print("MACSEQ Verified on %4d/%6d prn=%2d" %
-                              (wn, tow, prn))
                     else:
-                        print("MACSEQ not verified on %4d/%6d prn=%2d" %
-                              (wn, tow, prn))
-                        return False
+                        print(f"Key chain not verified {s}")
 
-                    # 6.7 Tag Verification
-                    for k in range(self.nt):
-                        ctr = k+1
-                        if k == 0:  # self-tag
-                            prn_d = self.prn_a
-                            adkd = 0
-                            tag, macseq, cop = self.decode_tags_info(0)
-                        else:
-                            tag, prn_d, adkd, cop = self.decode_tags_info(k)
-                            if adkd == 12 and self.flg_slowmac:
-                                # delayed tag loading
-                                navmsg = self.gen_navmsg(prn_d)
-                                tag_ = taginfo(self.gst_sf_p, prn_d, adkd, cop,
-                                               tag, ctr, navmsg)
-                                self.tag_list.append(tag_)
+            if self.status & uOSNMA.KEYCHAIN_VERIFIED == 0:
+                return status
 
-                        if adkd == 12:
-                            print(f"{ctr} prn_d={prn_d} adkd={adkd} slow-MAC "
-                                  "is skipped")
-                            continue
-                        elif adkd == 0:
-                            navmsg = self.gen_navmsg(prn_d)
-                        elif adkd == 4:
-                            navmsg = self.gen_utcmsg()
-                        else:
-                            navmsg = None
+            # 6.5 MAC Look-up Table Verification
+            self.gst_tow_p = self.gst_tow-30
+            self.gst_sf_p = self.set_gst_sf(gst_wn, self.gst_tow_p)
+            result = self.verify_maclt()
+            if self.monlevel > 0:
+                s = f"on {wn:4d}/{tow:6d} prn={prn}"\
+                    f" gst_tow={self.gst_tow_p}"
+                if result:
+                    print(f"MAC Look-up Table verified {s}")
+                else:
+                    print(f"MAC Look-up Table not verified {s}")
+            if not result:
+                return False
 
-                        if navmsg is None:
-                            print(f"{ctr} prn_d={prn_d} adkd={adkd} navmsg is "
-                                  "not available.")
-                            continue
+            # 6.6 MACSEQ Verification
+            # prn_a|gst_sf
+            result = self.verify_macseq()
+            if self.monlevel > 0:
+                s = f"on {wn:4d}/{tow:6d} prn={prn}"
+                if result:
+                    print(f"MACSEQ Verified {s}")
+                else:
+                    print(f"MACSEQ not verified {s}")
+            if not result:
+                return False
 
+            # 6.7 Tag Verification
+            for k in range(self.nt):
+                ctr = k+1
+                if k == 0:  # self-tag
+                    prn_d = self.prn_a
+                    adkd = 0
+                    tag, macseq, cop = self.decode_tags_info(0)
+                else:
+                    tag, prn_d, adkd, cop = self.decode_tags_info(k)
+                    if adkd == 12 and self.flg_slowmac:
+                        # delayed tag loading
+                        navmsg = self.gen_navmsg(prn_d)
                         tag_ = taginfo(self.gst_sf_p, prn_d,
-                                       adkd, cop, tag, ctr, navmsg)
-                        result = self.verify_navmsg(tag_)
-                        status = self.chk_nav(result, tag_)
-                        if status and adkd == 4:
-                            self.status |= uOSNMA.UTC_VERIFIED
-                        if self.monlevel > 0:
-                            if result:
-                                print(f"# {ctr} prn_d={prn_d} adkd={
-                                      adkd} tag verified")
-                            else:
-                                print(f"{ctr} prn_d={prn_d} adkd={
-                                      adkd} tag not verified")
-                    # slow MAC
-                    if self.flg_slowmac:
-                        for tag_ in self.tag_list:
-                            dt = self.difftime(self.gst_sf, tag_.gst_sf)
-                            if dt == 300:
-                                result = self.verify_navmsg(tag_)
-                                if self.monlevel > 0 and result:
-                                    print("SLOW-MAC# %d prn_d=%2d adkd=%2d tag verified"
-                                          % (tag_.cnt, tag_.prn, tag_.adkd))
-                            elif dt > 300:
-                                tag_ = None
+                                       self.prn_a, adkd, cop,
+                                       tag, ctr, navmsg)
+                        self.tag_list.append(tag_)
 
+                if adkd == 12:
+                    print(f"{ctr} prn_d={prn_d} adkd={adkd} slow-MAC "
+                          "is skipped")
+                    continue
+                elif adkd == 0:
+                    navmsg = self.gen_navmsg(prn_d)
+                elif adkd == 4:
+                    navmsg = self.gen_utcmsg()
+                else:
+                    navmsg = None
+
+                if navmsg is None:
+                    print(f"{ctr} prn_d={prn_d} adkd={adkd} navmsg is "
+                          "not available.")
+                    continue
+
+                tag_ = taginfo(self.gst_sf_p, prn_d, self.prn_a,
+                               adkd, cop, tag, ctr, navmsg)
+                result = self.verify_navmsg(tag_)
+                status = self.save_auth_nav(result, tag_)
+                if status and adkd == 4:
+                    self.status |= uOSNMA.UTC_VERIFIED
+                if self.monlevel > 0:
+                    s = f"{ctr} prn_d={prn_d:2d} adkd={adkd:2d}"
+                    if adkd != 4:
+                        s += f" iodnav={tag_.iodnav}"
+                    if result:
+                        print(f"# {s} tag verified")
+                    else:
+                        print(f"{s} tag not verified")
+            # slow MAC
+            if self.flg_slowmac:
+                for tag_ in self.tag_list:
+                    dt = self.difftime(self.gst_sf_p, tag_.gst_sf)
+                    if dt == 300:
+                        self.prn_a = tag_.prn_a
+                        result = self.verify_navmsg(tag_)
+                        status = self.save_auth_nav(result, tag_)
+                        if self.monlevel > 0:
+                            s = f"cnt={tag_.cnt} prn_d={tag_.prn_d:2d}" \
+                                f" prn_a={tag_.prn_a:2d} iodnav={tag_.iodnav}"
+                            if result:
+                                print(f"Slow-MAC {s} verified")
+                            else:
+                                print(f"{s} not verified")
+                    elif dt > 300:
+                        self.tag_list.remove(tag_)
+
+            self.nsat = self.count_valid_sat()
             self.cnt[prn-1] = 0
         return status
