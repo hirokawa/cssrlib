@@ -7,6 +7,7 @@ from enum import IntEnum
 from math import floor, sin, cos, sqrt, asin, atan2, fabs, tan
 import numpy as np
 from datetime import datetime, timezone
+import bitstruct.c as bs
 
 gpst0 = [1980, 1, 6, 0, 0, 0]  # GPS system time reference
 gst0 = [1999, 8, 22, 0, 0, 0]  # Galileo system time reference
@@ -1486,3 +1487,16 @@ def tropmodelHpf():
     trop_wet = (77.6e-6 * 11000.0 * 4810.0 * e/temp**2)/5.0
 
     return trop_dry, trop_wet, None
+
+
+def copy_buff(src, dst, ofst_s=0, ofst_d=0, blen=0):
+    """ copy bit-wise buffer copy """
+    b = blen//32
+    r = blen-b*32
+    for k in range(b):
+        d = bs.unpack_from('u32', src, k*32+ofst_s)[0]
+        bs.pack_into('u32', dst, k*32+ofst_d, d)
+    if r > 0:
+        fmt = 'u'+str(r)
+        d = bs.unpack_from(fmt, src, b*32+ofst_s)[0]
+        bs.pack_into(fmt, dst, b*32+ofst_d, d)

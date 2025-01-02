@@ -21,7 +21,8 @@ from cryptography.exceptions import InvalidSignature
 from binascii import unhexlify, hexlify
 from enum import IntEnum
 import xml.etree.ElementTree as et
-from cssrlib.gnss import gpst2time, time2gst
+from cssrlib.gnss import gpst2time, time2gst, copy_buff
+from cssrlib.qznma import raw2der
 
 
 class uOSNMA(IntEnum):
@@ -164,16 +165,6 @@ class osnma():
     flg_slowmac = False
     nsat = 0
 
-    def raw2der(self, ds):
-        """ convert digital signature from raw format to der format """
-        lds = len(ds)
-        ln = lds//2
-        r = int.from_bytes(ds[:ln], byteorder='big')
-        s = int.from_bytes(ds[ln:], byteorder='big')
-        der = utils.encode_dss_signature(r, s)
-
-        return bytes(der)
-
     def difftime(self, t1, t2):
         """ difference of time between t1 and t2 """
         wn1, tow1 = bs.unpack_from('u12u20', t1, 0)
@@ -277,7 +268,7 @@ class osnma():
 
         result = False
         hash_func = self.hash_table[self.hf]
-        ds_der = self.raw2der(self.ds)
+        ds_der = raw2der(self.ds)
         if self.pubk_path is None:
             pk = self.pk_list[self.pkid].pk
         else:
@@ -580,14 +571,8 @@ class osnma():
             return False
         if mt > 0 and mt <= 10:
             j = (mt-1)*16*8
-            for k in range(14):
-                b = bs.unpack_from('u8', df, 2+8*k)[0]
-                bs.pack_into('u8', self.subfrm, j, b)
-                j += 8
-            for k in range(2):
-                b = bs.unpack_from('u8', df, 122+8*k)[0]
-                bs.pack_into('u8', self.subfrm, j, b)
-                j += 8
+            copy_buff(df, self.subfrm, 2, j, 112)
+            copy_buff(df, self.subfrm, 122, j+112, 16)
         return True
 
     def load_inav(self, msg):
@@ -606,18 +591,9 @@ class osnma():
         if even != 0 or odd != 1 or pt1 != 0 or pt2 != 0:
             print("I/NAV page format error.")
 
-        i = 2
-        for k in range(14):
-            nav[k] = bs.unpack_from('u8', msg, i)[0]
-            i += 8
-        i += 8
-        for k in range(2):
-            nav[14+k] = bs.unpack_from('u8', msg, i)[0]
-            i += 8
-
-        for k in range(5):
-            nma_b[k] = bs.unpack_from('u8', msg, i)[0]
-            i += 8
+        copy_buff(msg, nav, 2, 0, 112)
+        copy_buff(msg, nav, 122, 112, 16)
+        copy_buff(msg, nma_b, 138, 0, 40)
 
         return nav, nma_b
 
@@ -629,7 +605,6 @@ class osnma():
         if tow % 30 == 1:
             self.subfrm[j0:j0+160] = self.subfrm_p[j0:j0+160]
             self.subfrm_p[j0:j0+160] = self.subfrm_n[j0:j0+160]
-            # self.subfrm_n[j0:j0+160] = [0]*160
 
         if mt > 0 and mt <= 10:
             j = j0+(mt-1)*16
@@ -659,26 +634,17 @@ class osnma():
         if self.monlevel > 1:
             svid = bs.unpack_from('u6', self.subfrm, j0+16+3*16*8)[0]
             wn, tow = bs.unpack_from('u12u20', self.subfrm, j0+73+4*16*8)
-            print(f" svid={svid:2d} iodnav={
-                  iodnav1:2d} gst_wn={wn:4d} gst_tow={tow:6d}")
+            print(f" svid={svid:2d} iodnav={iodnav1:2d} "
+                  f"gst_wn={wn:4d} gst_tow={tow:6d}")
 
         msg = bytearray(69)
         # 549b MT1 120b, MT2 120b, MT3 122b, MT4 120b, MT5 67b
+        blen_t = [120, 120, 122, 120, 67]
         j = 0
         for mt in range(5):
-            for k in range(15):
-                b = bs.unpack_from('u8', self.subfrm, j0+6+k*8+mt*16*8)[0]
-                bs.pack_into('u8', msg, j, b)
-                j += 8
-                if mt == 4 and k >= 7:
-                    b = bs.unpack_from('u3', self.subfrm, j0+70+4*16*8)[0]
-                    bs.pack_into('u3', msg, j, b)
-                    j += 3
-                    break
-            if mt == 2:
-                b = bs.unpack_from('u2', self.subfrm, j0+126+2*16*8)[0]
-                bs.pack_into('u2', msg, j, b)
-                j += 2
+            copy_buff(self.subfrm, msg, j0+6+mt*16*8, j, blen_t[mt])
+            j += blen_t[mt]
+
         return msg
 
     def gen_utcmsg(self):
@@ -699,15 +665,8 @@ class osnma():
 
         # 141b MT6 99b, MT10 42b
         msg = bytearray(18)
-        j = 0
-        for k in range(13):
-            b = bs.unpack_from('u8', mt6, 6+k*8)[0]
-            bs.pack_into('u8', msg, j, b)
-            j += 8
-        j = 99
-
-        a0g, a1g, t0g, wn0g = bs.unpack_from('s16s12u8u6', mt10, 86)
-        bs.pack_into('s16s12u8u6', msg, j, a0g, a1g, t0g, wn0g)
+        copy_buff(mt6, msg, 6, 0, 99)
+        copy_buff(mt10, msg, 86, 99, 42)
 
         return msg
 
