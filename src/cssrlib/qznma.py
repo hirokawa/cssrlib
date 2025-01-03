@@ -572,6 +572,10 @@ class qznma():
         if self.pk is None:
             pubk_path = self.pubk_bdir + f"/{npr.keyid:03d}.der"
             self.pk = load_pubkey(pubk_path)
+            if self.pk is None:
+                if self.monlevel > 0:
+                    print(f"loading public key {npr.keyid} was faild.")
+                return False
 
         ds_der = raw2der(npr.ds)
         status = False
@@ -762,6 +766,10 @@ class qznma():
         if self.pk is None:
             pubk_path = self.pubk_bdir + f"/{npr.keyid:03d}.der"
             self.pk = load_pubkey(pubk_path)
+            if self.pk is None:
+                if self.monlevel > 0:
+                    print(f"loading public key {npr.keyid} was faild.")
+                return False
 
         status = False
         try:
