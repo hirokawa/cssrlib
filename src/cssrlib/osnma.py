@@ -15,6 +15,7 @@ Note:
 
 """
 
+import os
 import numpy as np
 import bitstruct.c as bs
 from cryptography.hazmat.primitives import hashes, hmac, cmac
@@ -204,7 +205,7 @@ class osnma():
                 self.root_mt = x_
         return True
 
-    def __init__(self, mt_file=None):
+    def __init__(self, mt_file=None, logfile='log_osnma.txt'):
         self.monlevel = 1       # debug monitor level
         self.vcnt_min = 1
 
@@ -217,9 +218,6 @@ class osnma():
             self.hk.append(bytearray(15))
             self.mack.append(bytearray(60))
         self.pk_list = {}
-
-        if mt_file is not None:
-            self.load_mt(self.pubk_bdir + mt_file)
 
         self.flg_dsm = {}
 
@@ -237,6 +235,14 @@ class osnma():
         self.key = bytearray(16)
 
         self.vstatus = {}  # validation status [prn][iodnav]
+
+        self.fh = open(logfile, "wt")
+
+        if mt_file is not None:
+            if not os.path.exists(self.pubk_bdir+mt_file):
+                print(f"{mt_file} is not existing.")
+                return
+            self.load_mt(self.pubk_bdir + mt_file)
 
     def process_hash(self, msg):
         """ calculate hash """
@@ -277,7 +283,6 @@ class osnma():
             pk.verify(ds_der, bytes(msg), ec.ECDSA(hash_func()))
             result = True
         except InvalidSignature:
-            print('signature NG.')
             return False
         if result:
             self.status |= uOSNMA.ROOTKEY_VERIFIED  # root key verified
@@ -360,7 +365,8 @@ class osnma():
         i += l_ds//8
         p_dk = self.dsm[did][i:i+(l_pdk+7)//8]
         if not self.verify_pdk(p_dk, did):
-            print("p_dk verification error.")
+            if self.monlevel > 0:
+                print("p_dk verification error.")
             return False
         self.status |= uOSNMA.ROOTKEY_LOADED  # KROOT loaded
         self.did0 = did
@@ -457,6 +463,8 @@ class osnma():
                 result = self.decode_dsm_pkr(did)
 
         if result:
+            if self.monlevel > 0:
+                self.fh.write(f"## DSM[{did}] decoded.\n")
             self.flg_dsm[did] = 0
         return result
 
