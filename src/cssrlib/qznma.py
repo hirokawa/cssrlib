@@ -12,16 +12,16 @@ Note:
 @author: Rui Hirokawa
 """
 
+import copy
 from binascii import unhexlify, hexlify
 import numpy as np
 import bitstruct.c as bs
 from cssrlib.gnss import uGNSS, prn2sat, sat2prn, copy_buff
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec, utils
-from cryptography.x509 import load_pem_x509_certificate
 from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec
 from enum import IntEnum
-import copy
+from cssrlib.osnma import raw2der, load_pubkey
 
 dtype_ = [('wn', 'int'), ('tow', 'float'), ('prn', 'int'),
           ('type', 'int'), ('len', 'int'), ('nav', 'S512')]
@@ -39,12 +39,6 @@ class uNavId(IntEnum):
     GPS_CNAV2 = 3
     GAL_FNAV = 4
     GAL_INAV = 5
-
-
-class uCert(IntEnum):
-    X509_CRT = 1
-    PEM = 2
-    DER = 3
 
 
 class NavMsg():
@@ -90,44 +84,6 @@ class NavParam():
         self.keyid = keyid
         self.ds = ds
         self.salt = salt
-
-
-def load_pubkey(pubk_path):
-    """ load public key information in crt/pem/der format  """
-    ext = pubk_path.split('.')[-1]
-    if ext == 'crt':
-        pk_fmt = uCert.X509_CRT
-        mode = 'rt'
-    elif ext == 'pem':
-        pk_fmt = uCert.PEM
-        mode = 'rt'
-    elif ext == 'der':
-        pk_fmt = uCert.DER
-        mode = 'rb'
-    else:
-        return None
-
-    with open(pubk_path, mode) as f:
-        pubk = f.read()
-        if pk_fmt == uCert.X509_CRT:
-            pk = load_pem_x509_certificate(pubk.encode()).public_key()
-        elif pk_fmt == uCert.PEM:
-            pk = serialization.load_pem_public_key(pubk.encode())
-        elif pk_fmt == uCert.DER:
-            pk = serialization.load_der_public_key(pubk)
-
-    return pk
-
-
-def raw2der(ds):
-    """ convert digital signature in raw-format to der-format """
-    lds = len(ds)
-    ln = lds//2
-
-    r = int.from_bytes(ds[:ln], byteorder='big')
-    s = int.from_bytes(ds[ln:], byteorder='big')
-    der = utils.encode_dss_signature(r, s)
-    return bytes(der)
 
 
 class qznma():
