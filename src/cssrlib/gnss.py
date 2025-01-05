@@ -100,6 +100,7 @@ class rCST():
     P2_20 = 9.536743164062500E-07
     P2_21 = 4.768371582031250E-07
     P2_24 = 5.960464477539063e-08
+    P2_26 = 1.490116119384766e-08
     P2_27 = 7.450580596923828e-09
     P2_28 = 3.725290298461914E-09
     P2_29 = 1.862645149230957E-09
@@ -691,15 +692,37 @@ class Geph():
     sva = 0
     age = 0.0
     toe = gtime_t()
+    toes = 0.0
     tof = gtime_t()
     pos = np.zeros(3)
     vel = np.zeros(3)
     acc = np.zeros(3)
     taun = 0.0         # SV clock bias [s]
-    gamn = 0.0         # relative frq bias
+    gamn = 0.0         # SV clock drift [s/s]
+    beta = 0.0         # SV clock drift rate [s/s^2]
     dtaun = 0.0        # delta between L1 and L2 [s]
     mode = 0
-    status = 0
+    status = 0  # data validity
+    flag = 0
+
+    # for CDMA
+    urai = np.zeros(2, dtype=int)
+    dpos = np.zeros(3)
+
+    psi = 0.0  # yaw angle [rad]
+    sn = 0  # sign flag
+    win = 0.0  # angular rate [rad/s]
+    dw = 0.0  # angular accel [rad/s^2]
+    wmax = 0.0  # max angular rate[rad/s]
+    aode = 0
+    aodc = 0  # age of data orbit/clock [days]
+    tin = 0.0
+    tau1 = 0.0
+    tau2 = 0.0
+
+    src = 0  # source flags (b0-1: Rt, b2-3: Re)
+    sattype = 0  # 0 - M(L3), 1 - K1(L3), 3 - K1(L2/L3), 2 - K2 (L1/L2/L3)
+    isc = np.zeros(3)  # 0: ISC_L1OC, 1: ISC_L2OC, 2: ISC_L3OC
 
     def __init__(self, sat=0):
         self.sat = sat
@@ -781,6 +804,8 @@ class Nav():
         self.armode = 0
         self.thresar = 3.0  # AR acceptance threshold
         self.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
+
+        self.leaps = 18  # leap seconds [s]
 
         # Select tropospheric model
         #
