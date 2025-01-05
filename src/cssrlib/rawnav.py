@@ -94,9 +94,6 @@ class RawNav():
             self.bds_cnv3[k] = bytearray(200)
 
         self.glo_ca = {}
-        for k in range(uGNSS.GLOMAX):
-            self.glo_ca[k] = bytearray(200)
-
         self.glo_l1oc = {}
         self.glo_l2oc = {}
         self.glo_l3oc = {}
@@ -1508,32 +1505,37 @@ class RawNav():
 
         sid = bs.unpack_from('u4', msg, 1)[0]
 
-        if sid == 0 or sid > 4:
+        if sid == 0 or sid > 5:
             return None
 
-        buff = self.glo_ca[prn-1]
+        if prn not in self.glo_ca:
+            self.glo_ca[prn] = bytearray(60)
 
-        if sid == 1:  # when tk is updated, clear buffer
-            tk = bs.unpack_from('u12', msg, 9)[0]
-            tk_ = bs.unpack_from('u12', bytes(buff), 9)[0]
-            if tk != tk_:
-                for sid_ in range(4):
-                    buff[sid_*12:sid_*12+12] = bytearray(12)
+        # if sid == 1:  # when tk is updated, clear buffer
+        #    tk = bs.unpack_from('u12', msg, 9)[0]
+        #    tk_ = bs.unpack_from('u12', bytes(buff), 9)[0]
+        #    if tk != tk_:
+        #        for sid_ in range(4):
+        #            buff[sid_*12:sid_*12+12] = bytearray(12)
+        i0 = (sid-1)*12
+        copy_buff(msg, self.glo_ca[prn], 0, i0*8, 96)
+        # self.glo_ca[prn][i0:i0+12] = msg[0:12]
+        # buff = bytes(buff)
 
-        buff[(sid-1)*12:(sid-1)*12+12] = msg[0:12]
-        buff = bytes(buff)
+        buff = self.glo_ca[prn]
 
         id1 = bs.unpack_from('u4', buff, 1)[0]
         id2 = bs.unpack_from('u4', buff, 96+1)[0]
         id3 = bs.unpack_from('u4', buff, 96*2+1)[0]
         id4 = bs.unpack_from('u4', buff, 96*3+1)[0]
+        id5 = bs.unpack_from('u4', buff, 96*4+1)[0]
 
-        if id1 != 1 or id2 != 2 or id3 != 3 or id4 != 4:
+        if id1 != 1 or id2 != 2 or id3 != 3 or id4 != 4 or id5 != 5:
             return None
 
         geph = Geph(sat)
 
-        # frame 1
+        # string 1
         i = 7
         P1, tk_h, tk_m, tk_s = bs.unpack_from('u2u5u6u1', buff, i)
         i += 14
@@ -1544,7 +1546,7 @@ class RawNav():
         geph.pos[0] = self.getbitg(buff, i, 27)*rCST.P2_11*1e3
         i += 27
 
-        # frame 2
+        # string 2
         i = 96+5
         Bn, P2, tb = bs.unpack_from('u3u1u7', buff, i)
         i += 11+5
@@ -1555,7 +1557,7 @@ class RawNav():
         geph.pos[1] = self.getbitg(buff, i, 27)*rCST.P2_11*1e3
         i += 27
 
-        # frame 3
+        # string 3
         i = 96*2+5
         P3 = bs.unpack_from('u1', buff, i)[0]
         i += 1
@@ -1570,7 +1572,7 @@ class RawNav():
         geph.pos[2] = self.getbitg(buff, i, 27)*rCST.P2_11*1e3
         i += 27
 
-        # frame 4
+        # string 4
         i = 96*3+5
         geph.taun = self.getbitg(buff, i, 22)*rCST.P2_30
         i += 22
@@ -1579,12 +1581,23 @@ class RawNav():
         En, _, P4, FT, _, NT, slot, M = bs.unpack_from(
             'u5u14u1u4u3u11u5u2', buff, i)
 
-        geph.sat = prn2sat(uGNSS.GLO, slot)
+        # string 5
+        i = 96*4+5
+        NA = bs.unpack_from('u11', buff, i)[0]
+        i += 11
+        geph.tau_c = self.getbitg(buff, i, 32)*rCST.P2_31
+        i += 32+1
+        N4 = bs.unpack_from('u5', buff, i)[0]
+        i += 5
+        geph.tau_gps = self.getbitg(buff, i, 22)*rCST.P2_30
+        i += 22
+
+        # geph.sat = prn2sat(uGNSS.GLO, slot)
 
         geph.svh = Bn
         geph.age = En
         geph.sva = FT
-        geph.frq = freq-8
+        geph.frq = freq
 
         geph.iode = tb
 
@@ -1626,7 +1639,7 @@ class RawNav():
 
         buff = self.glo_l1oc[sat]
         i0 = sid_t[sid]*32*8
-        copy_buff(msg, buff, 12, i0, 222)
+        copy_buff(msg, buff, 12, i0, 222)  # buffer without preamble
         geph = self.decode_glo_cdma(week, time, sat, buff, 1)
         return geph
 
@@ -1646,7 +1659,7 @@ class RawNav():
 
         buff = self.glo_l3oc[sat]
         i0 = sid_t[sid]*32*8
-        copy_buff(msg, buff, 20, i0, 256)
+        copy_buff(msg, buff, 20, i0, 256)  # buffer without preamble
         geph = self.decode_glo_cdma(week, time, sat, buff, 3)
         return geph
 
@@ -1670,17 +1683,22 @@ class RawNav():
         i = 6
         # service field
         if stype == 1:  # L1OS
+            blen = 32
             svid, svh, valid, P1, P2, KP, A, ts = \
                 bs.unpack_from('u6u1u1u4u1u2u1u16', buff, i)
-            i += 32
         else:  # L3OS
+            blen = 31
             ts, svid, svh, valid, P1, P2, KP, A = \
                 bs.unpack_from('u15u6u1u1u4u1u2u1', buff, i)
-            i += 31
+        i += blen
 
-        N4, Nt, M, PS, tb, Ee, Et, Re, Rt, Fe, Ft = \
-            bs.unpack_from('u5u11u3u6u10u8u8u2u2s5s5', buff, i)
-        i += 65
+        N4, Nt, M, PS, tb, Ee, Et, Re, Rt = \
+            bs.unpack_from('u5u11u3u6u10u8u8u2u2', buff, i)
+        i += 55
+        geph.urai[0] = self.getbitg(buff, i, 5)  # Fe
+        i += 5
+        geph.urai[1] = self.getbitg(buff, i, 5)  # Ft
+        i += 5
 
         # N4: four-year interval
         # Nt: number of day
@@ -1691,34 +1709,63 @@ class RawNav():
         # Re, Rt: regime for generation of ephemeris/clock
         # Fe, Ft: ephemeris, clock accuracy index urai orb/clk
 
-        tau, gam, bet, tau_c, tc = \
-            bs.unpack_from('u32u19u15u40u13', buff, i)
+        geph.taun = self.getbitg(buff, i, 32)*rCST.P2_38
+        i += 32
+        geph.gamn = self.getbitg(buff, i, 19)*rCST.P2_48
+        i += 19
+        geph.beta = self.getbitg(buff, i, 15)*rCST.P2_57
+        i += 15
+        geph.tau_c = self.getbitg(buff, i, 40)*rCST.P2_31
+        i += 40
+        geph.dtau_c = self.getbitg(buff, i, 13)*rCST.P2_49
+        i += 13
 
         # MT11
         i = 32*8+6
+        i += blen
 
-        ts, svid, svh, valid, P1, P2, KP, A = \
-            bs.unpack_from('u15u6u1u1u4u1u2u1', buff, i)
-
-        i += 31
-        x, y, z, vx, vy = \
-            bs.unpack_from('s40s40s40s35s35', buff, i)
+        geph.pos[0] = self.getbitg(buff, i, 40)*rCST.P2_20*1e3
+        i += 40
+        geph.pos[1] = self.getbitg(buff, i, 40)*rCST.P2_20*1e3
+        i += 40
+        geph.pos[2] = self.getbitg(buff, i, 40)*rCST.P2_20*1e3
+        i += 40
+        geph.vel[0] = self.getbitg(buff, i, 35)*rCST.P2_30*1e3
+        i += 35
+        geph.vel[1] = self.getbitg(buff, i, 35)*rCST.P2_30*1e3
+        i += 35
 
         # MT12
         i = 32*2*8+6
+        i += blen
 
-        ts, svid, svh, valid, P1, P2, KP, A = \
-            bs.unpack_from('u15u6u1u1u4u1u2u1', buff, i)
-        i += 31
-        vz, ax, ay, az, dx, dy, dz, dtau_L3, tau_gps = \
-            bs.unpack_from('s35s15s15s15s13s13s13s18s30', buff, i)
+        geph.vel[2] = self.getbitg(buff, i, 35)*rCST.P2_30*1e3
+        i += 35
+        geph.acc[0] = self.getbitg(buff, i, 15)*rCST.P2_39*1e3
+        i += 15
+        geph.acc[1] = self.getbitg(buff, i, 15)*rCST.P2_39*1e3
+        i += 15
+        geph.acc[2] = self.getbitg(buff, i, 15)*rCST.P2_39*1e3
+        i += 15
+        geph.dpos[0] = self.getbitg(buff, i, 13)*rCST.P2_10
+        i += 13
+        geph.dpos[1] = self.getbitg(buff, i, 13)*rCST.P2_10
+        i += 13
+        geph.dpos[2] = self.getbitg(buff, i, 13)*rCST.P2_10
+        i += 13
+
+        # dtau_L2 (L1OS), dtau_L3 (L3OS)
+        j = 1 if stype == 1 else 2
+        geph.isc[j] = self.getbitg(buff, i, 18)*rCST.P2_38
+        i += 18
+        geph.tau_gps = self.getbitg(buff, i, 30)*rCST.P2_38
+        i += 30
 
         # MT16
         i = 32*3*8+6
+        i += blen
 
-        # ts, svid, svh, valid, P1, P2, KP, A = \
-        #    bs.unpack_from('u15u6u1u1u4u1u2u1', buff, i)
-        i += 31
+        # the instant in signal time of noon/midnight turn maneuver start.
         tin, psi, sn, wmax, win, dw, tau1, tau2 = \
             bs.unpack_from('u22u15u1u17u17u15u13u17', buff, i)
 
@@ -1732,26 +1779,8 @@ class RawNav():
         geph.tau1 = tau1*rCST.P2_5
         geph.tau2 = tau2*rCST.P2_5
 
-        geph.pos[0] = x*rCST.P2_20*1e3
-        geph.pos[1] = y*rCST.P2_20*1e3
-        geph.pos[2] = z*rCST.P2_20*1e3
-        geph.vel[0] = vx*rCST.P2_30*1e3
-        geph.vel[1] = vy*rCST.P2_30*1e3
-        geph.vel[2] = vz*rCST.P2_30*1e3
-        geph.acc[0] = ax*rCST.P2_39*1e3
-        geph.acc[1] = ay*rCST.P2_39*1e3
-        geph.acc[2] = az*rCST.P2_39*1e3
-
-        geph.dpos[0] = dx*rCST.P2_10
-        geph.dpos[1] = dy*rCST.P2_10
-        geph.dpos[2] = dz*rCST.P2_10
-
         # KP: expected UTC(SU) correection
         # A: L1OCd time correction in next string  0: no plan
-
-        geph.taun = tau*rCST.P2_38
-        geph.gamn = gam*rCST.P2_48
-        geph.beta = bet*rCST.P2_57
 
         geph.sattype = M  # 0:M(L3),1:K1(L3),3:K1(L2/L3),2:K2(L1/L2/L3)
         geph.svh = svh  # 0:health, 1:unhealthy
@@ -1761,11 +1790,6 @@ class RawNav():
 
         geph.aode = Ee*0.25  # age of ephemeris [days]
         geph.aodc = Et*0.25  # age of clock [days]
-
-        geph.urai[0] = Fe
-        geph.urai[1] = Ft
-
-        geph.isc[2] = dtau_L3*rCST.P2_38
 
         geph.toe = gep2time(N4, Nt, tb*90.0)
         _, geph.toes = time2gpst(geph.toe)

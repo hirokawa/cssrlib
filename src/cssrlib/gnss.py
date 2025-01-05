@@ -705,6 +705,10 @@ class Geph():
     status = 0  # data validity
     flag = 0
 
+    tau_c = 0.0  # GLONASS time scale correction to UTC(SU) time
+    dtau_c = 0.0
+    tau_gps = 0.0  # correction to GPS time relative to GLONASS time
+
     # for CDMA
     urai = np.zeros(2, dtype=int)
     dpos = np.zeros(3)
