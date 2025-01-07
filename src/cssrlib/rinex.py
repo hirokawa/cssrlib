@@ -1,5 +1,8 @@
 """
 module for RINEX 3.0x processing
+
+[1] RINEX: The Receiver Independent Exchange Format Version 4.02, 2024
+
 """
 
 import numpy as np
@@ -8,7 +11,7 @@ from cssrlib.gnss import bdt2gpst, time2bdt
 from cssrlib.gnss import gpst2time, bdt2time, epoch2time, timediff, gtime_t
 from cssrlib.gnss import prn2sat, char2sys, timeget, utc2gpst, time2epoch
 from cssrlib.gnss import Eph, Geph, Obs, sat2id, sat2prn, gpst2bdt, time2gpst
-from cssrlib.gnss import timeadd, id2sat, gpst2utc
+from cssrlib.gnss import timeadd, id2sat, gpst2utc, Seph
 
 
 class pclk_t:
@@ -161,6 +164,8 @@ class rnxdec:
                     if line[0:4] == 'GPSB' or line[0:4] == 'QZSB':
                         for k in range(4):
                             nav.ion[1, k] = self.flt(line[5+k*12:5+(k+1)*12])
+                elif line[60:72] == 'LEAP SECONDS':
+                    nav.leaps = int(line[:6])
 
             for line in fnav:
 
@@ -205,12 +210,14 @@ class rnxdec:
                     elif line[0:5] == '> ION':  # iono (TBD)
                         sys = char2sys(line[6])
                         itype = line[10:14]
+                        stype = '' if len(line) < 20 else line[15:19]
                         line = fnav.readline()
                         ttm = self.decode_time(line, 4)
                         if sys == uGNSS.GAL and itype == 'IFNV':  # Nequick-G
-                            for k in range(3):
+                            for k in range(3):  # ai0, ai1, ai2
                                 nav.ion[0, k] = self.flt(line, k+1)
                             line = fnav.readline()
+                            # disturbance flags
                             nav.ion[0, 3] = int(self.flt(line, 0))
                         elif sys == uGNSS.BDS and itype == 'CNVX':  # BDGIM
                             ttm = self.decode_time(line, 4)
@@ -223,6 +230,41 @@ class rnxdec:
                             line = fnav.readline()
                             for k in range(2):
                                 nav.ion_gim[k+7] = self.flt(line, k)
+                        elif sys == uGNSS.IRN and itype == 'L1NV':  # L1NAV
+                            if stype == 'KLOB':  #
+                                iodk = self.flt(line, 1)
+                                line = fnav.readline()
+                                for k in range(4):
+                                    nav.ion[0, k] = self.flt(line, k)
+                                line = fnav.readline()
+                                for k in range(4):
+                                    nav.ion[1, k] = self.flt(line, k)
+                                line = fnav.readline()
+                                nav.ion_region = np.zeros(4)
+                                for k in range(4):
+                                    nav.ion_region[k] = self.flt(line, k)
+
+                            elif stype == 'NEQN':
+                                nav.ion_region = np.zeros((3, 4))
+                                iodn = self.flt(line, 1)
+
+                                for j in range(3):
+                                    line = fnav.readline()
+                                    nav.ion = np.zeros((3, 4))
+                                    for k in range(4):  # a0, a1, a2, idf
+                                        nav.ion[j, k] = self.flt(line, k)
+                                    line = fnav.readline()
+                                    # lon_min, lon_max, mopid_min, mopid_max
+                                    for k in range(4):
+                                        nav.ion_region[j, k] = \
+                                            self.flt(line, k)
+
+                        elif sys == uGNSS.GLO and itype == 'LXOC':
+                            c_A = self.flt(line, 1)
+                            c_F10_7 = self.flt(line, 2)
+                            c_Ap = self.flt(line, 3)
+                            nav.ion[0, 0:3] = [c_A, c_F10_7, c_Ap]
+
                         else:  # Klobucher (LNAV, D1D2, CNVX)
                             self.ion_gim = np.zeros(9)
                             for k in range(3):
@@ -243,12 +285,16 @@ class rnxdec:
                         m = line[10:14]
                         if m == 'CNAV' or m == 'CNV1' or m == 'FNAV':
                             self.mode_nav = 1
-                        elif m == 'CNV2':
+                        elif m == 'CNV2' or m == 'L1NV':
                             self.mode_nav = 2
                         elif m == 'CNV3':
                             self.mode_nav = 3
                         elif m == 'FDMA':
                             self.mode_nav = 0
+                        elif m == 'L1OC':
+                            self.mode_nav = 1
+                        elif m == 'L3OC':
+                            self.mode_nav = 3
                         elif m == 'SBAS':
                             self.mode_nav = 0
                         line = fnav.readline()
@@ -265,9 +311,6 @@ class rnxdec:
                 if sys == uGNSS.GLO:
                     prn = int(line[1:3])
                     sat = prn2sat(sys, prn)
-                    pos = np.zeros(3)
-                    vel = np.zeros(3)
-                    acc = np.zeros(3)
                     geph = Geph(sat)
 
                     geph.mode = self.mode_nav
@@ -279,7 +322,83 @@ class rnxdec:
 
                     geph.taun = -self.flt(line, 1)
                     geph.gamn = self.flt(line, 2)
-                    t0 = self.flt(line, 3)
+                    if self.mode_nav == 0:  # FDMA
+                        t0 = self.flt(line, 3)
+                    else:  # L1OC, L3OC
+                        bet_ = self.flt(line, 3)  # clock drift rate
+
+                    line = fnav.readline()  # line #1
+                    geph.pos[0] = self.flt(line, 0)*1e3
+                    geph.vel[0] = self.flt(line, 1)*1e3
+                    geph.acc[0] = self.flt(line, 2)*1e3
+                    geph.svh = int(self.flt(line, 3))
+
+                    line = fnav.readline()  # line #2
+                    geph.pos[1] = self.flt(line, 0)*1e3
+                    geph.vel[1] = self.flt(line, 1)*1e3
+                    geph.acc[1] = self.flt(line, 2)*1e3
+
+                    if self.mode_nav == 0:  # FDMA
+                        geph.frq = int(self.flt(line, 3))
+
+                        if geph.frq > 128:
+                            geph.frq -= 256
+                    else:  # L1OC
+                        dvalid = int(self.flt(line, 3))
+
+                    line = fnav.readline()  # line #3
+                    geph.pos[2] = self.flt(line, 0)*1e3
+                    geph.vel[2] = self.flt(line, 1)*1e3
+                    geph.acc[2] = self.flt(line, 2)*1e3
+
+                    if self.mode_nav == 0:  # FDMA
+                        geph.age = int(self.flt(line, 3))
+                    elif self.mode_nav == 1:  # L1OC
+                        tgd_L2OCp = self.flt(line, 3)  # tgd_L2OCp
+                    elif self.mode_nav == 3:  # L3OC
+                        isc_L3OCp = self.flt(line, 3)  # isc_L3OCp
+
+                    # Use GLONASS line #4 only from RINEX v3.05 onwards
+                    #
+                    if self.ver >= 3.05:
+
+                        line = fnav.readline()  # line #4
+
+                        if self.mode_nav == 0:  # FDMA
+                            # b7-8: M, b6: P4, b5: P3, b4: P2, b2-3: P1, b0-1: P
+                            geph.status = int(self.flt(line, 0))
+                            geph.dtaun = -self.flt(line, 1)
+                            geph.urai = int(self.flt(line, 2))
+                            if len(line) >= 80:
+                                geph.svh = int(self.flt(line, 3))
+                        else:  # L1OC,L3OC
+                            sattype = int(self.flt(line, 0))
+                            src = int(self.flt(line, 1))
+                            aode_ee = int(self.flt(line, 2))
+                            aode_et = int(self.flt(line, 3))
+
+                            line = fnav.readline()  # line #5
+                            P2 = int(self.flt(line, 0))  # attitude flag
+                            t0 = self.flt(line, 1)  # sec of day, UTC(SU)
+                            tau1 = self.flt(line, 2)
+                            tau2 = self.flt(line, 3)
+
+                            line = fnav.readline()  # line #6
+                            yaw = self.flt(line, 0)
+                            sgn = int(self.flt(line, 1))
+                            win = self.flt(line, 2)
+                            dw = self.flt(line, 3)
+
+                            line = fnav.readline()  # line #7
+                            wmax = self.flt(line, 0)
+                            dxpc = self.flt(line, 1)
+                            dypc = self.flt(line, 2)
+                            dzpc = self.flt(line, 3)
+
+                            line = fnav.readline()  # line #8
+                            urai_orb = int(self.flt(line, 0))
+                            urai_clk = int(self.flt(line, 1))
+                            tot = self.flt(line, 2)
 
                     tod = t0 % 86400.0
                     tof = gpst2time(week, tod + dow*86400.0)
@@ -291,47 +410,42 @@ class rnxdec:
                     # iode = Tb(7bit)
                     geph.iode = int(((tocs+10800.0) % 86400)/900.0+0.5)
 
-                    line = fnav.readline()  # line #1
-                    pos[0] = self.flt(line, 0)*1e3
-                    vel[0] = self.flt(line, 1)*1e3
-                    acc[0] = self.flt(line, 2)*1e3
-                    geph.svh = int(self.flt(line, 3))
-
-                    line = fnav.readline()  # line #2
-                    pos[1] = self.flt(line, 0)*1e3
-                    vel[1] = self.flt(line, 1)*1e3
-                    acc[1] = self.flt(line, 2)*1e3
-                    geph.frq = int(self.flt(line, 3))
-
-                    if geph.frq > 128:
-                        geph.frq -= 256
-
-                    line = fnav.readline()  # line #3
-                    pos[2] = self.flt(line, 0)*1e3
-                    vel[2] = self.flt(line, 1)*1e3
-                    acc[2] = self.flt(line, 2)*1e3
-                    geph.age = int(self.flt(line, 3))
-
-                    geph.pos = pos
-                    geph.vel = vel
-                    geph.acc = acc
-
-                    # Use GLONASS line #4 only from RINEX v3.05 onwards
-                    #
-                    if self.ver >= 3.05:
-
-                        line = fnav.readline()  # line #4
-
-                        # b7-8: M, b6: P4, b5: P3, b4: P2, b2-3: P1, b0-1: P
-                        geph.status = int(self.flt(line, 0))
-                        geph.dtaun = -self.flt(line, 1)
-                        geph.urai = int(self.flt(line, 2))
-                        # svh = int(self.flt(line, 3))
-
                     nav.geph.append(geph)
                     continue
 
-                elif sys not in (uGNSS.GPS, uGNSS.GAL, uGNSS.QZS, uGNSS.BDS):
+                elif sys == uGNSS.SBS:
+                    prn = int(line[1:3])+100
+                    sat = prn2sat(sys, prn)
+                    seph = Seph(sat)
+
+                    seph.toc = self.decode_time(line, 4)
+                    seph.af0 = self.flt(line, 1)
+                    seph.af1 = self.flt(line, 2)
+                    seph.tot = self.flt(line, 3)
+
+                    line = fnav.readline()  # line #1
+                    seph.pos[0] = self.flt(line, 0)*1e3
+                    seph.vel[0] = self.flt(line, 1)*1e3
+                    seph.pos[0] = self.flt(line, 2)*1e3
+                    seph.svh = int(self.flt(line, 3))
+
+                    line = fnav.readline()  # line #2
+                    seph.pos[1] = self.flt(line, 0)*1e3
+                    seph.vel[1] = self.flt(line, 1)*1e3
+                    seph.pos[1] = self.flt(line, 2)*1e3
+                    seph.sva = self.flt(line, 3)
+
+                    line = fnav.readline()  # line #3
+                    seph.pos[2] = self.flt(line, 0)*1e3
+                    seph.vel[2] = self.flt(line, 1)*1e3
+                    seph.pos[2] = self.flt(line, 2)*1e3
+                    seph.iodn = int(self.flt(line, 3))
+
+                    nav.seph.append(seph)
+                    continue
+
+                elif sys not in (uGNSS.GPS, uGNSS.GAL, uGNSS.QZS, uGNSS.BDS,
+                                 uGNSS.IRN):
                     continue
 
                 prn = int(line[1:3])
@@ -353,7 +467,8 @@ class rnxdec:
 
                 line = fnav.readline()  # line #1
 
-                if sys == uGNSS.GAL:
+                if sys == uGNSS.GAL or \
+                        (sys == uGNSS.IRN and self.mode_nav == 0):
                     eph.iode = int(self.flt(line, 0))
                     eph.iodc = eph.iode
                 else:
@@ -374,7 +489,15 @@ class rnxdec:
                 eph.A = sqrtA**2
 
                 line = fnav.readline()  # line #3
-                eph.toes = int(self.flt(line, 0))
+                if sys == uGNSS.IRN and self.mode_nav == 2:
+                    eph.iode = int(self.flt(line, 0))
+                    eph.iode = eph.iodc
+                else:
+                    if (sys == uGNSS.GPS or sys == uGNSS.QZS) and \
+                            self.mode_nav > 0:  # CNAV, CNAV/2
+                        eph.tops = self.flt(line, 0)
+                    else:
+                        eph.toes = self.flt(line, 0)
                 eph.cic = self.flt(line, 1)
                 eph.OMG0 = self.flt(line, 2)
                 eph.cis = self.flt(line, 3)
@@ -395,12 +518,18 @@ class rnxdec:
                     if sys == uGNSS.GAL and self.ver < 4.0:
                         eph.mode = 1 if eph.code & 0x2 else 0
 
+                elif sys == uGNSS.IRN and self.mode_nav == 0:
+                    eph.week = int(self.flt(line, 2))
+
                 else:
                     eph.delnd = self.flt(line, 1)
                     if sys == uGNSS.BDS:
                         eph.sattype = int(self.flt(line, 2))
                         eph.tops = int(self.flt(line, 3))
-                    else:
+                    elif sys == uGNSS.IRN and self.mode_nav == 2:
+                        eph.integ = int(self.flt(line, 3))  # rsf
+                    else:  # CNAV, CNAV/2
+                        eph.urai = [0, 0, 0, 0]
                         eph.urai[0] = int(self.flt(line, 2))
                         eph.urai[1] = int(self.flt(line, 3))
 
@@ -410,6 +539,13 @@ class rnxdec:
                     eph.sisai[1] = int(self.flt(line, 1))  # ocb
                     eph.sisai[2] = int(self.flt(line, 2))  # oc1
                     eph.sisai[3] = int(self.flt(line, 3))  # oc2
+                elif sys == uGNSS.IRN:
+                    eph.urai = int(self.flt(line, 0))
+                    eph.svh = int(self.flt(line, 1))
+                    if self.mode_nav == 2 and eph.integ == 1:
+                        eph.tgd = int(self.flt(line, 3))
+                    else:
+                        eph.tgd = int(self.flt(line, 2))
                 else:
                     eph.sva = int(self.flt(line, 0))
                     eph.svh = int(self.flt(line, 1))
@@ -418,7 +554,7 @@ class rnxdec:
                         if self.mode_nav == 0:
                             eph.iodc = int(self.flt(line, 3))
                         else:
-                            eph.urai[2] = int(self.flt(line, 3))
+                            eph.urai[2] = int(self.flt(line, 3))  # URAI_NED2
                             eph.urai[3] = eph.sva  # URAI_ED
                     elif sys == uGNSS.GAL:
                         tgd_b = float(self.flt(line, 3))
@@ -437,53 +573,72 @@ class rnxdec:
                 if self.mode_nav < 3:
                     line = fnav.readline()  # line #7
                     if sys == uGNSS.BDS:
-                        if self.mode_nav == 0:
+                        if self.mode_nav == 0:  # D1/D2
                             tot = self.flt(line, 0)
                             eph.iodc = int(self.flt(line, 1))
-                        else:
-                            if self.mode_nav == 1:
+                        else:  # CNAV-1,2,3
+                            if self.mode_nav == 1:  # CNAV-1
                                 eph.isc[0] = float(self.flt(line, 0))  # B1Cd
-                            elif self.mode_nav == 2:
+                            elif self.mode_nav == 2:  # CNAV-2
                                 eph.isc[1] = float(self.flt(line, 1))  # B2ad
 
                             eph.tgd = float(self.flt(line, 2))    # tgd_B1Cp
                             eph.tgd_b = float(self.flt(line, 3))  # tgd_B2ap
 
-                    elif sys == uGNSS.GAL:
-                        tot = int(self.flt(line, 0))
-
-                    else:
-                        if self.mode_nav > 0 and sys != uGNSS.GAL:
-                            eph.isc[0] = self.flt(line, 0)
-                            eph.isc[1] = self.flt(line, 1)
-                            eph.isc[2] = self.flt(line, 2)
-                            eph.isc[3] = self.flt(line, 3)
-                            line = fnav.readline()
-
-                        if self.mode_nav == 2:
-                            eph.isc[4] = self.flt(line, 0)
-                            eph.isc[5] = self.flt(line, 1)
-                            line = fnav.readline()
-
-                        tot = int(self.flt(line, 0))
+                    elif sys == uGNSS.IRN:
                         if self.mode_nav > 0:
-                            eph.week = int(self.flt(line, 1))
-                        elif len(line) >= 42:
-                            eph.fit = int(self.flt(line, 1))
+                            if eph.integ == 0:  # rsf
+                                eph.isc[5] = float(self.flt(line, 0))  # S
+                                eph.isc[4] = float(self.flt(line, 1))  # L1D
+                            else:
+                                eph.isc[5] = float(self.flt(line, 2))  # L1P
+                                eph.isc[4] = float(self.flt(line, 3))  # L1D
 
-                if sys == uGNSS.BDS and self.mode_nav > 0:
+                            line = fnav.readline()  # line #8
+
+                        tot = self.flt(line, 0)
+
+                    elif sys == uGNSS.GAL:
+                        tot = self.flt(line, 0)
+
+                    elif sys in (uGNSS.GPS, uGNSS.QZS):
+                        if self.mode_nav > 0:  # CNAV, CNAV/2
+                            eph.isc[0] = self.flt(line, 0)  # ISC_L1CA
+                            eph.isc[1] = self.flt(line, 1)  # ISC_L2C
+                            eph.isc[2] = self.flt(line, 2)  # ISC_L5I5
+                            eph.isc[3] = self.flt(line, 3)  # ISC_L5Q5
+                        else:  # LNAV
+                            tot = self.flt(line, 0)
+                            if line(line) >= 42:
+                                eph.fit = int(self.flt(line, 1))
+
+                if sys in (uGNSS.GPS, uGNSS.QZS):
+                    if self.mode_nav > 0:  # CNAV, CNAV/2
+                        line = fnav.readline()  # line #8
+                        if self.mode_nav == 2:  # CNAV/2
+                            eph.isc[4] = self.flt(line, 0)  # ISC_L1Cd
+                            eph.isc[5] = self.flt(line, 1)  # ISC_L1Cp
+
+                            line = fnav.readline()  # line #9
+
+                        tot = int(self.flt(line, 0))
+                        eph.wn_op = int(self.flt(line, 1))
+                        if len(line) >= 61:  # optional
+                            eph.integ = int(self.flt(line, 2))
+
+                elif sys == uGNSS.BDS and self.mode_nav > 0:  # CNAV-1,2,3
                     line = fnav.readline()  # line #8
                     eph.sismai = int(self.flt(line, 0))
                     eph.svh = int(self.flt(line, 1))
                     eph.integ = int(self.flt(line, 2))
-                    if self.mode_nav < 3:
+                    if self.mode_nav < 3:  # CNAV-1,2
                         eph.iodc = int(self.flt(line, 3))
-                    else:
-                        eph.tgd_b = float(self.flt(line, 3))
+                    else:  # CNAV-3
+                        eph.tgd_b = float(self.flt(line, 3))  # tgd_B2bI
 
                     line = fnav.readline()  # line #9
-                    tot = int(self.flt(line, 0))
-                    if self.mode_nav < 3:
+                    tot = self.flt(line, 0)
+                    if self.mode_nav < 3:  # CNAV-1,2
                         eph.iode = int(self.flt(line, 3))
 
                 if sys == uGNSS.BDS:
@@ -759,7 +914,7 @@ class rnxenc:
 
         self.rec_eph = {}
 
-    def rnx_nav_header(self, fh=None, ver=4.00):
+    def rnx_nav_header(self, fh=None, ver=4.02):
         tutc = timeget()
         tgps = utc2gpst(tutc)
         leaps = timediff(tgps, tutc)
@@ -777,7 +932,7 @@ class rnxenc:
         fh.write("{:60s}{:20s}\n".
                  format("", "END OF HEADER"))
 
-    def rnx_obs_header(self, ts: gtime_t, fh=None, ver=4.00):
+    def rnx_obs_header(self, ts: gtime_t, fh=None, ver=4.02):
 
         if self.rnx_obs_header_sent:
             return
@@ -905,18 +1060,15 @@ class rnxenc:
 
     def rnx_nav_body(self, eph=None, fh=None):
         if eph.sat in self.rec_eph.keys():
-            if eph.iode in self.rec_eph[eph.sat].keys() and \
-                    self.rec_eph[eph.sat][eph.iode][0] == eph.mode:
+            if eph.mode in self.rec_eph[eph.sat].keys() and \
+                    self.rec_eph[eph.sat][eph.mode][0] == eph.iode:
                 return
         else:
             self.rec_eph[eph.sat] = {}
-        self.rec_eph[eph.sat][eph.iode] = [eph.mode, eph.toes]
+        self.rec_eph[eph.sat][eph.mode] = [eph.iode, eph.toes]
 
         id_ = sat2id(eph.sat)
         sys, prn = sat2prn(eph.sat)
-
-        if sys == uGNSS.BDS and (eph.iodc & 0xff) != eph.iode:
-            return
 
         if sys == uGNSS.BDS:
             ep = time2epoch(gpst2bdt(eph.toc))
@@ -956,9 +1108,14 @@ class rnxenc:
             v1 = float(eph.iode)
             v2 = eph.toes
         elif sys == uGNSS.IRN:
-            lbl = "LNAV"
-            v1 = float(eph.iode)
-            v2 = eph.toes
+            if eph.mode == 0:
+                lbl = "LNAV"
+                v1 = float(eph.iode)
+                v2 = eph.toes
+            else:
+                lbl = "L1NV"
+                v1 = eph.Adot
+                v2 = eph.iode
         else:
             return
 
@@ -1037,8 +1194,8 @@ class rnxenc:
                     fh.write("    {:19.12E}{:19.12E}{:19s}{:19s}\n".
                              format(float(eph.isc[4]), float(eph.isc[5]),
                                     "", ""))
-                fh.write("    {:19.12E}{:19.12E}{:19s}{:19s}\n".
-                         format(tot_, float(eph.wn_op), "", ""))
+                fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19s}\n".
+                         format(tot_, float(eph.wn_op), float(eph.integ), ""))
 
         if sys == uGNSS.GAL:  # I/NAV, F/NAV
             fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19s}\n".
@@ -1059,15 +1216,36 @@ class rnxenc:
                                 ""))
                 fh.write("    {:19.12E}{:19s}{:19s}{:19s}\n".
                          format(tot_, "", "", ""))
+            elif eph.mode == 2:  # L1NV
+                rsf = eph.integ
+                fh.write("    {:19.12E}{:19.12E}{:19s}{:19.12E}\n".
+                         format(eph.idot, eph.delnd, "", rsf))
+                if rsf == 0:
+                    fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19s}\n".
+                             format(float(eph.urai), float(eph.svh), eph.tgd,
+                                    ""))
+                    fh.write("    {:19.12E}{:19.12E}{:19s}{:19s}\n".
+                             format(float(eph.isc[5]), float(eph.isc[4]), "",
+                                    ""))
+                else:  # rsf = 1
+                    fh.write("    {:19.12E}{:19.12E}{:19s}{:19.12E}\n".
+                             format(float(eph.urai), float(eph.svh), "",
+                                    eph.tgd))
+                    fh.write("    {:19s}{:19s}{:19.12E}{:19.12E}\n".
+                             format("", "", float(eph.isc[5]),
+                                    float(eph.isc[4])))
+
+                fh.write("    {:19.12E}{:19s}{:19s}{:19s}\n".
+                         format(tot_, "", "", ""))
 
     def rnx_gnav_body(self, geph=None, fh=None):
         if geph.sat in self.rec_eph.keys():
-            if geph.iode in self.rec_eph[geph.sat].keys() and \
-                    self.rec_eph[geph.sat][geph.iode][0] == geph.mode:
+            if geph.mode in self.rec_eph[geph.sat].keys() and \
+                    self.rec_eph[geph.sat][geph.mode][0] == geph.iode:
                 return
         else:
             self.rec_eph[geph.sat] = {}
-        self.rec_eph[geph.sat][geph.iode] = [geph.mode, geph.toes]
+        self.rec_eph[geph.sat][geph.mode] = [geph.iode, geph.toes]
 
         id_ = sat2id(geph.sat)
         sys, prn = sat2prn(geph.sat)
@@ -1075,25 +1253,58 @@ class rnxenc:
         if sys != uGNSS.GLO:
             return
 
-        lbl = "FDMA"
         ep = time2epoch(gpst2utc(geph.toe))
         week, tot_ = time2gpst(geph.tof)
+
+        if geph.mode == 0:
+            lbl = "FDMA"
+            v1 = tot_
+            v2 = float(geph.frq)
+            v3 = float(geph.age)
+        elif geph.mode == 1:
+            lbl = "L1OC"
+            v1 = geph.beta
+            v2 = float(geph.status)
+            v3 = geph.isc[1]  # tgd_L2OCp
+        else:
+            lbl = "L3OC"
+            v1 = geph.beta
+            v2 = float(geph.status)
+            v3 = geph.isc[2]  # ISC_L3OC
 
         fh.write("> {:2s} {:3s} {:2s}\n".format("EPH", id_, lbl))
         fh.write("{:3s} {:4d} {:02d} {:02d} {:02d} {:02d} {:02d}".
                  format(id_, int(ep[0]), int(ep[1]), int(ep[2]),
                         int(ep[3]), int(ep[4]), int(ep[5])))
         fh.write("{:19.12E}{:19.12E}{:19.12E}\n".
-                 format(-geph.taun, geph.gamn, tot_))
+                 format(-geph.taun, geph.gamn, v1))
         fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
-                 format(geph.pos[0]*1e-3, geph.vel[0]*1e-3, geph.acc[0]*1e-3,
-                        float(geph.svh)))
+                 format(geph.pos[0]*1e-3, geph.vel[0]*1e-3,
+                        geph.acc[0]*1e-3, float(geph.svh)))
         fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
-                 format(geph.pos[1]*1e-3, geph.vel[1]*1e-3, geph.acc[1]*1e-3,
-                        float(geph.frq)))
+                 format(geph.pos[1]*1e-3, geph.vel[1]*1e-3,
+                        geph.acc[1]*1e-3, v2))
         fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
-                 format(geph.pos[2]*1e-3, geph.vel[2]*1e-3, geph.acc[2]*1e-3,
-                        float(geph.age)))
-        fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19s}\n".
-                 format(float(geph.flag), float(geph.dtaun), float(geph.sva),
-                        ""))
+                 format(geph.pos[2]*1e-3, geph.vel[2]*1e-3,
+                        geph.acc[2]*1e-3, v3))
+
+        if geph.mode == 0:  # FDMA
+            fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19s}\n".
+                     format(float(geph.flag), float(geph.dtaun),
+                            float(geph.sva), ""))
+        else:  # L1OC, L3OC
+            fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
+                     format(float(geph.sattype), float(geph.src),
+                            geph.aode, geph.aodc))
+            fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
+                     format(float(geph.flag), geph.tin,
+                            geph.tau1, geph.tau2))
+            fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
+                     format(geph.psi, float(geph.sn),
+                            geph.win, geph.dw))
+            fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
+                     format(geph.wmax, float(geph.dpos[0]),
+                            geph.dpos[1], geph.dpos[2]))
+            fh.write("    {:19.12E}{:19.12E}{:19s}{:19.12E}\n".
+                     format(float(geph.urai[0]), float(geph.urai[1]), "",
+                            tot_))
