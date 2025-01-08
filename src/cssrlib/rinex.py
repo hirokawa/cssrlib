@@ -609,7 +609,7 @@ class rnxdec:
                             eph.isc[3] = self.flt(line, 3)  # ISC_L5Q5
                         else:  # LNAV
                             tot = self.flt(line, 0)
-                            if line(line) >= 42:
+                            if len(line) >= 42:
                                 eph.fit = int(self.flt(line, 1))
 
                 if sys in (uGNSS.GPS, uGNSS.QZS):
