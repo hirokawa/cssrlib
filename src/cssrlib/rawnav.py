@@ -26,7 +26,8 @@ import numpy as np
 import bitstruct.c as bs
 from cssrlib.gnss import gpst2time, gst2time, bdt2time, rCST
 from cssrlib.gnss import prn2sat, uGNSS, sat2prn, bdt2gpst, utc2gpst, time2gpst
-from cssrlib.gnss import Eph, Geph, uTYP, copy_buff, gtime_t, timeadd
+from cssrlib.gnss import Eph, Geph, uTYP, copy_buff, gtime_t, timeadd, Seph
+from cssrlib.gnss import tod2tow
 from cssrlib.rinex import rnxenc, rSigRnx
 
 
@@ -1030,19 +1031,18 @@ class RawNav():
 
         return eph
 
-    def decode_bds_d1(self, week, time, sat, msg):
+    def decode_bds_d1(self, week, time, sat, msg, i=0):
         """ BDS D1 Message decoder """
 
         sys, prn = sat2prn(sat)
-
-        i = 0
         pre, _, sid, sow1 = bs.unpack_from('u11u4u3u8', msg, i)
-        i += 30
         if pre != 0x712:
             return None
 
         buff = self.bds_d12[prn-1]
-        buff[(sid-1)*40:(sid-1)*40+40] = msg[0:40]
+        i0 = (sid-1)*40
+        # copy_buff(msg, buff, i, i0, 40*8-i)
+        buff[i0:i0+40] = msg[0:40]
 
         buff = bytes(buff)
         id1 = bs.unpack_from('u3', buff, 15)[0]
@@ -1799,6 +1799,49 @@ class RawNav():
         geph.mode = stype  # FDMA:0,L1OC:1,L2OC:2,L3OC:3
 
         return geph
+
+    def decode_sbs_l1(self, week, time, sat, msg):
+        ura_t = [2, 2.8, 4, 5.7, 8, 11.3, 16, 32,
+                 64, 128, 256, 512, 1024, 2048, 4096, 0]
+
+        pre, mt, iodn = bs.unpack_from('u8u6u8', msg, 0)
+        i = 22
+
+        if pre not in (0x53, 0x9a, 0xc6):
+            return None
+
+        if mt != 9:
+            return None
+
+        t0, ura, xg, yg, zg = bs.unpack_from('u13u4s30s30s25', msg, i)
+        i += 102
+        vxg, vyg, vzg = bs.unpack_from('s17s17s18', msg, i)
+        i += 52
+        axg, ayg, azg = bs.unpack_from('s10s10s10', msg, i)
+        i += 30
+        af0, af1 = bs.unpack_from('s12s8', msg, i)
+        i += 20
+
+        seph = Seph(sat)
+        seph.tof = gpst2time(week, time)
+        seph.t0 = tod2tow(t0*16.0, seph.tof)
+        seph.iodn = iodn
+        seph.svh = 0 if ura != 15 else 1
+        seph.sva = ura_t[ura]
+        seph.mode = 0
+        seph.pos[0] = xg*0.08
+        seph.pos[1] = yg*0.08
+        seph.pos[2] = zg*0.4
+        seph.vel[0] = vxg*6.25e-4
+        seph.vel[1] = vyg*6.25e-4
+        seph.vel[2] = vzg*4.0e-3
+        seph.acc[0] = axg*1.25e-5
+        seph.acc[1] = ayg*1.25e-5
+        seph.acc[2] = azg*6.25e-5
+        seph.af0 = af0*rCST.P2_31
+        seph.af1 = af1*rCST.P2_40
+
+        return seph
 
 
 class rcvOpt():

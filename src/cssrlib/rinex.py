@@ -1308,3 +1308,37 @@ class rnxenc:
             fh.write("    {:19.12E}{:19.12E}{:19s}{:19.12E}\n".
                      format(float(geph.urai[0]), float(geph.urai[1]), "",
                             tot_))
+
+    def rnx_snav_body(self, seph=None, fh=None):
+        if seph.sat in self.rec_eph.keys():
+            if seph.mode in self.rec_eph[seph.sat].keys() and \
+                    self.rec_eph[seph.sat][seph.mode][0] == seph.iodn:
+                return
+        else:
+            self.rec_eph[seph.sat] = {}
+        self.rec_eph[seph.sat][seph.mode] = [seph.iodn]
+
+        id_ = sat2id(seph.sat)
+        sys, prn = sat2prn(seph.sat)
+
+        if sys != uGNSS.SBS:
+            return
+
+        ep = time2epoch(seph.t0)
+        week, tot_ = time2gpst(seph.tof)
+
+        fh.write("> {:2s} {:3s} {:2s}\n".format("EPH", id_, "SBAS"))
+        fh.write("{:3s} {:4d} {:02d} {:02d} {:02d} {:02d} {:02d}".
+                 format(id_, int(ep[0]), int(ep[1]), int(ep[2]),
+                        int(ep[3]), int(ep[4]), int(ep[5])))
+        fh.write("{:19.12E}{:19.12E}{:19.12E}\n".
+                 format(seph.af0, seph.af1, tot_))
+        fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
+                 format(seph.pos[0]*1e-3, seph.vel[0]*1e-3,
+                        seph.acc[0]*1e-3, float(seph.svh)))
+        fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
+                 format(seph.pos[1]*1e-3, seph.vel[1]*1e-3,
+                        seph.acc[1]*1e-3, seph.sva))
+        fh.write("    {:19.12E}{:19.12E}{:19.12E}{:19.12E}\n".
+                 format(seph.pos[2]*1e-3, seph.vel[2]*1e-3,
+                        seph.acc[2]*1e-3, float(seph.iodn)))
