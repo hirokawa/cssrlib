@@ -20,7 +20,7 @@ from cssrlib.cssrlib import cssr, sCSSR, prn2sat, sCType, cssre
 from cssrlib.gnss import uGNSS, sat2id, gpst2time, timediff, time2str, sat2prn
 from cssrlib.gnss import uTYP, uSIG, rSigRnx, bdt2time, bdt2gpst, glo2time
 from cssrlib.gnss import time2bdt, gpst2bdt, rCST, time2gpst, utc2gpst, timeadd
-from cssrlib.gnss import gtime_t
+from cssrlib.gnss import gtime_t, sys2str, sat2prn, sat2id
 from crccheck.crc import Crc24LteA
 from enum import IntEnum
 from cssrlib.gnss import Eph, Obs, Geph, Seph
@@ -42,9 +42,17 @@ class sRTCM(IntEnum):
     SBS_EPH = 1016
 
     # test messages
-    INTEG_SSR = 11
-    INTEG_SSR_IONO = 12
-    INTEG_SSR_TROP = 13
+    INTEG_MIN = 2003
+    INTEG_EXT = 2004
+    INTEG_EXT_SIS = 2005
+    INTEG_EXT_AREA = 2006
+    INTEG_QUALITY = 2007
+    INTEG_CNR = 2008
+    INTEG_VMAP = 2009
+    INTEG_MMAP = 2010
+    INTEG_SSR = 2011
+    INTEG_SSR_IONO = 2012
+    INTEG_SSR_TROP = 2013
 
 
 class Integrity():
@@ -1097,6 +1105,37 @@ class rtcm(cssr):
             self.fh.write(" {:20s}{:6d}\n".format("Number of Signals:",
                                                   self.nsig))
 
+        if self.subtype in (sRTCM.INTEG_SSR, sRTCM.INTEG_SSR_IONO,
+                            sRTCM.INTEG_SSR_TROP):
+            self.fh.write(" {:20s}{:6d} TOW={:6d}\n".
+                          format("INTEG-SSR:", self.msgtype,
+                                 int(self.integ.tow)))
+            self.fh.write(" {:20s}{:6d}\n".format("ProviderID:",
+                                                  self.integ.pid))
+
+            if self.subtype == sRTCM.INTEG_SSR:
+                self.fh.write(" {:20s}{:6d}\n".format("Varidity Period:",
+                                                      self.integ.vp))
+                self.fh.write(" {:20s}{:6d}\n".format("Update Interval:",
+                                                      self.integ.uri))
+
+            self.fh.write(" {:20s}{:04x}\n".format("Constellation Mask:",
+                                                   self.integ.mask_sys))
+            self.fh.write(" IOD GNSS Mask: ")
+            for sys in self.integ.iod_sys.keys():
+                self.fh.write(" {:8s}: {:1d}".format(
+                    sys2str(sys), self.integ.iod_sys[sys]))
+            self.fh.write("\n")
+
+            for sys in self.integ.flag.keys():
+                self.fh.write(" Network ID:{:3d} Integrity Flag: ".format(
+                    self.integ.nid[sys]))
+                for sat in self.integ.flag[sys]:
+                    self.fh.write(" {:3s}:{:2d}".format(
+                        sat2id(sat), self.integ.flag[sys][sat]))
+                self.fh.write("\n")
+            self.fh.flush()
+
         if eph is not None:
             sys, prn = sat2prn(eph.sat)
             self.fh.write(" {:20s}{:6d} ({:s})\n".format("PRN:", prn,
@@ -1121,6 +1160,9 @@ class rtcm(cssr):
         if self.msgtype == 1029:  # Unicode Text
             self.fh.write("{:s}\n".format(self.ustr))
 
+        if self.subtype == sRTCM.INTEG_SSR:
+            None
+
     def decode_msm_time(self, sys, week, t):
         if sys == uGNSS.GLO:
             dow = (t >> 27) & 0x1f
@@ -1135,8 +1177,8 @@ class rtcm(cssr):
     def decode_msm(self, msg, i):
         sys, msm = self.msmtype(self.msgtype)
 
-        self.refid, tow_, self.mi, self.iods = \
-            bs.unpack_from('u12u30u1u3', msg, i)
+        self.refid, tow_, self.mi, self.iods = bs.unpack_from(
+            'u12u30u1u3', msg, i)
         i += 53
         self.time, self.tow = self.decode_msm_time(sys, self.week, tow_)
 
@@ -1443,8 +1485,8 @@ class rtcm(cssr):
         i += 56
         P3, gamn, P, ln, taun, dtaun = bs.unpack_from('u1s11u2u1s22s5', msg, i)
         i += 42
-        En, P4, Ft, Nt, M, ad, Na, tauc, N4, taugps, ln = \
-            bs.unpack_from('u5u1u4u11u2u1u11s32u5s22u1', msg, i)
+        En, P4, Ft, Nt, M, ad, Na, tauc, N4, taugps, ln = bs.unpack_from(
+            'u5u1u4u11u2u1u11s32u5s22u1', msg, i)
         i += 102
 
         geph = Geph()
@@ -1959,8 +2001,8 @@ class rtcm(cssr):
                 # Augmentation Message Error under Fault-Free Scenario DFi038
                 # Overbounding Bias of the Long-Term Carrier Phase
                 # Augmentation Message Bias Error under Fault-Free DFi039
-                Pa_sp, sig_a, Pa_sc, ob_p, sig_ob_c, ob_c = \
-                    bs.unpack_from('u4u5u4u4u5u4', msg, i)
+                Pa_sp, sig_a, Pa_sc, ob_p, sig_ob_c, ob_c = bs.unpack_from(
+                    'u4u5u4u4u5u4', msg, i)
                 i += 26
 
     def decode_integrity_ext_sis_local(self, msg, i):
@@ -2027,8 +2069,8 @@ class rtcm(cssr):
                 # Nominal pseudorange bias rate of change DFi125
                 # Bounding sigma on phase-range-rate error DFi122
                 # Phase-range-rate error rate integrity index DFi123
-                idx_c, idx_p, cbr, sig_dp, idx_dp =  \
-                    bs.unpack_from('u4u4u3u4u4', msg, i)
+                idx_c, idx_p, cbr, sig_dp, idx_dp = bs.unpack_from(
+                    'u4u4u3u4u4', msg, i)
                 i += 19
 
                 # Orbit and clock error rate integrity parameter DFi127
@@ -2036,8 +2078,8 @@ class rtcm(cssr):
                 # Index of bounding parameter on change in iono error DFi129
                 # Residual tropospheric error standard deviation DFi130
                 # Index of bounding parameter on change in tropo error DFi131
-                oc, sig_ion, idx_ion, sig_trp, idx_trp = \
-                    bs.unpack_from('u3u3u3u3u3', msg, i)
+                oc, sig_ion, idx_ion, sig_trp, idx_trp = bs.unpack_from(
+                    'u3u3u3u3u3', msg, i)
                 i += 15
 
     def decode_integrity_ext_service_area(self, msg, i):
@@ -2255,9 +2297,11 @@ class rtcm(cssr):
             for svid in svid_t:
                 ofst = 192 if sys == uGNSS.QZS else 0
                 prn = svid+ofst
-                flag_t[sys][prn] = bs.unpack_from('u2', msg, i)[0]
+                sat = prn2sat(sys, prn)
+                flag_t[sys][sat] = bs.unpack_from('u2', msg, i)[0]
                 i += 2
 
+        self.integ.mask_sys = mask_sys
         self.integ.pid = pid
         self.integ.tow = tow
         self.integ.iod_sys = iod_sys
@@ -2346,22 +2390,37 @@ class rtcm(cssr):
 
         # test messages for SC-134
         elif self.msgtype == 3:  # minimum integrity
+            self.subtype = sRTCM.INTEG_MIN
             self.decode_integrity_min(msg, i)
         elif self.msgtype == 4:  # extended integrity
+            self.subtype = sRTCM.INTEG_EXT
             self.decode_integrity_ext(msg, i)
         elif self.msgtype == 5:  # sis integrity/local error
+            self.subtype = sRTCM.INTEG_EXT_SIS
             self.decode_integrity_ext_sis_local(msg, i)
         elif self.msgtype == 6:  # extended sercice area
+            self.subtype = sRTCM.INTEG_EXT_AREA
             self.decode_integrity_ext_service_area(msg, i)
         elif self.msgtype == 7:  # quality indicator
+            self.subtype = sRTCM.INTEG_QUALITY
             self.decode_integrity_quality(msg, i)
         elif self.msgtype == 8:  # CNR/ACG SIS Monitoring
+            self.subtype = sRTCM.INTEG_CNR
             self.decode_integrity_cnr_acg(msg, i)
         elif self.msgtype == 9:  # satellite visibility map
+            self.subtype = sRTCM.INTEG_VMAP
             self.decode_integrity_vmap(msg, i)
         elif self.msgtype == 10:  # multipath map
+            self.subtype = sRTCM.INTEG_MMAP
             self.decode_integrity_mmap(msg, i)
-        elif self.msgtype in (11, 12, 13):  # SSR integrity
+        elif self.msgtype == 11:  # SSR integrity
+            self.subtype = sRTCM.INTEG_SSR
+            self.decode_integrity_ssr(msg, i)
+        elif self.msgtype == 12:  # SSR integrity Iono
+            self.subtype = sRTCM.INTEG_SSR_IONO
+            self.decode_integrity_ssr(msg, i)
+        elif self.msgtype == 13:  # SSR integrity Trop
+            self.subtype = sRTCM.INTEG_SSR_TROP
             self.decode_integrity_ssr(msg, i)
         else:
             self.subtype = -1
@@ -2433,9 +2492,10 @@ class rtcme(cssre):
 
         for sys in sys_t:
             flag = self.integ.flag[sys]
-            prn_t = flag.keys()
+            sat_t = flag.keys()
             svid_t = []
-            for prn in prn_t:
+            for sat in sat_t:
+                sys, prn = sat2prn(sat)
                 ofst = 192 if sys == uGNSS.QZS else 0
                 svid_t.append(prn-ofst)
 
