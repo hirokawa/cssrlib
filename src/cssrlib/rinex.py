@@ -11,7 +11,8 @@ from cssrlib.gnss import bdt2gpst, time2bdt
 from cssrlib.gnss import gpst2time, bdt2time, epoch2time, timediff, gtime_t
 from cssrlib.gnss import prn2sat, char2sys, timeget, utc2gpst, time2epoch
 from cssrlib.gnss import Eph, Geph, Obs, sat2id, sat2prn, gpst2bdt, time2gpst
-from cssrlib.gnss import timeadd, id2sat, gpst2utc, Seph
+from cssrlib.gnss import timeadd, id2sat, gpst2utc, Seph, STOParam, EOPParam
+from cssrlib.gnss import IONParam
 
 
 class pclk_t:
@@ -48,6 +49,13 @@ class rnxdec:
         # 4:FDMA, 5:SBAS
         self.mode_nav = 0
         self.glo_ch = {}
+
+        self.ofst_src = {'GP': uGNSS.GPS, 'GL': uGNSS.GLO,
+                         'GA': uGNSS.GAL, 'BD': uGNSS.BDS,
+                         'QZ': uGNSS.QZS, 'IR': uGNSS.IRN,
+                         'SB': uGNSS.SBS, 'UT': uGNSS.NONE}
+        self.itype_t = {'LNAV': 0, 'FDMA': 1, 'IFNV': 2, 'D1D2': 3,
+                        'SBAS': 4, 'CNVX': 5, 'L1NV': 6, 'LXOC': 7}
 
     def setSignals(self, sigList):
         """ define the signal list for each constellation """
@@ -172,111 +180,155 @@ class rnxdec:
                 if self.ver >= 4.0:
 
                     if line[0:5] == '> STO':  # system time offset (TBD)
-                        ofst_src = {'GP': uGNSS.GPS, 'GL': uGNSS.GLO,
-                                    'GA': uGNSS.GAL, 'BD': uGNSS.BDS,
-                                    'QZ': uGNSS.QZS, 'IR': uGNSS.IRN,
-                                    'SB': uGNSS.SBS, 'UT': uGNSS.NONE}
+
                         sys = char2sys(line[6])
                         itype = line[10:14]
-                        line = fnav.readline()
-                        ttm = self.decode_time(line, 4)
-                        mode = line[24:28]
-                        if mode[0:2] in ofst_src and mode[2:4] in ofst_src:
-                            nav.sto_prm[0] = ofst_src[mode[0:2]]
-                            nav.sto_prm[1] = ofst_src[mode[2:4]]
+
+                        if sys not in nav.sto_prm:
+                            nav.sto_prm[sys] = {}
+
+                        if itype not in self.itype_t:
+                            fnav.readline()
+                            fnav.readline()
+                            continue
+
+                        im = self.itype_t[itype]
+
+                        if im not in nav.sto_prm[sys]:
+                            nav.sto_prm[sys][im] = STOParam()
 
                         line = fnav.readline()
-                        ttm = self.flt(line, 0)
+                        nav.sto_prm[sys][im].t_ot = self.decode_time(line, 4)
+                        mode = line[24:28]
+                        if mode[0:2] in self.ofst_src and \
+                                mode[2:4] in self.ofst_src:
+                            nav.sto_prm[sys][im].prm[0] = \
+                                self.ofst_src[mode[0:2]]
+                            nav.sto_prm[sys][im].prm[1] = \
+                                self.ofst_src[mode[2:4]]
+
+                        line = fnav.readline()
+                        nav.sto_prm[sys][im].t_t = self.flt(line, 0)
                         for k in range(3):
-                            nav.sto[k] = self.flt(line, k+1)
+                            nav.sto_prm[sys][im].a[k] = self.flt(line, k+1)
                         continue
 
                     elif line[0:5] == '> EOP':  # earth orientation param
                         sys = char2sys(line[6])
                         itype = line[10:14]
+
+                        if sys not in nav.eop_prm:
+                            nav.eop_prm[sys] = {}
+
+                        if itype not in self.itype_t:
+                            fnav.readline()
+                            fnav.readline()
+                            fnav.readline()
+                            continue
+
+                        im = self.itype_t[itype]
+
+                        if im not in nav.eop_prm[sys]:
+                            nav.eop_prm[sys][im] = EOPParam()
+
                         line = fnav.readline()
-                        ttm = self.decode_time(line, 4)
+                        nav.eop_prm[sys][im].t_eop = self.decode_time(line, 4)
                         for k in range(3):
-                            nav.eop[k] = self.flt(line, k+1)
+                            nav.eop_prm[sys][im].prm[k] = self.flt(line, k+1)
                         line = fnav.readline()
                         for k in range(3):
-                            nav.eop[k+3] = self.flt(line, k+1)
+                            nav.eop_prm[sys][im].prm[k+3] = self.flt(line, k+1)
                         line = fnav.readline()
-                        ttm = self.flt(line, 0)
+                        nav.eop_prm[sys][im].t_t = self.flt(line, 0)
                         for k in range(3):
-                            nav.eop[k+6] = self.flt(line, k+1)
+                            nav.eop_prm[sys][im].prm[k+6] = self.flt(line, k+1)
                         continue
 
                     elif line[0:5] == '> ION':  # iono (TBD)
                         sys = char2sys(line[6])
                         itype = line[10:14]
                         stype = '' if len(line) < 20 else line[15:19]
+
+                        if sys not in nav.ion_prm:
+                            nav.ion_prm[sys] = {}
+
+                        im = self.itype_t[itype]
+                        nav.ion_prm[sys][im] = IONParam()
+
                         line = fnav.readline()
-                        ttm = self.decode_time(line, 4)
+                        nav.ion_prm[sys][im].t_tm = self.decode_time(line, 4)
                         if sys == uGNSS.GAL and itype == 'IFNV':  # Nequick-G
                             for k in range(3):  # ai0, ai1, ai2
-                                nav.ion[0, k] = self.flt(line, k+1)
+                                nav.ion_prm[sys][im].prm[k] = \
+                                    self.flt(line, k+1)
                             line = fnav.readline()
                             # disturbance flags
-                            nav.ion[0, 3] = int(self.flt(line, 0))
+                            nav.ion_prm[sys][im].prm[3] = \
+                                int(self.flt(line, 0))
                         elif sys == uGNSS.BDS and itype == 'CNVX':  # BDGIM
-                            ttm = self.decode_time(line, 4)
-                            self.ion_gim = np.zeros(9)
                             for k in range(3):
-                                nav.ion_gim[k] = self.flt(line, k+1)
+                                nav.ion_prm[sys][im].prm[k] = \
+                                    self.flt(line, k+1)
                             line = fnav.readline()
                             for k in range(4):
-                                nav.ion_gim[k+3] = self.flt(line, k)
+                                nav.ion_prm[sys][im].prm[k+3] = \
+                                    self.flt(line, k)
                             line = fnav.readline()
                             for k in range(2):
-                                nav.ion_gim[k+7] = self.flt(line, k)
+                                nav.ion_prm[sys][im].prm[k+7] = \
+                                    self.flt(line, k)
                         elif sys == uGNSS.IRN and itype == 'L1NV':  # L1NAV
                             if stype == 'KLOB':  #
                                 iodk = self.flt(line, 1)
                                 line = fnav.readline()
                                 for k in range(4):
-                                    nav.ion[0, k] = self.flt(line, k)
+                                    nav.ion_prm[sys][im].prm[k] = \
+                                        self.flt(line, k)
                                 line = fnav.readline()
                                 for k in range(4):
-                                    nav.ion[1, k] = self.flt(line, k)
+                                    nav.ion_prm[sys][im].prm[k+4] = \
+                                        self.flt(line, k)
+                                nav.ion_prm[sys][im].iod = iodk
                                 line = fnav.readline()
-                                nav.ion_region = np.zeros(4)
+                                nav.ion_prm[sys][im].region = np.zeros(4)
                                 for k in range(4):
-                                    nav.ion_region[k] = self.flt(line, k)
-
+                                    nav.ion_prm[sys][im].region[k] = \
+                                        self.flt(line, k)
                             elif stype == 'NEQN':
-                                nav.ion_region = np.zeros((3, 4))
-                                iodn = self.flt(line, 1)
-
+                                nav.ion_prm[sys][im].iod = self.flt(line, 1)
+                                prm = np.zeros((3, 8))
                                 for j in range(3):
                                     line = fnav.readline()
-                                    nav.ion = np.zeros((3, 4))
                                     for k in range(4):  # a0, a1, a2, idf
-                                        nav.ion[j, k] = self.flt(line, k)
+                                        prm[j, k] = self.flt(line, k)
                                     line = fnav.readline()
                                     # lon_min, lon_max, mopid_min, mopid_max
                                     for k in range(4):
-                                        nav.ion_region[j, k] = \
-                                            self.flt(line, k)
+                                        prm[j, k+4] = self.flt(line, k)
+                                nav.ion_prm[sys][im].prm = prm
 
                         elif sys == uGNSS.GLO and itype == 'LXOC':
                             c_A = self.flt(line, 1)
                             c_F10_7 = self.flt(line, 2)
                             c_Ap = self.flt(line, 3)
-                            nav.ion[0, 0:3] = [c_A, c_F10_7, c_Ap]
+                            nav.ion_prm[sys][im].prm[0:3] = \
+                                [c_A, c_F10_7, c_Ap]
 
                         else:  # Klobucher (LNAV, D1D2, CNVX)
-                            self.ion_gim = np.zeros(9)
+                            nav.ion_prm[sys][im].prm = np.zeros(9)
+
                             for k in range(3):
-                                nav.ion[0, k] = self.flt(line, k+1)
+                                nav.ion_prm[sys][im].prm[k] = \
+                                    self.flt(line, k+1)
                             line = fnav.readline()
-                            nav.ion[0, 3] = self.flt(line, 0)
-                            for k in range(3):
-                                nav.ion[1, k] = self.flt(line, k+1)
+                            for k in range(4):
+                                nav.ion_prm[sys][im].prm[k+3] = \
+                                    self.flt(line, k)
                             line = fnav.readline()
-                            nav.ion[1, 3] = self.flt(line, 0)
+                            nav.ion_prm[sys][im].prm[7] = self.flt(line, 0)
                             if len(line) >= 42:
-                                nav.ion_region = int(self.flt(line, 1))
+                                nav.ion_prm[sys][im].prm[8] = \
+                                    int(self.flt(line, 1))
                         continue
 
                     elif line[0:5] == '> EPH':
@@ -540,7 +592,10 @@ class rnxdec:
                     eph.sisai[2] = int(self.flt(line, 2))  # oc1
                     eph.sisai[3] = int(self.flt(line, 3))  # oc2
                 elif sys == uGNSS.IRN:
-                    eph.urai = int(self.flt(line, 0))
+                    if self.mode_nav == 0:
+                        eph.sva = self.flt(line, 0)
+                    else:  # L1NV
+                        eph.urai = self.flt(line, 0)
                     eph.svh = int(self.flt(line, 1))
                     if self.mode_nav == 2 and eph.integ == 1:
                         eph.tgd = int(self.flt(line, 3))

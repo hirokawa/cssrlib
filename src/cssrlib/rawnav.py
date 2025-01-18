@@ -142,10 +142,14 @@ class RawNav():
 
     def urai2sva(self, urai, sys=uGNSS.GPS):
         """ GPS/QZSS SV accuracy [1] 20.3.3.3.1.3, [2] Tab. 5.4.3-2 """
-        urai_t = [2.40, 3.40, 4.85, 6.85, 9.65, 13.65, 24.00, 48.00, 96.00,
-                  192.00, 384.00, 768.00, 1536.00, 3072.00, 6144.00, -1.0]
+        # sva_t = [2.40, 3.40, 4.85, 6.85, 9.65, 13.65, 24.00, 48.00, 96.00,
+        #         192.00, 384.00, 768.00, 1536.00, 3072.00, 6144.00, -1.0]
 
-        return urai_t[urai]
+        # from RINEX 4.02
+        sva_t = [2.0, 2.8, 4.0, 5.7, 8.0, 11.3, 16.0, 32.0,
+                 64.0, 128.0, 256.0, 512.0, 1024.0, 2048.0, 4096.0, 8192.0]
+
+        return sva_t[urai]
 
     def sisa2sva(self, sisa):
         """ Galileo SISA Index Values [3] Tab. 89 """
@@ -873,25 +877,31 @@ class RawNav():
 
         # decode Subframe 3
         i = 608
-        page, eph.svh, eph.integ, eph.sismai = bs.unpack_from('u6u2u3u4',
+        page, eph.svh, eph.integ, eph.sismai = bs.unpack_from('u6u2u3s4',
                                                               msg, i)
         i += 15
         if page == 1:  # Iono, BDT-UTC
-            eph.sisai[0] = bs.unpack_from('u5', msg, i)[0]
+            eph.sisai[0] = bs.unpack_from('u5', msg, i)[0]  # SISAI_oe
             i += 5
             i = self.decode_bds_cnav_sisai(msg, eph, i)
         elif page == 2:  # Reduced almanac
             i = self.decode_bds_cnav_sisai(msg, eph, i)
             i += 22
         elif page == 3:  # EOP, BGTO
-            eph.sisai[0] = bs.unpack_from('u5', msg, i)[0]
+            eph.sisai[0] = bs.unpack_from('u5', msg, i)[0]  # SISAI_oe
             i += 5
+            # EOP
+            # BGTO
         elif page == 4:  # Midi almanac
             i = self.decode_bds_cnav_sisai(msg, eph, i)
             i += 22
+            # Midi Almanac
 
         # i += 264-15
         eph.mode = 1  # B-CNAV1
+
+        if page != 1:  # page 1 include SISAI*
+            return None
 
         return eph
 
@@ -918,7 +928,7 @@ class RawNav():
         id4, sow4 = bs.unpack_from('u6u18', buff, 320*3+6)
         id5, sow5 = bs.unpack_from('u6u18', buff, 320*4+6)
 
-        if id1 != 10 or id2 != 11 or id3 != 30 or id4 != 34 or id5 != 40:
+        if id1 != 10 or id2 != 11 or id3 != 30 or id5 != 40:
             return None
 
         if sow2 != sow1+1 or sow3 != sow2+1:
@@ -936,11 +946,13 @@ class RawNav():
         if id5 == 40:
             i = 320*4+42
             eph.sisai[0] = bs.unpack_from('u5', buff, i)[0]
+            i += 5
+            i = self.decode_bds_cnav_sisai(buff, eph, i)
 
         # decode MT10
         i = 30
         eph.week, ib2a, eph.sismai, ib1c, eph.iode = bs.unpack_from(
-            'u13u3u4u3u8', buff, i)
+            'u13u3s4u3u8', buff, i)
         i += 31
         i = self.decode_bds_cnav_eph1(buff, eph, i)
         eph.integ = (ib2a << 3)+ib1c
@@ -962,7 +974,7 @@ class RawNav():
             return None
 
         i = self.decode_bds_cnav_iono(buff, i)
-        tgd_b1cp = bs.unpack_from('u12', buff, i)[0]
+        tgd_b1cp = bs.unpack_from('s12', buff, i)[0]
 
         eph.tgd = tgd_b1cp*rCST.P2_34
         eph.isc[1] = isc_b2ad*rCST.P2_34
@@ -1009,7 +1021,7 @@ class RawNav():
         i = self.decode_bds_cnav_eph1(buff, eph, i)
         i = self.decode_bds_cnav_eph2(buff, eph, i)
 
-        eph.integ, eph.sismai = bs.unpack_from('u3u4', buff, i)
+        eph.integ, eph.sismai = bs.unpack_from('u3s4', buff, i)
         i += 7
 
         # decode MT30
