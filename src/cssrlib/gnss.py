@@ -616,6 +616,31 @@ class gtime_t():
             (self.time == other.time and self.sec > other.sec)
 
 
+class STOParam():
+    """ System Time and UTC Office """
+    sbas = 0  # SBAS ID
+    prm = [0, 0]  # System time offset parameter
+    t_ot = None  # reference epoch
+    t_t = 0.0  # transmission time of message (Time of week [sec])
+    a = np.zeros(3)  # a0, a1, a2
+
+
+class EOPParam():
+    """ Earth Orientation Parameter """
+    prm = np.zeros(9)
+    # EOP parameters (xp,dxp,ddxp,yp,dyp,ddyp,dut1,ddut1,dddut1)
+    t_ot = None  # reference epoch
+    t_t = 0.0  # transmission time of message (Time of week [sec])
+
+
+class IONParam():
+    """ Ionospheric delay model Parameter """
+    iod = 0
+    prm = np.zeros(9)  # ION parameters
+    t_tm = None  # transmission time
+    region = None
+
+
 class Obs():
     """ class to define the observation """
 
@@ -787,8 +812,13 @@ class Nav():
             [0.1167E+06, -0.2294E+06, -0.1311E+06, 0.1049E+07]])
         self.ion_gim = np.zeros(9)
         self.ion_region = 0  # 0: wide-area, 1: Japan-aera (QZSS only)
-        self.sto = np.zeros(3)
-        self.sto_prm = np.zeros(4, dtype=int)
+        # self.sto = np.zeros(3)
+        # self.sto_prm = np.zeros(4, dtype=int)
+
+        self.sto_prm = {}
+        self.eop_prm = {}
+        self.ion_prm = {}
+
         self.eop = np.zeros(9)
         self.elmin = np.deg2rad(15.0)
         self.tidecorr = False
