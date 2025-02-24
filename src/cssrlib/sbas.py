@@ -102,7 +102,7 @@ def searchIGP(t, posp, cs):
         if band not in cs.vtec or band not in cs.givei:
             continue
 
-        gp = cs.igp_t[band]
+        gp = cs.igp_t[band][cs.igp_idx[band]]
         for i in range(4):
             idx = np.where((gp[:, 0] == latp[i]) & (gp[:, 1] == lonp[i]))[0]
             if len(idx) == 0:
@@ -158,10 +158,12 @@ def ionoSBAS(t, pos, az, el, cs):
     if err:
         return diono, var
 
+    t0_igp = cs.lc[cs.inet].t0[0][sCType.VTEC]
+
     for i in range(4):
         if i not in igp:
             continue
-        dt = timediff(t, cs.t0_igp)
+        dt = timediff(t, t0_igp)
         diono += w[i]*igp[i][0]
         var += w[i]*givei_t[igp[i][1]]*9e-8*abs(dt)
 
