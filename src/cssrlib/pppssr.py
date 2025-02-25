@@ -119,7 +119,7 @@ class pppos():
         # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
         self.nav.armode = 0
         self.nav.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
-        self.nav.elmin = np.deg2rad(10.0)
+        self.nav.elmin = np.deg2rad(15.0)
 
         # Initial state vector
         #
@@ -657,6 +657,12 @@ class pppos():
                     elif sys == uGNSS.BDS:
                         sig0 = (rSigRnx("CC6I"),)
 
+                elif cs.cssrmode == sc.PVS_PPP:
+                    if sys == uGNSS.GPS:
+                        sig0 = (rSigRnx("GC1C"), rSigRnx("GC5Q"))
+                    elif sys == uGNSS.GAL:
+                        sig0 = (rSigRnx("EC1C"), rSigRnx("EC5Q"))
+
             # Receiver/satellite antenna offset
             #
             if self.nav.rcv_ant is None:
@@ -678,7 +684,8 @@ class pppos():
                                                     sc.GAL_HAS_IDD,
                                                     sc.IGS_SSR,
                                                     sc.RTCM3_SSR,
-                                                    sc.BDS_PPP):
+                                                    sc.BDS_PPP,
+                                                    sc.PVS_PPP):
 
                 antsPR = antModelTx(self.nav, e[i, :], sigsPR,
                                     sat, obs.t, rs[i, :], sig0)

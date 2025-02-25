@@ -2,8 +2,8 @@
 QZSS Navigation Message Authentication (QZNMA)
 
 [1] Quasi-Zenith Satellite System Interface Specification
-    Satellite Positioning, Navigation and Timing Service (IS-QZSS-PNT-006),
-    July, 2024
+    Signal Authentication Service (IS-QZSS-SAS-001),
+    March, 2024
 
 Note:
     to use the package for QZSNMA, the user needs to

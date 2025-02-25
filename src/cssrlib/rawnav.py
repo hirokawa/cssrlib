@@ -1929,6 +1929,13 @@ class rcvDec():
 
     sig_tab = {}
 
+    def __init__(self, opt=None, prefix='', gnss_t='GECJ'):
+        self.sig_tab = self.init_sig_tab(gnss_t)
+        if opt is not None:
+            self.init_param(opt, prefix)
+        self.nsig = {uTYP.C: 0, uTYP.L: 0, uTYP.D: 0, uTYP.S: 0}
+        self.prn_ref = -1
+
     def init_sig_tab(self, gnss_t='GEJ'):
         """ initialize signal table for RINEX output """
         sig_tab = {}
@@ -2004,12 +2011,6 @@ class rcvDec():
             }
 
         return sig_tab
-
-    def __init__(self, opt=None, prefix='', gnss_t='GECJ'):
-        self.sig_tab = self.init_sig_tab(gnss_t)
-        if opt is not None:
-            self.init_param(opt, prefix)
-        self.nsig = {uTYP.C: 0, uTYP.L: 0, uTYP.D: 0, uTYP.S: 0}
 
     def init_param(self, opt: rcvOpt, prefix=''):
         if opt.flg_rnxnav or opt.flg_rnxobs:
