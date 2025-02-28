@@ -89,8 +89,8 @@ class pppos():
         #
         # Observation noise parameters
         #
-        self.nav.eratio = np.ones(self.nav.nf)*100  # [-] factor
-        self.nav.err = [0, 0.000, 0.003]       # [m] sigma
+        self.nav.eratio = np.ones(self.nav.nf)*50  # [-] factor
+        self.nav.err = [0, 0.01, 0.005]/np.sqrt(2)  # [m] sigma
 
         # Initial sigma for state covariance
         #

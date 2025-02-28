@@ -156,6 +156,7 @@ class rnxdec:
         if not append:
             nav.eph = []
             nav.geph = []
+            nav.seph = []
 
         with open(navfile, 'rt') as fnav:
             for line in fnav:
@@ -314,7 +315,7 @@ class rnxdec:
                             nav.ion_prm[sys][im].prm[0:3] = \
                                 [c_A, c_F10_7, c_Ap]
 
-                        else:  # Klobucher (LNAV, D1D2, CNVX)
+                        else:  # Klobuchar (LNAV, D1D2, CNVX)
                             nav.ion_prm[sys][im].prm = np.zeros(9)
 
                             for k in range(3):
@@ -365,6 +366,10 @@ class rnxdec:
                     sat = prn2sat(sys, prn)
                     geph = Geph(sat)
 
+                    pos = np.zeros(3)
+                    vel = np.zeros(3)
+                    acc = np.zeros(3)
+
                     geph.mode = self.mode_nav
                     toc = self.decode_time(line, 4)
                     week, tocs = time2gpst(toc)
@@ -380,15 +385,15 @@ class rnxdec:
                         bet_ = self.flt(line, 3)  # clock drift rate
 
                     line = fnav.readline()  # line #1
-                    geph.pos[0] = self.flt(line, 0)*1e3
-                    geph.vel[0] = self.flt(line, 1)*1e3
-                    geph.acc[0] = self.flt(line, 2)*1e3
+                    pos[0] = self.flt(line, 0)*1e3
+                    vel[0] = self.flt(line, 1)*1e3
+                    acc[0] = self.flt(line, 2)*1e3
                     geph.svh = int(self.flt(line, 3))
 
                     line = fnav.readline()  # line #2
-                    geph.pos[1] = self.flt(line, 0)*1e3
-                    geph.vel[1] = self.flt(line, 1)*1e3
-                    geph.acc[1] = self.flt(line, 2)*1e3
+                    pos[1] = self.flt(line, 0)*1e3
+                    vel[1] = self.flt(line, 1)*1e3
+                    acc[1] = self.flt(line, 2)*1e3
 
                     if self.mode_nav == 0:  # FDMA
                         geph.frq = int(self.flt(line, 3))
@@ -399,9 +404,13 @@ class rnxdec:
                         dvalid = int(self.flt(line, 3))
 
                     line = fnav.readline()  # line #3
-                    geph.pos[2] = self.flt(line, 0)*1e3
-                    geph.vel[2] = self.flt(line, 1)*1e3
-                    geph.acc[2] = self.flt(line, 2)*1e3
+                    pos[2] = self.flt(line, 0)*1e3
+                    vel[2] = self.flt(line, 1)*1e3
+                    acc[2] = self.flt(line, 2)*1e3
+
+                    geph.pos = pos
+                    geph.vel = vel
+                    geph.acc = acc
 
                     if self.mode_nav == 0:  # FDMA
                         geph.age = int(self.flt(line, 3))
@@ -470,28 +479,36 @@ class rnxdec:
                     sat = prn2sat(sys, prn)
                     seph = Seph(sat)
 
+                    pos = np.zeros(3)
+                    vel = np.zeros(3)
+                    acc = np.zeros(3)
+
                     seph.toc = self.decode_time(line, 4)
                     seph.af0 = self.flt(line, 1)
                     seph.af1 = self.flt(line, 2)
                     seph.tot = self.flt(line, 3)
 
                     line = fnav.readline()  # line #1
-                    seph.pos[0] = self.flt(line, 0)*1e3
-                    seph.vel[0] = self.flt(line, 1)*1e3
-                    seph.pos[0] = self.flt(line, 2)*1e3
+                    pos[0] = self.flt(line, 0)*1e3
+                    vel[0] = self.flt(line, 1)*1e3
+                    acc[0] = self.flt(line, 2)*1e3
                     seph.svh = int(self.flt(line, 3))
 
                     line = fnav.readline()  # line #2
-                    seph.pos[1] = self.flt(line, 0)*1e3
-                    seph.vel[1] = self.flt(line, 1)*1e3
-                    seph.pos[1] = self.flt(line, 2)*1e3
+                    pos[1] = self.flt(line, 0)*1e3
+                    vel[1] = self.flt(line, 1)*1e3
+                    acc[1] = self.flt(line, 2)*1e3
                     seph.sva = self.flt(line, 3)
 
                     line = fnav.readline()  # line #3
-                    seph.pos[2] = self.flt(line, 0)*1e3
-                    seph.vel[2] = self.flt(line, 1)*1e3
-                    seph.pos[2] = self.flt(line, 2)*1e3
+                    pos[2] = self.flt(line, 0)*1e3
+                    vel[2] = self.flt(line, 1)*1e3
+                    acc[2] = self.flt(line, 2)*1e3
                     seph.iodn = int(self.flt(line, 3))
+
+                    seph.pos = pos
+                    seph.vel = vel
+                    seph.acc = acc
 
                     nav.seph.append(seph)
                     continue

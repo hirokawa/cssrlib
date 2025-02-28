@@ -686,7 +686,7 @@ def substSigTx(pcv, sig):
 
 def substSigRx(pcv, sig):
     """
-    Substitute frequency band for PCO/PCV selection of receving antenna.
+    Substitute frequency band for PCO/PCV selection of receiving antenna.
 
     This function converts a RINEX observation code to a phase observation code
     without tracking attribute. If the signal is not available in the list of
@@ -709,7 +709,7 @@ def substSigRx(pcv, sig):
     #
     sig = sig.toTyp(uTYP.L).toAtt()
 
-    # Use directly if an corresponsing offset exists
+    # Use directly if an corresponding offset exists
     #
     if sig in pcv.off:
         return sig
@@ -894,17 +894,17 @@ def antModelRx(nav, pos, e, sigs, rtype=1):
     else:  # for base
         ant = nav.rcv_ant_b
 
-    # Elevation angle, zenit angle and zenit angle grid
+    # Elevation angle, zenith angle and zenith angle grid
     #
     za = np.rad2deg(np.arccos(e[2]))
     za_t = np.arange(ant.zen[0], ant.zen[1]+ant.zen[2], ant.zen[2])
 
-    # Loop over singals
+    # Loop over signals
     #
     dant = np.zeros(len(sigs))
     for i, sig_ in enumerate(sigs):
 
-        # Subsititute signal if not available
+        # Substitute signal if not available
         #
         sig = substSigRx(ant, sig_)
 

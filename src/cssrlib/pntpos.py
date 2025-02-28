@@ -46,7 +46,7 @@ def ionmodel(t, pos, az, el, nav=None, model=uIonoModel.KLOBUCHAR, cs=None):
         if cs is None or cs.iodi < 0:
             diono = ionKlobuchar(t, pos, az, el, nav.ion)
             return diono
-        diono, var = ionoSBAS(t, pos, az, el, cs)
+        diono, _ = ionoSBAS(t, pos, az, el, cs)
         if diono == 0.0:
             diono = ionKlobuchar(t, pos, az, el, nav.ion)
 
@@ -104,8 +104,8 @@ class stdpos(pppos):
 
         # Observation noise parameters
         #
-        self.nav.eratio = np.ones(self.nav.nf)*100  # [-] factor
-        self.nav.err = [0, 0.000, 0.003]       # [m] sigma
+        self.nav.eratio = np.ones(self.nav.nf)*50  # [-] factor
+        self.nav.err = [0, 0.01, 0.005]            # [m] sigma
 
         # Initial sigma for state covariance
         #
@@ -175,8 +175,6 @@ class stdpos(pppos):
 
     def csmooth(self, obs: Obs, sat, Pm, Lm, ns=100, dt_th=1, cs_th=10):
         """ Hatch filter for carrier smoothing """
-
-        sys, _ = sat2prn(sat)
 
         if Pm == 0.0 or Lm == 0.0:
             self.cs_cnt[sat] = 1
