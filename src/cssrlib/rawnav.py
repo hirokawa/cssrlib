@@ -1990,10 +1990,14 @@ class rcvDec():
 
         if 'J' in gnss_t:
             sig_tab[uGNSS.QZS] = {
-                uTYP.C: [rSigRnx('JC1C'), rSigRnx('JC2L'), rSigRnx('JC5Q')],
-                uTYP.L: [rSigRnx('JL1C'), rSigRnx('JL2L'), rSigRnx('JL5Q')],
-                uTYP.D: [rSigRnx('JD1C'), rSigRnx('JD2L'), rSigRnx('JD5Q')],
-                uTYP.S: [rSigRnx('JS1C'), rSigRnx('JS2L'), rSigRnx('JS5Q')],
+                uTYP.C: [rSigRnx('JC1C'), rSigRnx('JC1E'), rSigRnx('JC1L'),
+                         rSigRnx('JC2L'), rSigRnx('JC5Q')],
+                uTYP.L: [rSigRnx('JL1C'), rSigRnx('JL1E'), rSigRnx('JL1L'),
+                         rSigRnx('JL2L'), rSigRnx('JL5Q')],
+                uTYP.D: [rSigRnx('JD1C'), rSigRnx('JD1E'), rSigRnx('JD1L'),
+                         rSigRnx('JD2L'), rSigRnx('JD5Q')],
+                uTYP.S: [rSigRnx('JS1C'), rSigRnx('JS1E'), rSigRnx('JS1L'),
+                         rSigRnx('JS2L'), rSigRnx('JS5Q')],
             }
 
         if 'S' in gnss_t:
@@ -2006,8 +2010,10 @@ class rcvDec():
 
         if 'I' in gnss_t:
             sig_tab[uGNSS.IRN] = {
-                uTYP.C: [rSigRnx('IC5A')], uTYP.L: [rSigRnx('IL5A')],
-                uTYP.D: [rSigRnx('ID5A')], uTYP.S: [rSigRnx('IS5A')],
+                uTYP.C: [rSigRnx('IC1P'), rSigRnx('IC5A')],
+                uTYP.L: [rSigRnx('IL1P'), rSigRnx('IL5A')],
+                uTYP.D: [rSigRnx('ID1P'), rSigRnx('ID5A')],
+                uTYP.S: [rSigRnx('IS1P'), rSigRnx('IS5A')],
             }
 
         return sig_tab
@@ -2145,3 +2151,35 @@ class rcvDec():
 
         if self.fh_rnxobs is not None:
             self.fh_rnxobs.close()
+
+    def output_sbas(self, prn, msg, fh, itype=0):
+        """ output ascii encoded SBAS raw message into file. """
+        if itype == 3:  # QZSS L5S experimental message
+            pre_t = [0x5, 0xc, 0x6, 0x9, 0x3, 0xa]
+            preamble = msg[0]
+            s = msg[1] >> 6
+            if s == 0:
+                mt = 34
+            elif s == 1:
+                if preamble == 0x53:
+                    mt = 31  # DFMC mask
+                elif preamble == 0x9a:
+                    mt = 37  # DFMC OBAD
+                else:
+                    mt = 47  # DFMC SBAS almanac
+            elif s == 2:
+                mt = 32  # DFMC orbit/clock correction
+            else:  # s == 3:
+                mt = 63  # DFMC null
+            preamble = pre_t[int(self.tow) % 6]
+            msg[0] = (preamble << 4) | (mt >> 2)
+            msg[1] = ((mt & 0x3) << 6) | (msg[1] & 0x3f)
+        else:
+            bl = 4 if itype == 1 else 8
+            mt = bs.unpack_from('u6', msg, bl)[0]
+
+        fh.write("{:4d}{:7d}{:4d}{:3d} : ".
+                 format(self.week, int(self.tow), prn, mt))
+        for i in range(29):
+            fh.write("{:02X}".format(msg[i]))
+        fh.write("\n")

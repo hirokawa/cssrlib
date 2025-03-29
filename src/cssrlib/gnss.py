@@ -78,6 +78,7 @@ class rCST():
     FREQ_S1 = 1575.42e6      # [Hz] SBS L1
     FREQ_S5 = 1176.45e6      # [Hz] SBS L5
 
+    FREQ_I1 = 1575.42e6      # [Hz] IRS L1
     FREQ_I5 = 1191.795e6     # [Hz] IRS L5
     FREQ_IS = 2492.028e6     # [Hz] IRS S
 
@@ -481,7 +482,8 @@ class rSigRnx():
                    (s[1] == '6' and s[2] not in 'IQXDPZ'):
                     raise ValueError
             elif sys == uGNSS.IRN:
-                if (s[1] == '5' and s[2] not in 'ABCX') or \
+                if (s[1] == '1' and s[2] not in 'DPX') or \
+                   (s[1] == '5' and s[2] not in 'ABCX') or \
                    (s[1] == '9' and s[2] not in 'ABCX'):
                     raise ValueError
 
@@ -590,7 +592,9 @@ class rSigRnx():
             elif int(self.sig / 100) == 5:
                 return rCST.FREQ_S5
         elif self.sys == uGNSS.IRN:
-            if int(self.sig / 100) == 5:
+            if int(self.sig / 100) == 1:
+                return rCST.FREQ_I1
+            elif int(self.sig / 100) == 5:
                 return rCST.FREQ_I5
             elif int(self.sig / 100) == 9:
                 return rCST.FREQ_IS
