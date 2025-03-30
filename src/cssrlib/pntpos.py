@@ -129,6 +129,7 @@ class stdpos(pppos):
 
         self.nav.elmin = np.deg2rad(10.0)
 
+        self.nsat = 0
         self.dop = None
 
         # Initial state vector
@@ -318,7 +319,7 @@ class stdpos(pppos):
                 PR = obs.P[i, 0]
                 CP = lam[0]*obs.L[i, 0]
             else:  # iono-free combination
-                iono = 0
+                iono = 0.0
                 if self.nav.rmode == 1:  # L1/L2 iono free combination
                     gam = (rCST.FREQ_G1/rCST.FREQ_G2)**2
                 if self.nav.rmode == 2:  # L1/L5 iono free combination
@@ -471,6 +472,8 @@ class stdpos(pppos):
             ns = len(iu)
 
         if ns < 4:
+            self.nav.t = obs.t
+            self.nsat = ns
             print(" too few satellites < 4: ns={:d}".format(ns))
             return
 

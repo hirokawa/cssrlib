@@ -554,13 +554,13 @@ class sbasDec(cssr):
         self.lc[0].dorb[sat][1] = -self.sval(dy, 11, 0.125)
         self.lc[0].dorb[sat][2] = -self.sval(dz, 11, 0.125)
 
-        self.lc[0].dclk[sat] = -self.sval(db, 11, rCST.P2_31*rCST.CLIGHT)
+        self.lc[0].dclk[sat] = self.sval(db, 11, rCST.P2_31*rCST.CLIGHT)
         self.lc[0].dvel[sat] = np.zeros(3)
         self.lc[0].dvel[sat][0] = -self.sval(dxd, 8, rCST.P2_11)
         self.lc[0].dvel[sat][1] = -self.sval(dyd, 8, rCST.P2_11)
         self.lc[0].dvel[sat][2] = -self.sval(dzd, 8, rCST.P2_11)
 
-        self.lc[0].ddft[sat] = self.sval(db, 8, rCST.P2_39*rCST.CLIGHT)
+        self.lc[0].ddft[sat] = self.sval(dbd, 8, rCST.P2_39*rCST.CLIGHT)
 
         self.lc[0].cstat |= (1 << sCType.CLOCK) | (1 << sCType.ORBIT)
 
