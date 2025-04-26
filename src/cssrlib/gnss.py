@@ -1278,10 +1278,10 @@ def dops_h(H):
     """ calculate DOP from H """
     Qinv = np.linalg.inv(np.dot(H.T, H))
     dop = np.diag(Qinv)
-    hdop = dop[0]+dop[1]  # TBD
-    vdop = dop[2]  # TBD
-    pdop = hdop+vdop
-    gdop = pdop+dop[3]
+    hdop = np.sqrt(dop[0]+dop[1])
+    vdop = np.sqrt(dop[2])
+    pdop = np.sqrt(np.sum(dop[0:3]))
+    gdop = np.sqrt(np.sum(dop[0:4]))
     dop = np.array([gdop, pdop, hdop, vdop])
     return dop
 
@@ -1303,14 +1303,7 @@ def dops(az, el, elmin=0):
         n += 1
     if n < 4:
         return None
-    Qinv = np.linalg.inv(np.dot(H.T, H))
-    dop = np.diag(Qinv)
-    hdop = dop[0]+dop[1]  # TBD
-    vdop = dop[2]  # TBD
-    pdop = hdop+vdop
-    gdop = pdop+dop[3]
-    dop = np.array([gdop, pdop, hdop, vdop])
-    return dop
+    return dops_h(H)
 
 
 def xyz2enu(pos):
