@@ -179,6 +179,7 @@ class sbasDec(cssr):
         self.cssrmode = sCSSRTYPE.SBAS_L1
         self.nsig_max = 0
         self.sat_n = []
+        self.sat = []
 
         self.lc[0].dclk = {}
         self.lc[0].hclk = {}
@@ -940,7 +941,7 @@ class sbasDec(cssr):
 
         self.lc[0].cstat |= (1 << sCType.CLOCK) | (1 << sCType.ORBIT)
         self.lc[0].t0[sat] = {
-            sCType.CLOCK: self.time, sCType.ORBIT: self.time}
+            sCType.CLOCK: self.time0, sCType.ORBIT: self.time0}
 
         return sat
 
@@ -957,6 +958,8 @@ class sbasDec(cssr):
         i += 45
         dxd, dyd, dzd, dbd, t0 = bs.unpack_from('s8s8s8s9u13', msg, i)
         i += 46
+
+        self.time0 = tod2tow(t0*16.0, self.time)
 
         i, C = self.decode_cov(msg, i)
 
@@ -975,8 +978,6 @@ class sbasDec(cssr):
         self.cov[sat] = C
         self.dfrei[sat] = dfrei
         self.dRcorr[sat] = dRcorr
-
-        self.time0 = tod2tow(t0*16.0, self.time)
 
         # self.iodssr = 0
 
