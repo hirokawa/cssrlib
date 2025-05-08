@@ -508,7 +508,7 @@ class atxdec():
         self.pcvs = []
         self.pcvr = []
 
-    def readpcv(self, fname):
+    def readpcv(self, fname, onlyReceiver=False):
         """ read ANTEX file """
 
         state = False
@@ -526,7 +526,7 @@ class atxdec():
                 elif "END OF ANTENNA" in line[60:]:
                     if pcv.sat is None:
                         self.pcvr.append(pcv)
-                    else:
+                    elif not onlyReceiver:
                         self.pcvs.append(pcv)
                     state = False
                 if not state:
@@ -664,7 +664,7 @@ def substSigTx(pcv, sig):
     #
     sig = sig.toTyp(uTYP.L).toAtt()
 
-    # Use directly if an corresponsing offset exists
+    # Use directly if an corresponding offset exists
     #
     if sig in pcv.off:
         return sig
@@ -678,7 +678,7 @@ def substSigTx(pcv, sig):
         if sig.sig == uSIG.L3:
             sig = rSigRnx(sig.sys, sig.typ, uSIG.L2)
     elif sig.sys == uGNSS.BDS:
-        if sig.sig == uSIG.L8:  # BDS-3 Ba+b
+        if sig.sig == uSIG.L8:  # BDS-3 B2a+b
             sig = rSigRnx(sig.sys, sig.typ, uSIG.L5)
 
     return sig
