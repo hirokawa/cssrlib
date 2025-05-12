@@ -355,6 +355,7 @@ def satpos(sat, t, nav, cs=None, orb=None):
             dorb = cs.lc[0].dorb[sat]  # radial,along-track,cross-track
 
             if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5):
+
                 dorb += cs.lc[0].dvel[sat] * \
                     (timediff(t, cs.lc[0].t0[sat][sCType.ORBIT]))
 
@@ -469,7 +470,7 @@ def satpos(sat, t, nav, cs=None, orb=None):
             dts[i] += dclk/rCST.CLIGHT
 
             if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5,
-                               sc.DGPS):
+                               sc.DGPS) and sys == uGNSS.GPS:
                 dts[i] -= eph.tgd
 
         elif nav.smode == 1 and nav.nf == 1:  # standalone positioning
@@ -707,6 +708,7 @@ def satposs(obs, nav, cs=None, orb=None):
 
                 nav.dorb[sat] = dorb_
                 nav.dclk[sat] = dclk
+
             elif nav.smode == 1 and nav.nf == 1:  # stand-alone positioning
                 dts[i] -= eph.tgd
 
