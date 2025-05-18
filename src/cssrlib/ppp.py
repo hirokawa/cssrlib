@@ -6,7 +6,10 @@ from cssrlib.peph import gpst2utc, time2epoch
 from enum import IntEnum
 from math import sin, cos, atan2, asin
 import numpy as np
-from pysolid.solid import solid_grid
+try:
+    from pysolid.solid import solid_grid
+except ImportError:
+    solid_grid = None
 
 
 def nut_iau1980(t_, f):
@@ -389,8 +392,12 @@ def tidedispIERS2010(tutc, pos, erpv=None):
     Wrapper for solid_grid() method of PySolid module to compute Earth tide
     displacement corrections according to the IERS2010 conventions
     """
+    if solid_grid is None:  # workaround for missing PySolid
+        return tidedisp(tutc, pos, erpv)
+
     e = time2epoch(tutc)
-    disp_e, disp_n, disp_u = solid_grid(e[0], e[1], e[2], e[3], e[4], int(e[5]),
+    disp_e, disp_n, disp_u = solid_grid(e[0], e[1], e[2], e[3], e[4],
+                                        int(e[5]),
                                         np.rad2deg(pos[0]), 0, 1,
                                         np.rad2deg(pos[1]), 0, 1)
     E = gn.enu2xyz(pos)
