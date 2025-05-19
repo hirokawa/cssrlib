@@ -121,6 +121,9 @@ class pppos():
         self.nav.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
         self.nav.elmin = np.deg2rad(15.0)
 
+        self.nav.parmode = 2  # 1: normal, 2: PAR
+        self.nav.par_P0 = 0.995  # probability of sussefull AR
+
         # Initial state vector
         #
         self.nav.x[0:3] = pos0
@@ -657,11 +660,13 @@ class pppos():
                     elif sys == uGNSS.BDS:
                         sig0 = (rSigRnx("CC6I"),)
 
-                elif cs.cssrmode == sc.PVS_PPP:
+                elif cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5):
                     if sys == uGNSS.GPS:
                         sig0 = (rSigRnx("GC1C"), rSigRnx("GC5Q"))
                     elif sys == uGNSS.GAL:
                         sig0 = (rSigRnx("EC1C"), rSigRnx("EC5Q"))
+                    elif sys == uGNSS.SBS:
+                        sig0 = (rSigRnx("SC1C"), rSigRnx("SC5Q"))
 
             # Receiver/satellite antenna offset
             #
@@ -1054,7 +1059,7 @@ class pppos():
         ix = np.resize(ix, (nb, 2))
         return ix
 
-    def resamb_lambda(self, sat):
+    def resamb_lambda(self, sat, armode=1, P0=0.995):
         """ resolve integer ambiguity using LAMBDA method """
         nx = self.nav.nx
         na = self.nav.na
@@ -1072,8 +1077,9 @@ class pppos():
         Qab = self.nav.P[0:na, ix[:, 0]]-self.nav.P[0:na, ix[:, 1]]
 
         # MLAMBDA ILS
-        b, s = mlambda(y, Qb)
-        if s[0] <= 0.0 or s[1]/s[0] >= self.nav.thresar:
+        b, s, nfix, Ps = mlambda(y, Qb, armode=armode, P0=P0)
+        if s[0] <= 0.0 or s[1]/s[0] >= self.nav.thresar \
+                or (armode == 2 and nfix > 0):
             self.nav.xa = self.nav.x[0:na].copy()
             self.nav.Pa = self.nav.P[0:na, 0:na].copy()
             bias = b[:, 0]
@@ -1084,6 +1090,13 @@ class pppos():
 
             # restore SD ambiguity
             xa = self.restamb(bias, nb)
+
+        elif armode == 2 and nfix == 0:
+            nb = 0
+            if self.nav.monlevel > 0:
+                self.nav.fout.write(
+                    "{:s}  Ps={:3.2f} nfix={:d}\n".
+                    format(time2str(self.time), Ps, nfix))
         else:
             nb = 0
 
@@ -1404,7 +1417,7 @@ class pppos():
         self.nav.smode = 5  # 4: fixed ambiguities, 5: float ambiguities
 
         if self.nav.armode > 0:
-            nb, xa = self.resamb_lambda(sat)
+            nb, xa = self.resamb_lambda(sat, self.nav.parmode, self.nav.par_P0)
             if nb > 0:
                 # Use position with fixed ambiguities xa
                 yu, eu, elu = self.zdres(obs, cs, bsx, rs, vs, dts, xa[0:3])
@@ -1416,6 +1429,10 @@ class pppos():
                     if self.nav.armode == 3:     # fix and hold
                         self.holdamb(xa)    # hold fixed ambiguity
                     self.nav.smode = 4           # fix
+                else:
+                    pass
+            else:
+                pass
 
         # Store epoch for solution
         #

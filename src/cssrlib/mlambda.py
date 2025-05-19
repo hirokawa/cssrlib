@@ -11,6 +11,8 @@ reference :
 """
 
 import numpy as np
+from scipy.stats import norm
+from numpy.linalg import inv
 
 
 def ldldecom(Q):
@@ -64,6 +66,12 @@ def reduction(L, d):
         else:
             j -= 1
     return L, d, Z
+
+
+def sr_boost(d):
+    """ Compute the bootstrapped success rate """
+    Ps = np.prod(2*norm.cdf(0.5/np.sqrt(d))-1)
+    return Ps
 
 
 def msearch(L, d, zs, m=2):
@@ -129,14 +137,67 @@ def msearch(L, d, zs, m=2):
     return zn, s
 
 
-def mlambda(a, Q, m=2):
-    L, d = ldldecom(Q)
+def parsearch(zhat, Qzhat, Z, L, d, P0=0.995, ncands=2):
+    """ Partial Ambiguity Resolution """
+    n = len(Qzhat)
+    Ps = sr_boost(d)
+
+    k = 0
+    while Ps < P0 and k < (n-1):
+        k += 1
+
+        # Compute the bootstrapped success rate if the last n-k+1 ambiguities
+        # would be fixed
+        Ps = sr_boost(d[k:])
+
+    if Ps > P0:
+
+        zpar, sqnorm = msearch(L[k:, k:], d[k:], zhat[k:], ncands)
+
+        Qzpar = Qzhat[k:, k:]
+        Zpar = Z[:, k:]
+
+        # First k-1 ambiguities are adjusted based on correlation with the
+        # fixed ambiguities
+        QP = Qzhat[:k, k:]@inv(Qzhat[k:, k:])
+
+        zfix = np.zeros((k, ncands))
+        for i in range(ncands):
+            zfix[:, i] = zhat[:k] - QP@(zhat[k:]-zpar[:, i])
+
+        zfix = np.concatenate((zfix, zpar), axis=0)
+        nfix = n-k
+
+    else:
+
+        zpar = []
+        Qzpar = []
+        Zpar = []
+        sqnorm = []
+        Ps = np.nan
+        zfix = zhat
+        nfix = 0
+
+    return zpar, sqnorm, Qzpar, Zpar, Ps, nfix, zfix
+
+
+def mlambda(ahat, Qahat, ncands=2, armode=1, P0=0.995):
+    """ modified LAMBDA method for ambiguity resolution """
+    L, d = ldldecom(Qahat)
     L, d, Z = reduction(L, d)
-    invZt = np.round(np.linalg.inv(Z.T))
-    z = Z.T@a
-    E, s = msearch(L, d, z, m)
-    afix_ = invZt@E
-    return afix_, s
+    iZt = np.round(inv(Z.T))
+    zhat = Z.T@ahat
+
+    if armode == 1:
+        zfix, s = msearch(L, d, zhat, ncands)
+        Ps, nfix = np.nan, len(zhat)
+    elif armode == 2:  # PAR
+        Qzhat = Z.T@Qahat@Z
+        zpar, s, Qzpar, Zpar, Ps, nfix, zfix = parsearch(zhat, Qzhat, Z, L, d,
+                                                         P0, ncands)
+
+    afix_ = iZt@zfix
+    return afix_, s, nfix, Ps
 
 
 if __name__ == '__main__':
