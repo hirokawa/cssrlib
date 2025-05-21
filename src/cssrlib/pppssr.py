@@ -1078,8 +1078,7 @@ class pppos():
 
         # MLAMBDA ILS
         b, s, nfix, Ps = mlambda(y, Qb, armode=armode, P0=P0)
-        if s[0] <= 0.0 or s[1]/s[0] >= self.nav.thresar \
-                or (armode == 2 and nfix > 0):
+        if nfix > 0 and (armode == 2 or s[0] <= 0.0 or s[1]/s[0] >= self.nav.thresar):
             self.nav.xa = self.nav.x[0:na].copy()
             self.nav.Pa = self.nav.P[0:na, 0:na].copy()
             bias = b[:, 0]
@@ -1096,7 +1095,7 @@ class pppos():
             if self.nav.monlevel > 0:
                 self.nav.fout.write(
                     "{:s}  Ps={:3.2f} nfix={:d}\n".
-                    format(time2str(self.time), Ps, nfix))
+                    format(time2str(self.nav.t), Ps, nfix))
         else:
             nb = 0
 
