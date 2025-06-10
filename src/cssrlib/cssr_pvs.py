@@ -81,10 +81,10 @@ class cssr_pvs(cssr):
 
     def adjust_time_week(self, time, time0):
         dt = timediff(time, time0)
-        if dt > rCST.HALFWEEK_SEC:
-            time = timeadd(time, -rCST.WEEK_SEC)
-        elif dt < -rCST.HALFWEEK_SEC:
-            time = timeadd(time,  rCST.WEEK_SEC)
+        if dt > rCST.DAY_SEC/2:
+            time = timeadd(time, -rCST.DAY_SEC)
+        elif dt < -rCST.DAY_SEC/2:
+            time = timeadd(time,  rCST.DAY_SEC)
         return time
 
     def check_validity(self, time):
