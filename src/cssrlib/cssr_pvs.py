@@ -7,6 +7,12 @@ PVS (PPP via SouthPAN) correction data decoder
 [2] Service Definition Document for Data Access Services, SBAS-STN-0002,
     Revision 01, November 2023
 
+For use of SSR corrections see section A 3.9.2 in
+
+[3] EUROCAE, ED-259, Minimum Operational Performance Standards for Galileo -
+    Global Positioning System - Satellite-Based Augmentation System Airborne
+    Equipment
+
 """
 
 import numpy as np
