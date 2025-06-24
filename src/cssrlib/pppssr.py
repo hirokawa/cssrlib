@@ -539,11 +539,12 @@ class pppos():
             if self.nav.ephopt == 4:  # from Bias-SINEX
 
                 # Code and phase signal bias, converted from [ns] to [m]
-                # note: IGS uses sign convention different with RTCM
+                # Note: IGS uses sign convention different with RTCM
                 cbias = np.array(
                     [-bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
-                pbias = np.array(
-                    [-bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
+                if sys != uGNSS.GLO:
+                    pbias = np.array(
+                        [-bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
 
             elif cs is not None:  # from CSSR
 
@@ -598,6 +599,7 @@ class pppos():
                 trop = mapfh*trop_hs + mapfw*trop_wet
 
             # Ionospheric delay
+            #
             if self.nav.iono_opt == 2:  # from cssr
                 idx_l = cs.lc[inet].sat_n.index(sat)
                 iono = np.array([40.3e16/(f*f)*stec[idx_l] for f in frq])
