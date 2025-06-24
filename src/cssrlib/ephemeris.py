@@ -547,12 +547,23 @@ def satposs(obs, nav, cs=None, orb=None):
                 continue
             dt = dts_[0]
 
-            if len(nav.eph) > 0:
+            if sys == uGNSS.GLO and len(nav.geph) > 0:
+                geph = findeph(nav.geph, t, sat)
+                if geph is None:
+                    svh[i] = 1
+                    continue
+                svh[i] = geph.svh
+
+                if sat not in nav.glo_ch:
+                    nav.glo_ch[sat] = geph.frq
+
+            elif len(nav.eph) > 0:
                 eph = findeph(nav.eph, t, sat)
                 if eph is None:
                     svh[i] = 1
                     continue
                 svh[i] = eph.svh
+
             else:
                 svh[i] = 0
 

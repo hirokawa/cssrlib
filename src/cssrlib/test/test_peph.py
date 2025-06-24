@@ -180,23 +180,33 @@ if True:
     print("Test Bias-SINEX module")
     print()
 
+    site = "REYK"
+
     bd = biasdec()
-    bd.parse(dcbfile)
+    bd.parse(dcbfile,siteID=site)
 
     sat = id2sat("G03")
     sig = rSigRnx("GC1C")
 
     bias = bd.getosb(sat, time, sig)
 
-    print("{:s} {:s} {:8.5f}"
-          .format(sat2id(sat), sig.str(), bias))
+    print("{:s} {:4s} {:s} {:8.5f}"
+          .format(sat2id(sat), "", sig.str(), bias))
     assert bias == -0.7324
 
     sig = rSigRnx("GL1W")
     bias = bd.getosb(sat, time, sig)
 
-    print("{:s} {:s} {:8.5f}"
-          .format(sat2id(sat), sig.str(), bias))
+    print("{:s} {:4s} {:s} {:8.5f}"
+          .format(sat2id(sat), "", sig.str(), bias))
     assert bias == 0.67184
+
+    sat = id2sat("R01")
+    sig = rSigRnx("RC1C")
+    bias = bd.getosb(sat, time, sig)
+
+    print("{:s} {:4s} {:s} {:8.5f}"
+          .format(sat2id(sat), site, sig.str(), bias))
+    assert bias == -2.50640
 
     print()
