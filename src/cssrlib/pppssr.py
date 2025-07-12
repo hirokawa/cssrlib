@@ -1314,14 +1314,14 @@ class pppos():
                 gf0 = self.nav.gf[sat_i]
                 if gf1 != 0.0:
                     self.nav.gf[sat_i] = gf1
-                if gf0 != 0.0 and gf1 != 0.0 and
-                abs(gf1-gf0) > self.nav.thresslip:
+                if gf0 != 0.0 and gf1 != 0.0 and \
+                        abs(gf1-gf0) > self.nav.thresslip:
                     self.nav.edt[i, 0:2] = 1
                     if self.nav.monlevel > 0:
                         self.nav.fout.write(" {}  {} - edit [:4s] - GF slip gf0 {:6.3f} gf1 {:6.3f} gf0-gf1 {:6.3f} \n"
                                             .format(time2str(obs.t),
-                                                    satid(sat_i),
-                                                    sigCP[0].str(), gf0, gf1,
+                                                    sat2id(sat_i),
+                                                    sig1.str(), gf0, gf1,
                                                     gf0-gf1))
 
             # Store satellite which have passed all tests
