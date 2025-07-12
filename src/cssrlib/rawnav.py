@@ -180,7 +180,7 @@ class RawNav():
         # odd_, page_ = bs.unpack_from('u1u1', msg, 120)
         sid, iodnav = bs.unpack_from('u6u10', msg, 2)
 
-        if sid > 5:
+        if sid == 0 or sid > 5:
             return None
 
         buff = self.gal_inav[prn-1]
@@ -255,9 +255,13 @@ class RawNav():
         elif type_ == 1:  # FNAV E1B, R5A
             eph.code |= (1 << 8)  # toc/af0-2, SISA are for E5a, E1
 
+        eph.tot = gst2time(week_gst, tow)
+        if toc < tow - rCST.HALFWEEK_SEC:
+            week_gst += 1
+        elif toc > tow + rCST.HALFWEEK_SEC:
+            week_gst -= 1
         eph.toe = gst2time(week_gst, eph.toes)
         eph.toc = gst2time(week_gst, toc)
-        eph.tot = gst2time(week_gst, tow)
 
         eph.tgd = bgda*rCST.P2_32    # TGD (E1, E5a)
         eph.tgd_b = bgdb*rCST.P2_32  # TGD (E1, E5b)
@@ -336,9 +340,15 @@ class RawNav():
         eph.code = 2  # FNAV
         eph.code |= (1 << 8)  # toc/af0-2, SISA are for E5a, E1
 
+        eph.tot = gst2time(week_gst, tow)
+
+        if toc < tow - rCST.HALFWEEK_SEC:
+            week_gst += 1
+        elif toc > tow + rCST.HALFWEEK_SEC:
+            week_gst -= 1
+
         eph.toe = gst2time(week_gst, eph.toes)
         eph.toc = gst2time(week_gst, toc)
-        eph.tot = gst2time(week_gst, tow)
 
         eph.tgd = bgda*rCST.P2_32    # TGD (E1, E5a)
         eph.tgd_b = 0.0
@@ -448,9 +458,15 @@ class RawNav():
         eph.OMGd = OMGd*rCST.P2_43*rCST.SC2RAD
         eph.idot = idot*rCST.P2_43*rCST.SC2RAD
         eph.mode = 0  # LNAV
+
+        eph.tot = bdt2time(eph.week, tow)
+        if toc < tow - rCST.HALFWEEK_SEC:
+            eph.week += 1
+        elif toc > tow + rCST.HALFWEEK_SEC:
+            eph.week -= 1
+
         eph.toc = gpst2time(eph.week, toc)
         eph.toe = gpst2time(eph.week, eph.toes)
-        eph.tot = bdt2time(eph.week, tow)
 
         return eph
 
@@ -518,11 +534,11 @@ class RawNav():
         id2 = bs.unpack_from('u6', buff, 304+14)[0]
         id3 = bs.unpack_from('u6', buff, 304*2+14)[0]
 
-        if id1 != 10 or id2 != 11 or id3//10 != 3:
-            if sys == uGNSS.QZS and id3 == 61:
-                None
-            else:
-                return None
+        if id1 != 10 or id2 != 11:
+            return None
+
+        if id3//10 != 3 and (sys == uGNSS.QZS and id3 != 61):
+            return None
 
         toe1 = bs.unpack_from('u11', buff, 70)[0]
         toe2 = bs.unpack_from('u11', buff, 304+38)[0]
@@ -627,9 +643,13 @@ class RawNav():
         eph.cuc = cuc*rCST.P2_30
 
         eph.mode = 1  # CNAV
+        eph.tot = gpst2time(eph.week, tow)
+        if toc < tow - rCST.HALFWEEK_SEC:
+            eph.week += 1
+        elif toc > tow + rCST.HALFWEEK_SEC:
+            eph.week -= 1
         eph.toc = gpst2time(eph.week, toc)
         eph.toe = gpst2time(eph.week, eph.toes)
-        eph.tot = gpst2time(eph.week, tow)
         eph.top = gpst2time(eph.wn_op, eph.tops)
 
         if wn_op < 0:
@@ -736,9 +756,13 @@ class RawNav():
         eph.cuc = cuc*rCST.P2_30
 
         eph.mode = 2  # CNAV/2
+        eph.tot = gpst2time(eph.week, tow)
+        if toe < tow - rCST.HALFWEEK_SEC:
+            eph.week += 1
+        elif toe > tow + rCST.HALFWEEK_SEC:
+            eph.week -= 1
         eph.toe = gpst2time(eph.week, eph.toes)
         eph.toc = eph.toe
-        eph.tot = gpst2time(eph.week, tow)
         eph.top = gpst2time(eph.wn_op, eph.tops)
 
         return eph
@@ -909,7 +933,7 @@ class RawNav():
         """ BDS B2a (B-CNAV2 message decoder) [4] """
 
         sys, prn = sat2prn(sat)
-        sid, sow = bs.unpack_from('u6u18', msg, 6)
+        prn_, sid, sow = bs.unpack_from('u6u6u18', msg, 0)
 
         if sid not in (10, 11, 30, 34, 40):
             return None
@@ -1051,6 +1075,9 @@ class RawNav():
         if pre != 0x712:
             return None
 
+        if sid > 3:
+            return None
+
         buff = self.bds_d12[prn-1]
         i0 = (sid-1)*40
         # copy_buff(msg, buff, i, i0, 40*8-i)
@@ -1068,8 +1095,8 @@ class RawNav():
         if id1 != 1 or id2 != 2 or id3 != 3:
             return None
 
-        if sow2 != sow1+6 or sow3 != sow2+6:
-            return None
+        # if sow2 != sow1+6 or sow3 != sow2+6:
+        #    return None
 
         eph = Eph(sat)
 
@@ -1119,9 +1146,9 @@ class RawNav():
 
         eph.toes = ((toe1 << 15)+toe2)*8.0
         eph.tot = bdt2gpst(bdt2time(eph.week, sow1))
-        if eph.toes > sow1+302400.0:
+        if eph.toes > sow1+rCST.HALFWEEK_SEC:
             eph.week += 1
-        elif eph.toes < sow1-302400.0:
+        elif eph.toes < sow1-rCST.HALFWEEK_SEC:
             eph.week -= 1
         eph.toc = bdt2time(eph.week, toc)
         eph.toe = bdt2time(eph.week, eph.toes)
@@ -1812,7 +1839,7 @@ class RawNav():
 
         return geph
 
-    def decode_sbs_l1(self, week, time, sat, msg):
+    def decode_sbs_l1(self, week, tow, sat, msg):
         ura_t = [2, 2.8, 4, 5.7, 8, 11.3, 16, 32,
                  64, 128, 256, 512, 1024, 2048, 4096, 0]
 
@@ -1835,7 +1862,7 @@ class RawNav():
         i += 20
 
         seph = Seph(sat)
-        seph.tof = gpst2time(week, time)
+        seph.tof = gpst2time(week, tow)
         seph.t0 = tod2tow(t0*16.0, seph.tof)
         seph.iodn = iodn
         seph.svh = 0 if ura != 15 else 1
