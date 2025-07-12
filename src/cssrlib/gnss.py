@@ -843,6 +843,9 @@ class Nav():
         self.thresar = 3.0  # AR acceptance threshold
         self.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
 
+        # cycle-slip threshold of geometry-free combination of phase [m]
+        self.thresslip = 0.15
+
         self.leaps = 18  # leap seconds [s]
 
         # Select tropospheric model
