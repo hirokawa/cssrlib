@@ -88,6 +88,8 @@ class Integrity():
     sat = {}
     mask_sys = 0
 
+    mm_param = None
+
     sys_tbl = {0: uGNSS.GPS, 1: uGNSS.GLO, 2: uGNSS.GAL, 3: uGNSS.BDS,
                4: uGNSS.QZS, 5: uGNSS.IRN}
 
@@ -194,6 +196,7 @@ class rtcm(cssr):
         }
 
         self.integ = Integrity()
+        self.test_mode = False  # for interop testing in SC134
 
     def is_msmtype(self, msgtype):
         for sys_ in self.msm_t.keys():
@@ -2330,11 +2333,20 @@ class rtcm(cssr):
     def decode_integrity_vmap(self, msg, i):
         """ RTCM SC-134 Satellite Visibility Map Message (MT9) """
 
+        if self.test_mode:  # for test
+            wg, st, rev = bs.unpack_from('u4u8u8', msg, i)
+            i += 20
+            self.subtype = st
+            self.ver = rev
+            self.wg = wg-1
+
         # GPS Epoch Time (TOW) DFi008
         # number of area points DFi201
-        tow, narea = bs.unpack_from('u30u8', msg, i)
-        i += 38
+        tow, narea, nslice, mcf = bs.unpack_from('u30u8u6u1', msg, i)
+        i += 45
         self.integ.pos = np.zeros((narea, 3))
+
+        tow *= 1e-3
 
         for k in range(narea):
             # Area Point - Lat DFi202
@@ -2343,24 +2355,37 @@ class rtcm(cssr):
             lat, lon, alt = bs.unpack_from('s34s35s14', msg, i)
             i += 83
 
-            self.integ.pos[k, :] = [lat, lon, alt]
+            self.integ.pos[k, :] = [lat*1.1e-8, lon*1.1e-8, alt]
+
+        self.integ.azel = np.zeros((nslice, 2))
 
         # Azimuth DFi206
         # Elevation Mask DFi208
-        az, mask_el = bs.unpack_from('u9u7', msg, i)
-        i += 16
+        az = 0
+        for k in range(nslice):
+            daz, mask_el = bs.unpack_from('u9u7', msg, i)
+            i += 16
+            az += daz
+            self.integ.azel[k, :] = [az, mask_el]
 
-        self.integ.az = az
-        self.integ.mask_el = mask_el
+        return i
 
     def decode_integrity_mmap(self, msg, i):
         """ RTCM SC-134 Multipath Map Message (MT10) """
 
+        if self.test_mode:  # for test
+            wg, st, rev = bs.unpack_from('u4u8u8', msg, i)
+            i += 20
+            self.subtype = st
+            self.ver = rev
+            self.wg = wg-1
+
         # GPS Epoch Time (TOW) DFi008
         # number of area points DFi201
-        # multipath model ID DFi209
-        tow, narea, mm_id = bs.unpack_from('u30u8u3', msg, i)
-        i += 41
+        # multipath model ID DFi209: 0:GMM,1:MBM,2:JM
+        tow, narea, mm_id, mcf = bs.unpack_from('u30u8u3u1', msg, i)
+        i += 42
+        tow *= 1e-3
         self.integ.pos = np.zeros((narea, 3))
         self.integ.mm_id = mm_id
 
@@ -2371,15 +2396,20 @@ class rtcm(cssr):
             lat, lon, alt = bs.unpack_from('s34s35s14', msg, i)
             i += 83
 
-            self.integ.pos[k, :] = [lat, lon, alt]
+            self.integ.pos[k, :] = [lat*1.1e-8, lon*1.1e-8, alt]
 
         if mm_id == 0:
             # Number of GMM components DFi210
             # GMM component probability DFi211
             # GMM component expectation DFi212
             # GMM component standard deviation DFi213
-            nc, prob, exp, std = bs.unpack_from('u2u4u4u4', msg, i)
+            nc, prob, exp_, std_ = bs.unpack_from('u2u4u4u4', msg, i)
             i += 14
+            prob *= 0.0625
+            exp = self.integ.mu_k_t[exp_]
+            std = self.integ.sig_k_t[std_]
+            self.integ.mm_param = [mm_id, prob, exp, std]
+
         elif mm_id == 1:
             # GNSS signal modulation DFi214
             # Multipath parameter a DFi215
@@ -2408,10 +2438,13 @@ class rtcm(cssr):
             smod, pa, pb, pc, pd = bs.unpack_from('u3u4s5s5u8', msg, i)[0]
             i += 25
 
+        return i
+
     def decode_integrity_ssr(self, msg, i):
         """ RTCM SC-134 SSR integrity message (MT11,12,13) """
         pid, tow, mask_sys = bs.unpack_from('u12u30u16', msg, i)
         i += 58
+        tow *= 1e-3
 
         # update rate interval DFi067
 
@@ -2420,8 +2453,9 @@ class rtcm(cssr):
         if self.msgtype == 11:
             vp, uri = bs.unpack_from('u4u16', msg, i)
             i += 20
-            self.integ.vp = vp  # Validity Period DFi065 (0-15)
-            self.integ.uri = uri  # update rate interval DFi067 (0.1)
+            # Validity Period DFi065 (0-15)
+            self.integ.vp = self.integ.vp_tbl[vp]
+            self.integ.uri = uri*0.1  # update rate interval DFi067 (0.1)
 
         sys_t, nsys = self.decode_mask(mask_sys, 16, ofst=0)
         iod_sys = {}
@@ -2453,7 +2487,7 @@ class rtcm(cssr):
         self.integ.nid = nid
         self.integ.flag = flag_t
 
-    def decode(self, msg):
+    def decode(self, msg, subtype=None):
         """ decode RTCM messages """
         i = 24
         self.msgtype = bs.unpack_from('u12', msg, i)[0]
@@ -2467,7 +2501,7 @@ class rtcm(cssr):
         geph = None
         seph = None
 
-        self.subtype = None
+        self.subtype = subtype
 
         # Network RTK residual messages
         if self.msgtype in (1057, 1063, 1240, 1246, 1252, 1258):
@@ -2567,6 +2601,11 @@ class rtcm(cssr):
         elif self.msgtype == 13:  # SSR integrity Trop
             self.subtype = sRTCM.INTEG_SSR_TROP
             self.decode_integrity_ssr(msg, i)
+        elif self.msgtype == 54:  # SSR integrity test msg
+            if self.subtype == 9:
+                self.decode_integrity_vmap(msg, i)
+            elif self.subtype == 10:
+                self.decode_integrity_mmap(msg, i)
         else:
             self.subtype = -1
 
