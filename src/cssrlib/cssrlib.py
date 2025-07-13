@@ -1,9 +1,9 @@
 """
 module for Compact SSR processing
 
-[1] Specification of Compact SSR Messages for Satellite Based Augmentation
+[1] Specification of Compact SSR Messages for Satellite Based Augmentation 
     Service, v08, DOI: 10.13140/RG.2.2.10749.49129, 2019
-
+    
 @author Rui Hirokawa
 
 """
@@ -315,7 +315,7 @@ class cssr:
         self.iodssr_c = np.ones(16, dtype=np.int32)*-1
         self.sig_n_p = []
 
-        # maximum validity time for correction
+        # maximum validty time for correction
         self.tmax = {sCType.CLOCK: 30.0, sCType.ORBIT: 120.0,
                      sCType.CBIAS: 120.0, sCType.PBIAS: 120.0,
                      sCType.TROP: 120.0, sCType.STEC: 120.0}
@@ -572,6 +572,8 @@ class cssr:
             for k in range(0, nsat):
                 if sys == uGNSS.QZS:
                     prn[k] += 192
+                elif sys == uGNSS.BDS3:
+                    prn[k] += 18
                 sat = prn2sat(sys, prn[k])
                 self.sys_n.append(sys)
                 self.sat_n.append(sat)
@@ -1211,7 +1213,7 @@ class cssr:
                                   skip_footer=0, encoding='utf8')
 
     def find_grid_index(self, pos):
-        """ find index/weight of surrounding grid   """
+        """ find index/weight of surounding grid   """
         self.rngmin = 5e3
         clat = np.cos(pos[0])
         dlat = np.deg2rad(self.grid['lat'])-pos[0]
@@ -1265,7 +1267,7 @@ class cssr:
         return dlat, dlon
 
     def get_trop(self, dlat=0.0, dlon=0.0):
-        """ calculate trop delay correction by interpolation """
+        """ calculate trop delay correction by interporation """
         inet = self.inet_ref
         trph = 0
         trpw = 0
@@ -1276,7 +1278,7 @@ class cssr:
         return trph, trpw
 
     def get_stec(self, dlat=0.0, dlon=0.0):
-        """ calculate STEC correction by interpolation """
+        """ calculate STEC correction by interporation """
         inet = self.inet_ref
         nsat = self.lc[inet].nsat_n
         stec = np.zeros(nsat)
