@@ -480,7 +480,8 @@ class cssr:
         """ convert from sGNSS to sys """
         tbl = {sGNSS.GPS: uGNSS.GPS, sGNSS.GLO: uGNSS.GLO,
                sGNSS.GAL: uGNSS.GAL, sGNSS.BDS: uGNSS.BDS,
-               sGNSS.QZS: uGNSS.QZS, sGNSS.SBS: uGNSS.SBS}
+               sGNSS.QZS: uGNSS.QZS, sGNSS.SBS: uGNSS.SBS,
+               sGNSS.BDS3: uGNSS.BDS}
         if gnss not in tbl:
             return -1
         sys = tbl[gnss]
@@ -552,16 +553,14 @@ class cssr:
         self.nsat_g = np.zeros(self.SYSMAX, dtype=int)
 
         for j in range(self.ngnss):
-            v = bs.unpack_from_dict('u4u40u16u1', ['gnssid', 'svmask',
-                                                   'sigmask', 'cma'], msg, i)
-            self.gnss_idx[j] = self.gnss2sys(v['gnssid'])
-            sys = self.gnss2sys(v['gnssid'])
+            gnss, svmask, sigmask, cma = bs.unpack_from('u4u40u16u1', msg, i)
+            sys = self.gnss_idx[j] = self.gnss2sys(gnss)
             i += 61
-            prn, nsat = self.decode_mask(v['svmask'], 40)
-            sig, nsig = self.decode_mask(v['sigmask'], 16, 0)
-            self.nsat_g[v['gnssid']] = nsat
+            prn, nsat = self.decode_mask(svmask, 40)
+            sig, nsig = self.decode_mask(sigmask, 16, 0)
+            self.nsat_g[gnss] = nsat
             self.nsat_n += nsat
-            if v['cma'] == 1:
+            if cma == 1:
                 vc = bs.unpack_from(('u'+str(nsig))*nsat, msg, i)
                 i += nsig*nsat
 
@@ -570,27 +569,27 @@ class cssr:
             sig_r = [self.ssig2rsig(sys, uTYP.L, s) for s in sig]
 
             for k in range(0, nsat):
-                if sys == uGNSS.QZS:
+                if gnss == sGNSS.QZS:
                     prn[k] += 192
-                elif v['gnssid'] == sGNSS.BDS3:
+                elif gnss == sGNSS.BDS3:
                     prn[k] += 18
                 sat = prn2sat(sys, prn[k])
                 self.sys_n.append(sys)
                 self.sat_n.append(sat)
-                self.gnss_n.append(v['gnssid'])
-                if v['cma'] == 1:
+                self.gnss_n.append(gnss)
+                if cma == 1:
                     sig_s, nsig_s = self.decode_mask(vc[k], nsig, 0)
                     sig_n = [sig_r[i] for i in sig_s]
                     self.nsig_n.append(nsig_s)
-                    self.nsig_total = self.nsig_total+nsig_s
+                    self.nsig_total += nsig_s
                     self.sig_n[sat] = sig_n
                 else:
                     self.nsig_n.append(nsig)
-                    self.nsig_total = self.nsig_total+nsig
+                    self.nsig_total += nsig
                     self.sig_n[sat] = sig_r
 
             if self.cssrmode == sCSSRTYPE.GAL_HAS_SIS:  # HAS only
-                self.nm_idx[v['gnssid']] = bs.unpack_from('u3', msg, i)[0]
+                self.nm_idx[gnss] = bs.unpack_from('u3', msg, i)[0]
                 i += 3
 
         if self.cssrmode == sCSSRTYPE.GAL_HAS_SIS:  # HAS only
