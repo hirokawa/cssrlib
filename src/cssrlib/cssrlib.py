@@ -572,7 +572,7 @@ class cssr:
             for k in range(0, nsat):
                 if sys == uGNSS.QZS:
                     prn[k] += 192
-                elif sys == uGNSS.BDS3:
+                elif v['gnssid'] == sGNSS.BDS3:
                     prn[k] += 18
                 sat = prn2sat(sys, prn[k])
                 self.sys_n.append(sys)
