@@ -1018,11 +1018,12 @@ class cssr:
         self.lc[inet].sat_n = self.decode_local_sat(netmask)
         self.lc[inet].nsat_n = nsat = len(self.lc[inet].sat_n)
         self.lc[inet].stec_quality = {}
-        if dfm['stec'] & 2 > 0:
+        if dfm['stec'] & 2 > 0:  # functional term is available
             self.lc[inet].ci = {}
             self.lc[inet].stype = {}
-        if dfm['stec'] & 1 > 0:
+        if dfm['stec'] & 1 > 0:  # residual term is available
             self.lc[inet].dstec = {}
+            self.lc[inet].s_sz = {}
 
         for k in range(nsat):
             sat = self.lc[inet].sat_n[k]
@@ -1044,6 +1045,7 @@ class cssr:
             if dfm['stec'] & 1 > 0:  # residual term
                 sz_idx = bs.unpack_from('u2', msg, i)[0]
                 i += 2
+                self.lc[inet].s_sz[sat] = sz_idx
                 sz = self.stec_sz_t[sz_idx]
                 scl = self.stec_scl_t[sz_idx]
                 v = bs.unpack_from(('s'+str(sz))*ng, msg, i)
