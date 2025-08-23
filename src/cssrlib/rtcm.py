@@ -1125,10 +1125,10 @@ class rtcm(cssr):
                                                   self.integ.pid))
 
             if self.subtype == sRTCM.INTEG_SSR:
-                self.fh.write(" {:20s}{:6d}\n".format("Varidity Period:",
-                                                      self.integ.vp))
-                self.fh.write(" {:20s}{:6d}\n".format("Update Interval:",
-                                                      self.integ.uri))
+                self.fh.write(" {:20s}{:6.1f}\n".format("Varidity Period:",
+                                                        self.integ.vp))
+                self.fh.write(" {:20s}{:6.1f}\n".format("Update Interval:",
+                                                        self.integ.uri))
 
             self.fh.write(" {:20s}{:04x}\n".format("Constellation Mask:",
                                                    self.integ.mask_sys))
@@ -1329,14 +1329,27 @@ class rtcm(cssr):
             pr_ = np.zeros(self.nsig, dtype=np.float64)
             cp_ = np.zeros(self.nsig, dtype=np.float64)
             ll_ = np.zeros(self.nsig, dtype=np.int32)
+            hf_ = np.zeros(self.nsig, dtype=np.int32)
             cn_ = np.zeros(self.nsig, dtype=np.float64)
+
+            fcn = 0
+            if sys == uGNSS.GLO:
+                if ex[k] <= 13:
+                    fcn = ex[k]-7
 
             for j, sig_ in enumerate(self.sig_n[k]):
                 idx = sig.index(sig_)
+                if sys != uGNSS.GLO:
+                    freq = obs.sig[sys][uTYP.C][idx].frequency()
+                else:
+                    freq = obs.sig[sys][uTYP.C][idx].frequency(fcn)
+
                 pr_[idx] = pr[j+ofst]+r[k]
-                cp_[idx] = cp[j+ofst]+r[k]
+                cp_[idx] = (cp[j+ofst]+r[k])*freq/rCST.CLIGHT
                 cn_[idx] = cnr[j+ofst]
                 ll_[idx] = lock[j+ofst]
+                hf_[idx] = half[j+ofst]
+
             ofst += nsig_
 
             obs.P[k, :] = pr_
@@ -1348,9 +1361,9 @@ class rtcm(cssr):
                 for j, ll in enumerate(ll_):
                     ll_p = self.lock[sat_][j]
                     if (ll == 0 & ll_p != 0) | ll < ll_p:
-                        obs.lli[k, j] = 1
-                    else:
-                        obs.lli[k, j] = 0
+                        obs.lli[k, j] |= 1
+                    if hf_[j] > 0:
+                        obs.lli[k, j] |= 3
 
             self.lock[sat_] = ll_
 
