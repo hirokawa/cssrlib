@@ -565,6 +565,7 @@ class rnxdec:
                     if (sys == uGNSS.GPS or sys == uGNSS.QZS) and \
                             self.mode_nav > 0:  # CNAV, CNAV/2
                         eph.tops = self.flt(line, 0)
+                        eph.week, eph.toes = time2gpst(eph.toc)
                     else:
                         eph.toes = self.flt(line, 0)
                 eph.cic = self.flt(line, 1)
@@ -1043,10 +1044,15 @@ class rnxenc:
         for sys in self.sig_tab:
             pr = self.sig_tab[sys][uTYP.C]
             cp = self.sig_tab[sys][uTYP.L]
-            dp = self.sig_tab[sys][uTYP.D]
-            cn = self.sig_tab[sys][uTYP.S]
+            nsig = len(pr)+len(cp)
 
-            nsig = len(pr)+len(cp)+len(dp)+len(cn)
+            if uTYP.D in self.sig_tab[sys]:
+                dp = self.sig_tab[sys][uTYP.D]
+                nsig += len(dp)
+
+            if uTYP.S in self.sig_tab[sys]:
+                cn = self.sig_tab[sys][uTYP.S]
+                nsig += len(cn)
 
             fh.write("{:1s}  {:3d}".format(sys_t[sys], nsig))
 
@@ -1064,14 +1070,16 @@ class rnxenc:
                     fh.write("  {:20s}\n{:6s}".format(
                         "SYS / # / OBS TYPES", ""))
 
-                fh.write(" {:3s}".format(dp[k].str()))
-                n += 1
-                if n == 13:
-                    fh.write("  {:20s}\n{:6s}".format(
-                        "SYS / # / OBS TYPES", ""))
+                if uTYP.D in self.sig_tab[sys]:
+                    fh.write(" {:3s}".format(dp[k].str()))
+                    n += 1
+                    if n == 13:
+                        fh.write("  {:20s}\n{:6s}".format(
+                            "SYS / # / OBS TYPES", ""))
 
-                fh.write(" {:3s}".format(cn[k].str()))
-                n += 1
+                if uTYP.S in self.sig_tab[sys]:
+                    fh.write(" {:3s}".format(cn[k].str()))
+                    n += 1
 
                 if n == 13:
                     fh.write("  {:20s}\n{:6s}".format(
@@ -1113,21 +1121,25 @@ class rnxenc:
 
         for k in range(nsat):
             fh.write("{:3s}".format(sat2id(obs.sat[k])))
-            sys, _ = sat2prn(obs.sat[k])
+            sys, prn = sat2prn(obs.sat[k])
             for i in range(nsig):
                 ssi = min(max(int(obs.S[k][i]/6), 1), 9)
                 lli = obs.lli[k][i]
                 fh.write("{:14s}{:2s}".format(
                     self.sval(obs.P[k][i]), ""))
+
                 fh.write("{:14s}".format(self.sval(obs.L[k][i])))
                 if obs.L[k][i] == 0.0:
                     fh.write("{:2s}".format(""))
                 else:
                     fh.write("{:1d}{:1d}".format(lli, ssi))
 
-                fh.write("{:14s}{:2s}".format(
-                    self.sval(obs.D[k][i]), ""))
-                fh.write("{:14s}{:2s}".format(self.sval(obs.S[k][i]), ""))
+                if uTYP.D in self.sig_tab[sys]:
+                    fh.write("{:14s}{:2s}".format(self.sval(obs.D[k][i]), ""))
+
+                if uTYP.S in self.sig_tab[sys]:
+                    fh.write("{:14s}{:2s}".format(self.sval(obs.S[k][i]), ""))
+
             fh.write("\n")
 
     def rnx_nav_body(self, eph=None, fh=None):

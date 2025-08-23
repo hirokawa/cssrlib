@@ -176,6 +176,7 @@ class rtcm(cssr):
         self.monlevel = 1
         self.sysref = -1
         self.nsig_max = 4
+        self.lock = {}
         self.mask_pbias = False
 
         self.nrtk_r = {}
@@ -1179,6 +1180,9 @@ class rtcm(cssr):
             tow = (t & 0x7ffffff)*1e-3
             time = gpst2time(week, tow+dow*86400.0)
             time = utc2gpst(timeadd(time, -10800.0))
+        elif sys == uGNSS.BDS:
+            tow = t*1e-3
+            time = bdt2gpst(gpst2time(week, tow))
         else:
             tow = t*1e-3
             time = gpst2time(week, tow)
@@ -1298,13 +1302,14 @@ class rtcm(cssr):
                 rrf[k] = self.sval(v, 15, 1e-4)
 
         obs = Obs()
-        obs.t = self.time
+        obs.time = self.time
 
-        obs.P = np.empty((0, self.nsig), dtype=np.float64)
-        obs.L = np.empty((0, self.nsig), dtype=np.float64)
-        obs.S = np.empty((0, self.nsig), dtype=np.float64)
-        obs.lli = np.empty((0, self.nsig), dtype=np.int32)
-        obs.sat = np.empty(0, dtype=np.int32)
+        obs.P = np.zeros((self.nsat, self.nsig), dtype=np.float64)
+        obs.L = np.zeros((self.nsat, self.nsig), dtype=np.float64)
+        obs.S = np.zeros((self.nsat, self.nsig), dtype=np.float64)
+        obs.D = np.zeros((self.nsat, self.nsig), dtype=np.float64)
+        obs.lli = np.zeros((self.nsat, self.nsig), dtype=np.int32)
+        obs.sat = np.zeros(self.nsat, dtype=np.int32)
 
         obs.sig = {}
         obs.sig[sys] = {}
@@ -1334,11 +1339,20 @@ class rtcm(cssr):
                 ll_[idx] = lock[j+ofst]
             ofst += nsig_
 
-            obs.P = np.append(obs.P, pr_)
-            obs.L = np.append(obs.L, cp_)
-            obs.S = np.append(obs.S, cn_)
-            obs.lli = np.append(obs.lli, ll_)
-            obs.sat = np.append(obs.sat, sat_)
+            obs.P[k, :] = pr_
+            obs.L[k, :] = cp_
+            obs.S[k, :] = cn_
+            obs.sat[k] = sat_
+
+            if sat_ in self.lock:
+                for j, ll in enumerate(ll_):
+                    ll_p = self.lock[sat_][j]
+                    if (ll == 0 & ll_p != 0) | ll < ll_p:
+                        obs.lli[k, j] = 1
+                    else:
+                        obs.lli[k, j] = 0
+
+            self.lock[sat_] = ll_
 
         return i, obs
 
@@ -1473,7 +1487,7 @@ class rtcm(cssr):
 
         eph.toe = gpst2time(eph.week, eph.toes)
         eph.toc = gpst2time(eph.week, toc)
-        eph.ttr = self.time
+        eph.tot = self.time
         eph.A = sqrtA*sqrtA
         eph.mode = 0
 
@@ -1601,7 +1615,7 @@ class rtcm(cssr):
 
         eph.toe = gpst2time(eph.week, eph.toes)
         eph.toc = gpst2time(eph.week, toc)
-        eph.ttr = self.time
+        eph.tot = self.time
         eph.A = sqrtA*sqrtA
         eph.svh = (hs << 7)+(dvs << 6)
         if self.msgtype == 1046:
@@ -1656,7 +1670,7 @@ class rtcm(cssr):
         eph.week = week
         eph.sva = sva
         eph.svh = svh
-        eph.tgd = tgd*self.P2_31
+        eph.tgd = tgd*rCST.P2_31
         eph.iodc = iodc
         eph.fit = fit
 
@@ -1664,7 +1678,7 @@ class rtcm(cssr):
 
         eph.toe = gpst2time(eph.week, eph.toes)
         eph.toc = gpst2time(eph.week, toc)
-        eph.ttr = self.time
+        eph.tot = self.time
         eph.A = sqrtA*sqrtA
         eph.flag = 1
         eph.mode = 0
@@ -1718,7 +1732,7 @@ class rtcm(cssr):
 
         eph.toe = bdt2gpst(bdt2time(eph.week, eph.toes))
         eph.toc = bdt2gpst(bdt2time(eph.week, toc))
-        eph.ttr = self.time
+        eph.tot = self.time
         eph.A = sqrtA*sqrtA
         eph.mode = 0
 
@@ -1771,7 +1785,7 @@ class rtcm(cssr):
 
         eph.toe = gpst2time(eph.week, eph.toes)
         eph.toc = gpst2time(eph.week, toc)
-        eph.ttr = self.time
+        eph.tot = self.time
         eph.A = sqrtA*sqrtA
         eph.iodc = eph.iode
         eph.mode = 0
@@ -2612,7 +2626,7 @@ class rtcm(cssr):
         if self.monlevel > 0 and self.fh is not None:
             self.out_log(obs, eph, geph, seph)
 
-        return i, obs, eph
+        return i, obs, eph, geph, seph
 
 
 class rtcme(cssre):
