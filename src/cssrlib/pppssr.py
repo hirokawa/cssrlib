@@ -1348,10 +1348,14 @@ class pppos():
         if len(obs.sat) == 0:
             return
 
+        self.nav.nsat[0] = len(obs.sat)
+
         # GNSS satellite positions, velocities and clock offsets
         # for all satellite in RINEX observations
         #
         rs, vs, dts, svh, nsat = satposs(obs, self.nav, cs=cs, orb=orb)
+
+        self.nav.nsat[1] = nsat
 
         if nsat < 6:
             print(" too few satellites < 6: nsat={:d}".format(nsat))
@@ -1374,6 +1378,8 @@ class pppos():
         else:  # RTK
             y, e, iu, obs_ = self.base_process(obs, obsb, rs, dts, svh)
             ns = len(iu)
+
+        self.nav.nsat[2] = ns
 
         if ns < 6:
             print(" too few satellites < 6: ns={:d}".format(ns))

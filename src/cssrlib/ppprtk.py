@@ -21,4 +21,4 @@ class ppprtkpos(pppos):
         self.nav.err = [0, 0.01, 0.005]/np.sqrt(2)  # [m] sigma
         self.nav.sig_p0 = 30.0  # [m]
         self.nav.thresar = 2.0  # AR acceptance threshold
-        self.nav.armode = 1     # AR is enabled
+        self.nav.armode = 3     # AR is enabled

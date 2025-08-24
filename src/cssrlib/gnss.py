@@ -153,7 +153,7 @@ class uGNSS(IntEnum):
     BDSMAX = 63
     GLOMAX = 27
     SBSMAX = 39
-    IRNMAX = 10
+    IRNMAX = 14
 
     GPSMIN = 0
     GALMIN = GPSMIN+GPSMAX
@@ -894,6 +894,9 @@ class Nav():
         # GLONASS frequency channel table
         self.glo_ch = {}
 
+        # number of satellite (observed, calculated, corrected)
+        self.nsat = [0, 0, 0]
+
 
 def epoch2time(ep):
     """ calculate time from epoch """
@@ -1182,6 +1185,7 @@ def sat2id(sat):
     gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GLO: 'R', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
                 uGNSS.QZS: 'J', uGNSS.SBS: 'S', uGNSS.IRN: 'I'}
     if sys not in gnss_tbl:
+        print(f"{sat} {sys} {prn}")
         return -1
     if sys == uGNSS.QZS:
         prn -= 192

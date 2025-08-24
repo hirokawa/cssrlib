@@ -28,11 +28,12 @@ def ldldecom(Q):
     n = len(Q)
     L = np.zeros((n, n))
     d = np.zeros(n)
+    A = Q.copy()
     for i in range(n-1, -1, -1):
-        d[i] = Q[i, i].copy()
-        L[i, :i+1] = Q[i, :i+1]/np.sqrt(Q[i, i])
+        d[i] = A[i, i]
+        L[i, :i+1] = A[i, :i+1]/np.sqrt(d[i])
         for j in range(i):
-            Q[j, :j+1] -= L[i, :j+1]*L[i, j]
+            A[j, :j+1] -= L[i, :j+1]*L[i, j]
         L[i, :i+1] /= L[i, i]
 
     if np.any((d < 1e-10)):
