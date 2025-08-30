@@ -888,6 +888,9 @@ class Nav():
         # Carrier-phase processed indicator
         self.vsat = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
 
+        # geometry-free combination for cycle-slip detection
+        self.gf = np.zeros(uGNSS.MAXSAT)
+
         self.tt = 0
         self.t = gtime_t()
 

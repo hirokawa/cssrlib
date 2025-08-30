@@ -85,9 +85,6 @@ class pppos():
         self.nav.phw = np.zeros(uGNSS.MAXSAT)
         self.nav.el = np.zeros(uGNSS.MAXSAT)
 
-        # geometry-free combination for cycle-slip detection
-        self.nav.gf = np.zeros(uGNSS.MAXSAT)
-
         # Parameters for PPP
         #
         # Observation noise parameters
@@ -1300,29 +1297,30 @@ class pppos():
                     continue
 
             # cycle-slip detection by geometry-free combination
-            L1R, L2R = obs.L[j, 0:2]
-            sys, _ = sat2prn(sat_i)
-            sig1, sig2 = obs.sig[sys][uTYP.L][0:2]
-            if sys == uGNSS.GLO:
-                lam1 = sig1.wavelength(self.nav.glo_ch[sat_i])
-                lam2 = sig2.wavelength(self.nav.glo_ch[sat_i])
-            else:
-                lam1 = sig1.wavelength()
-                lam2 = sig2.wavelength()
-            if L1R != 0.0 and L2R != 0.0:
-                gf1 = (L1R*lam1-L2R*lam2)
-                gf0 = self.nav.gf[sat_i]
-                if gf1 != 0.0:
-                    self.nav.gf[sat_i] = gf1
-                if gf0 != 0.0 and gf1 != 0.0 and \
-                        abs(gf1-gf0) > self.nav.thresslip:
-                    self.nav.edt[i, 0:2] = 1
-                    if self.nav.monlevel > 0:
-                        self.nav.fout.write(" {}  {} - edit {:4s} - GF slip gf0 {:6.3f} gf1 {:6.3f} gf0-gf1 {:6.3f} \n"
-                                            .format(time2str(obs.t),
-                                                    sat2id(sat_i),
-                                                    sig1.str(), gf0, gf1,
-                                                    gf0-gf1))
+            if obs.L.shape[1] > 1:
+                L1R, L2R = obs.L[j, 0:2]
+                sys, _ = sat2prn(sat_i)
+                sig1, sig2 = obs.sig[sys][uTYP.L][0:2]
+                if sys == uGNSS.GLO:
+                    lam1 = sig1.wavelength(self.nav.glo_ch[sat_i])
+                    lam2 = sig2.wavelength(self.nav.glo_ch[sat_i])
+                else:
+                    lam1 = sig1.wavelength()
+                    lam2 = sig2.wavelength()
+                if L1R != 0.0 and L2R != 0.0:
+                    gf1 = (L1R*lam1-L2R*lam2)
+                    gf0 = self.nav.gf[sat_i]
+                    if gf1 != 0.0:
+                        self.nav.gf[sat_i] = gf1
+                    if gf0 != 0.0 and gf1 != 0.0 and \
+                            abs(gf1-gf0) > self.nav.thresslip:
+                        self.nav.edt[i, 0:2] = 1
+                        if self.nav.monlevel > 0:
+                            self.nav.fout.write(" {}  {} - edit {:4s} - GF slip gf0 {:6.3f} gf1 {:6.3f} gf0-gf1 {:6.3f} \n"
+                                                .format(time2str(obs.t),
+                                                        sat2id(sat_i),
+                                                        sig1.str(), gf0, gf1,
+                                                        gf0-gf1))
 
             # Store satellite which have passed all tests
             #
