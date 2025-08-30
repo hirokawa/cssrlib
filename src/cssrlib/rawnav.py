@@ -24,6 +24,7 @@ Raw Navigation Message decoder
 
 import numpy as np
 import bitstruct.c as bs
+import struct as st
 from cssrlib.gnss import gpst2time, gst2time, bdt2time, rCST
 from cssrlib.gnss import prn2sat, uGNSS, sat2prn, bdt2gpst, utc2gpst, time2gpst
 from cssrlib.gnss import Eph, Geph, uTYP, copy_buff, gtime_t, timeadd, Seph
@@ -1548,7 +1549,7 @@ class RawNav():
             return None
 
         if prn not in self.glo_ca:
-            self.glo_ca[prn] = bytearray(60)
+            self.glo_ca[prn] = bytearray(80)
 
         # if sid == 1:  # when tk is updated, clear buffer
         #    tk = bs.unpack_from('u12', msg, 9)[0]
@@ -1563,13 +1564,23 @@ class RawNav():
 
         buff = self.glo_ca[prn]
 
+        st.pack_into('>L', buff, 60+(sid-1)*4, int(time))
+
         id1 = bs.unpack_from('u4', buff, 1)[0]
         id2 = bs.unpack_from('u4', buff, 96+1)[0]
         id3 = bs.unpack_from('u4', buff, 96*2+1)[0]
         id4 = bs.unpack_from('u4', buff, 96*3+1)[0]
         id5 = bs.unpack_from('u4', buff, 96*4+1)[0]
 
-        if id1 != 1 or id2 != 2 or id3 != 3 or id4 != 4 or id5 != 5:
+        t1 = st.unpack_from('>L', buff, 60)[0]
+        t2 = st.unpack_from('>L', buff, 64)[0]
+        t3 = st.unpack_from('>L', buff, 68)[0]
+        t4 = st.unpack_from('>L', buff, 72)[0]
+
+        if id1 != 1 or id2 != 2 or id3 != 3 or id4 != 4:
+            return None
+
+        if t4-t3 != 2 or t3-t2 != 2 or t2-t1 != 2:
             return None
 
         geph = Geph(sat)
@@ -1620,16 +1631,17 @@ class RawNav():
         En, _, P4, FT, _, NT, slot, M = bs.unpack_from(
             'u5u14u1u4u3u11u5u2', buff, i)
 
-        # string 5
-        i = 96*4+5
-        NA = bs.unpack_from('u11', buff, i)[0]
-        i += 11
-        geph.tau_c = self.getbitg(buff, i, 32)*rCST.P2_31
-        i += 32+1
-        N4 = bs.unpack_from('u5', buff, i)[0]
-        i += 5
-        geph.tau_gps = self.getbitg(buff, i, 22)*rCST.P2_30
-        i += 22
+        if id5 == 5:
+            # string 5
+            i = 96*4+5
+            NA = bs.unpack_from('u11', buff, i)[0]
+            i += 11
+            geph.tau_c = self.getbitg(buff, i, 32)*rCST.P2_31
+            i += 32+1
+            N4 = bs.unpack_from('u5', buff, i)[0]
+            i += 5
+            geph.tau_gps = self.getbitg(buff, i, 22)*rCST.P2_30
+            i += 22
 
         # geph.sat = prn2sat(uGNSS.GLO, slot)
 
