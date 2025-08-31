@@ -9,10 +9,12 @@ module for Compact SSR processing
 """
 
 import bitstruct as bs
+import copy
 import numpy as np
 from enum import IntEnum
 from cssrlib.gnss import gpst2time, rCST, prn2sat, uGNSS, gtime_t, rSigRnx
 from cssrlib.gnss import uSIG, uTYP, sat2prn, time2str, sat2id, timediff
+from cssrlib.gnss import copy_buff
 
 
 class sCSSRTYPE(IntEnum):
@@ -275,10 +277,13 @@ class cssr:
         self.cbias = []
         self.pbias = []
         self.inet = -1
-        self.facility_p = -1
+        self.facility = -1
+        self.pattern = -1
+        self.sid = -1
         self.cstat = 0
         self.local_pbias = True  # for QZS CLAS
         self.buff = bytearray(250*5)
+        self.buff_p = None
         self.sinfo = bytearray(160)
         self.grid = None
         self.prc = None
@@ -1300,8 +1305,9 @@ class cssr:
     def decode_l6msg(self, msg, ofst):
         """decode QZS L6 message """
         fmt = 'u32u8u3u2u2u1u1'
-        names = ['preamble', 'prn', 'vendor', 'facility', 'res', 'sid',
+        names = ['preamble', 'prn', 'vendor', 'facility', 'pt', 'sid',
                  'alert']
+        facility_t = [[0, 2, 1, 3], [2, 0, 3, 1]]  # Table 4.1.2-2
         i = ofst*8
         l6head = bs.unpack_from_dict(fmt, names, msg, i)
         if l6head['preamble'] != 0x1acffc1d:
@@ -1309,21 +1315,25 @@ class cssr:
         i += 49
         if l6head['sid'] == 1:
             self.fcnt = 0
-        if self.facility_p >= 0 and l6head['facility'] != self.facility_p:
+            self.buff_p = copy.copy(self.buff)
+            self.buff = bytearray(250*5)
+
+        if l6head['vendor'] == 5:  # CLAS
+            facility = facility_t[l6head['pt']][l6head['facility']]
+        else:
+            facility = l6head['facility']
+        if self.facility >= 0 and facility != self.facility:
             self.fcnt = -1
-        self.facility_p = l6head['facility']
+        facility_p = self.facility
+        self.facility = facility
+        self.pattern = l6head['pt']
+        self.sid = l6head['sid']
         if self.fcnt < 0:
-            print("facility changed.")
+            print(f"facility changed: {facility_p} -> {facility}")
             return -1
-        j = 1695*self.fcnt
-        for k in range(53):
-            sz = 32 if k < 52 else 31
-            fmt = 'u'+str(sz)
-            b = bs.unpack_from(fmt, msg, i)
-            i += sz
-            bs.pack_into(fmt, self.buff, j, b[0])
-            j += sz
-        self.fcnt = self.fcnt+1
+
+        copy_buff(msg, self.buff, i, 1695*self.fcnt, 1695)
+        self.fcnt = self.fcnt + 1
 
 
 class cssre():

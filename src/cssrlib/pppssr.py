@@ -602,14 +602,14 @@ class pppos():
 
             # Tropospheric delay
             #
-            if self.nav.iono_opt == 2:  # from cssr
+            if self.nav.trop_opt == 2:  # from cssr
                 trop = mapfh*trph*r_hs+mapfw*trpw*r_wet
             else:
                 trop = mapfh*trop_hs + mapfw*trop_wet
 
             # Ionospheric delay
             #
-            if self.nav.iono_opt == 2:  # from cssr
+            if self.nav.iono_opt == 2 and inet > 0:  # from cssr
                 idx_l = cs.lc[inet].sat_n.index(sat)
                 iono = np.array([40.3e16/(f*f)*stec[idx_l] for f in frq])
             else:
