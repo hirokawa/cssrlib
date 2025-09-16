@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from cssrlib.gnss import uGNSS, sat2prn, sat2id
+from cssrlib.gnss import rCST
 
 
 def plot_nsat(t, nsat):
@@ -85,3 +86,28 @@ def skyplot(azm, elv, elmask=0, satlist=None):
         nsat += 1
     plt.show()
     return nsat
+
+
+def draw_rect(ax, ccrs, p, col, alpha=0.5):
+    """ draw rectangle centered on [latr, lonr] """
+
+    lonr_ = [p.lonr-p.lons, p.lonr+p.lons, p.lonr +
+             p.lons, p.lonr-p.lons, p.lonr-p.lons]
+    latr_ = [p.latr+p.lats, p.latr+p.lats, p.latr -
+             p.lats, p.latr-p.lats, p.latr+p.lats]
+
+    ax.fill(lonr_, latr_, color=col, alpha=alpha,
+            transform=ccrs)
+
+
+def draw_circle(ax, ccrs, p, col, nc=10, alpha=0.5):
+    """ draw circle centered on [latr, lonr] with radius rng """
+    r_ = p.rng/(rCST.RE_WGS84*1e-3)*rCST.R2D
+
+    the_ = np.linspace(0, 2*np.pi, nc)
+
+    lonr_ = p.lonr + r_/np.cos(p.latr*rCST.D2R)*np.cos(the_)
+    latr_ = p.latr + r_*np.sin(the_)
+
+    ax.fill(lonr_, latr_, color=col, alpha=alpha,
+            transform=ccrs)

@@ -8,8 +8,8 @@ Raw Navigation Message decoder
 [1-3] NAVSTAR GPS Space Segment/Navigation User Segment L1C Interfaces
     (IS-GPS-800) Rev.J, 2022
 [2] Quasi-Zenith Satellite System Interface Specification
-    Satellite Positioning, Navigation and Timing Service (IS-QZSS-PNT-005),
-    2022
+    Satellite Positioning, Navigation and Timing Service (IS-QZSS-PNT-006),
+    2024
 [3] Galileo Open Service Signal-in-Space Interface Control Document
     (OS SIS ICD) Issue 2.1, 2023
 [4] BeiDou Navigation Satellite System Signal In Space Interface Control
@@ -17,16 +17,44 @@ Raw Navigation Message decoder
 [5] GLONASS Interface Control Document (Edition 5.1), 2008
 [6] Indian Regional NAvigation Satellite System Signal in Space ICD
     for Standard Positioning Service (Version 1.1), 2017
+[7] NAVIC Signal in Space ICD for Standard Positioning Service
+    in L1 Frequency (Version 1.0), 2023
 
 """
 
 import numpy as np
 import bitstruct.c as bs
+import struct as st
 from cssrlib.gnss import gpst2time, gst2time, bdt2time, rCST
-from cssrlib.gnss import prn2sat, uGNSS, sat2prn, bdt2gpst, utc2gpst
-from cssrlib.gnss import time2gpst, gpst2utc
-from cssrlib.gnss import Eph, Geph, uTYP
+from cssrlib.gnss import prn2sat, uGNSS, sat2prn, bdt2gpst, utc2gpst, time2gpst
+from cssrlib.gnss import Eph, Geph, uTYP, copy_buff, gtime_t, timeadd, Seph
+from cssrlib.gnss import tod2tow
 from cssrlib.rinex import rnxenc, rSigRnx
+
+
+def gep2time(N4, Nt, sod):
+    """ calculate time from Glonass epoch """
+    time = gtime_t()
+
+    if Nt <= 366:
+        j = 1
+        doy = Nt
+    elif Nt <= 731:
+        j = 2
+        doy = Nt-366
+    elif Nt <= 1096:
+        j = 3
+        doy = Nt-731
+    else:
+        j = 4
+        doy = Nt-1096
+
+    year = 1996 + 4*(N4-1) + j-1
+    days = (year-1970)*365+(year-1969)//4+doy-1
+    sec = int(sod)
+    time.time = days*86400+sec
+    time.sec = sod-sec
+    return utc2gpst(timeadd(time, -10800.0))
 
 
 class RawNav():
@@ -68,8 +96,11 @@ class RawNav():
             self.bds_cnv3[k] = bytearray(200)
 
         self.glo_ca = {}
-        for k in range(uGNSS.GLOMAX):
-            self.glo_ca[k] = bytearray(200)
+        self.glo_l1oc = {}
+        self.glo_l2oc = {}
+        self.glo_l3oc = {}
+
+        self.monlevel = 1
 
         self.irn_nav = {}
         for k in range(uGNSS.IRNMAX):
@@ -112,10 +143,14 @@ class RawNav():
 
     def urai2sva(self, urai, sys=uGNSS.GPS):
         """ GPS/QZSS SV accuracy [1] 20.3.3.3.1.3, [2] Tab. 5.4.3-2 """
-        urai_t = [2.40, 3.40, 4.85, 6.85, 9.65, 13.65, 24.00, 48.00, 96.00,
-                  192.00, 384.00, 768.00, 1536.00, 3072.00, 6144.00, -1.0]
+        # sva_t = [2.40, 3.40, 4.85, 6.85, 9.65, 13.65, 24.00, 48.00, 96.00,
+        #         192.00, 384.00, 768.00, 1536.00, 3072.00, 6144.00, -1.0]
 
-        return urai_t[urai]
+        # from RINEX 4.02
+        sva_t = [2.0, 2.8, 4.0, 5.7, 8.0, 11.3, 16.0, 32.0,
+                 64.0, 128.0, 256.0, 512.0, 1024.0, 2048.0, 4096.0, 8192.0]
+
+        return sva_t[urai]
 
     def sisa2sva(self, sisa):
         """ Galileo SISA Index Values [3] Tab. 89 """
@@ -143,9 +178,10 @@ class RawNav():
         # for E5b: field1: reserved1. field2 = reserved2
 
         odd, page = bs.unpack_from('u1u1', msg, 0)
+        # odd_, page_ = bs.unpack_from('u1u1', msg, 120)
         sid, iodnav = bs.unpack_from('u6u10', msg, 2)
 
-        if sid > 5:
+        if sid == 0 or sid > 5:
             return None
 
         buff = self.gal_inav[prn-1]
@@ -220,9 +256,13 @@ class RawNav():
         elif type_ == 1:  # FNAV E1B, R5A
             eph.code |= (1 << 8)  # toc/af0-2, SISA are for E5a, E1
 
+        eph.tot = gst2time(week_gst, tow)
+        if toc < tow - rCST.HALFWEEK_SEC:
+            week_gst += 1
+        elif toc > tow + rCST.HALFWEEK_SEC:
+            week_gst -= 1
         eph.toe = gst2time(week_gst, eph.toes)
         eph.toc = gst2time(week_gst, toc)
-        eph.tot = gst2time(week_gst, tow)
 
         eph.tgd = bgda*rCST.P2_32    # TGD (E1, E5a)
         eph.tgd_b = bgdb*rCST.P2_32  # TGD (E1, E5b)
@@ -301,9 +341,15 @@ class RawNav():
         eph.code = 2  # FNAV
         eph.code |= (1 << 8)  # toc/af0-2, SISA are for E5a, E1
 
+        eph.tot = gst2time(week_gst, tow)
+
+        if toc < tow - rCST.HALFWEEK_SEC:
+            week_gst += 1
+        elif toc > tow + rCST.HALFWEEK_SEC:
+            week_gst -= 1
+
         eph.toe = gst2time(week_gst, eph.toes)
         eph.toc = gst2time(week_gst, toc)
-        eph.tot = gst2time(week_gst, tow)
 
         eph.tgd = bgda*rCST.P2_32    # TGD (E1, E5a)
         eph.tgd_b = 0.0
@@ -337,82 +383,91 @@ class RawNav():
         id2 = bs.unpack_from('u3', buff, 320+53)[0]
         id3 = bs.unpack_from('u3', buff, 320*2+53)[0]
 
-        if id1 == 1 and id2 == 2 and id3 == 3:
-            tow, alert, asf = bs.unpack_from('u17u1u1', buff, 32+2)
-            tow *= 6.0
-            # subfram #1
-            wn, code, urai, svh, iodc_ = bs.unpack_from('u10u2u4u6u2', buff,
-                                                        32*2+2)
-            l2p = bs.unpack_from('u1', buff, 32*3+2)[0]
-            tgd = bs.unpack_from('s8', buff, 32*6+2+16)[0]
-            iodc, toc = bs.unpack_from('u8u16', buff, 32*7+2)
-            af2, af1 = bs.unpack_from('s8s16', buff, 32*8+2)
-            af0 = bs.unpack_from('s22', buff, 32*9+2)[0]
-            iodc |= (iodc_ << 8)
-
-            # subframe #2
-            i0 = 320
-            iode, crs = bs.unpack_from('u8s16', buff, i0+32*2+2)
-            deln, M0_ = bs.unpack_from('s16u8', buff, i0+32*3+2)
-            M0 = bs.unpack_from('u24', buff, i0+32*4+2)[0]
-            M0 = bs.unpack('s32', bs.pack('u8u24', M0_, M0))[0]
-            cuc, e_ = bs.unpack_from('s16u8', buff, i0+32*5+2)
-            e = bs.unpack_from('u24', buff, i0+32*6+2)[0]
-            e = bs.unpack('s32', bs.pack('u8u24', e_, e))[0]
-            cus, sa_ = bs.unpack_from('s16u8', buff, i0+32*7+2)
-            sa = bs.unpack_from('u24', buff, i0+32*8+2)[0]
-            sqrtA = bs.unpack('u32', bs.pack('u8u24', sa_, sa))[0]
-            toe, fit, aodo = bs.unpack_from('u16u1u5', buff, i0+32*9+2)
-
-            # subframe #3
-            i0 = 320*2
-            cic, OMG0_ = bs.unpack_from('s16u8', buff, i0+32*2+2)
-            OMG0 = bs.unpack_from('u24', buff, i0+32*3+2)[0]
-            OMG0 = bs.unpack('s32', bs.pack('u8u24', OMG0_, OMG0))[0]
-            cis, inc0_ = bs.unpack_from('s16u8', buff, i0+32*4+2)
-            inc0 = bs.unpack_from('u24', buff, i0+32*5+2)[0]
-            inc0 = bs.unpack('s32', bs.pack('u8u24', inc0_, inc0))[0]
-            crc, omg_ = bs.unpack_from('s16u8', buff, i0+32*6+2)
-            omg = bs.unpack_from('u24', buff, i0+32*7+2)[0]
-            omg = bs.unpack('s32', bs.pack('u8u24', omg_, omg))[0]
-            OMGd = bs.unpack_from('s24', buff, i0+32*8+2)[0]
-            iode, idot = bs.unpack_from('u8s14', buff, i0+32*9+2)
-
-            eph.week = (week // 1024)*1024 + wn
-            eph.l2p = l2p
-            eph.code = code
-            eph.svh = svh
-            eph.sva = self.urai2sva(urai)
-            eph.tgd = tgd*rCST.P2_31
-            eph.iodc = iodc
-            toc *= 16.0
-            eph.af2 = af2*rCST.P2_55
-            eph.af1 = af1*rCST.P2_43
-            eph.af0 = af0*rCST.P2_31
-            eph.iode = iode
-            eph.crs = crs*rCST.P2_5
-            eph.deln = deln*rCST.P2_43*rCST.SC2RAD
-            eph.M0 = M0*rCST.P2_31*rCST.SC2RAD
-            eph.cuc = cuc*rCST.P2_29
-            eph.e = e*rCST.P2_33
-            eph.cus = cus*rCST.P2_29
-            sqrtA *= rCST.P2_19
-            eph.A = sqrtA**2
-            eph.toes = toe*16.0
-            eph.cic = cic*rCST.P2_29
-            eph.OMG0 = OMG0*rCST.P2_31*rCST.SC2RAD
-            eph.cis = cis*rCST.P2_29
-            eph.i0 = inc0*rCST.P2_31*rCST.SC2RAD
-            eph.crc = crc*rCST.P2_5
-            eph.omg = omg*rCST.P2_31*rCST.SC2RAD
-            eph.OMGd = OMGd*rCST.P2_43*rCST.SC2RAD
-            eph.idot = idot*rCST.P2_43*rCST.SC2RAD
-            eph.mode = 0  # LNAV
-            eph.toc = gpst2time(eph.week, toc)
-            eph.toe = gpst2time(eph.week, eph.toes)
-            eph.tot = bdt2time(eph.week, tow)
-        else:
+        if id1 != 1 or id2 != 2 or id3 != 3:
             return None
+
+        tow, alert, asf = bs.unpack_from('u17u1u1', buff, 32+2)
+        tow *= 6.0
+        # subfram #1
+        wn, code, urai, svh, iodc_ = bs.unpack_from('u10u2u4u6u2', buff,
+                                                    32*2+2)
+        l2p = bs.unpack_from('u1', buff, 32*3+2)[0]
+        tgd = bs.unpack_from('s8', buff, 32*6+2+16)[0]
+        iodc, toc = bs.unpack_from('u8u16', buff, 32*7+2)
+        af2, af1 = bs.unpack_from('s8s16', buff, 32*8+2)
+        af0 = bs.unpack_from('s22', buff, 32*9+2)[0]
+        iodc |= (iodc_ << 8)
+
+        # subframe #2
+        i0 = 320
+        iode, crs = bs.unpack_from('u8s16', buff, i0+32*2+2)
+        deln, M0_ = bs.unpack_from('s16u8', buff, i0+32*3+2)
+        M0 = bs.unpack_from('u24', buff, i0+32*4+2)[0]
+        M0 = bs.unpack('s32', bs.pack('u8u24', M0_, M0))[0]
+        cuc, e_ = bs.unpack_from('s16u8', buff, i0+32*5+2)
+        e = bs.unpack_from('u24', buff, i0+32*6+2)[0]
+        e = bs.unpack('s32', bs.pack('u8u24', e_, e))[0]
+        cus, sa_ = bs.unpack_from('s16u8', buff, i0+32*7+2)
+        sa = bs.unpack_from('u24', buff, i0+32*8+2)[0]
+        sqrtA = bs.unpack('u32', bs.pack('u8u24', sa_, sa))[0]
+        toe, fit, aodo = bs.unpack_from('u16u1u5', buff, i0+32*9+2)
+
+        # subframe #3
+        i0 = 320*2
+        cic, OMG0_ = bs.unpack_from('s16u8', buff, i0+32*2+2)
+        OMG0 = bs.unpack_from('u24', buff, i0+32*3+2)[0]
+        OMG0 = bs.unpack('s32', bs.pack('u8u24', OMG0_, OMG0))[0]
+        cis, inc0_ = bs.unpack_from('s16u8', buff, i0+32*4+2)
+        inc0 = bs.unpack_from('u24', buff, i0+32*5+2)[0]
+        inc0 = bs.unpack('s32', bs.pack('u8u24', inc0_, inc0))[0]
+        crc, omg_ = bs.unpack_from('s16u8', buff, i0+32*6+2)
+        omg = bs.unpack_from('u24', buff, i0+32*7+2)[0]
+        omg = bs.unpack('s32', bs.pack('u8u24', omg_, omg))[0]
+        OMGd = bs.unpack_from('s24', buff, i0+32*8+2)[0]
+        iode2, idot = bs.unpack_from('u8s14', buff, i0+32*9+2)
+
+        if iode != iode2 or iode != (iodc & 0xff):
+            return None
+
+        eph.week = (week // 1024)*1024 + wn
+        eph.l2p = l2p
+        eph.code = code
+        eph.svh = svh
+        eph.sva = self.urai2sva(urai)
+        eph.tgd = tgd*rCST.P2_31
+        eph.iodc = iodc
+        toc *= 16.0
+        eph.af2 = af2*rCST.P2_55
+        eph.af1 = af1*rCST.P2_43
+        eph.af0 = af0*rCST.P2_31
+        eph.iode = iode
+        eph.crs = crs*rCST.P2_5
+        eph.deln = deln*rCST.P2_43*rCST.SC2RAD
+        eph.M0 = M0*rCST.P2_31*rCST.SC2RAD
+        eph.cuc = cuc*rCST.P2_29
+        eph.e = e*rCST.P2_33
+        eph.cus = cus*rCST.P2_29
+        sqrtA *= rCST.P2_19
+        eph.A = sqrtA**2
+        eph.toes = toe*16.0
+        eph.cic = cic*rCST.P2_29
+        eph.OMG0 = OMG0*rCST.P2_31*rCST.SC2RAD
+        eph.cis = cis*rCST.P2_29
+        eph.i0 = inc0*rCST.P2_31*rCST.SC2RAD
+        eph.crc = crc*rCST.P2_5
+        eph.omg = omg*rCST.P2_31*rCST.SC2RAD
+        eph.OMGd = OMGd*rCST.P2_43*rCST.SC2RAD
+        eph.idot = idot*rCST.P2_43*rCST.SC2RAD
+        eph.mode = 0  # LNAV
+
+        eph.tot = bdt2time(eph.week, tow)
+        if toc < tow - rCST.HALFWEEK_SEC:
+            eph.week += 1
+        elif toc > tow + rCST.HALFWEEK_SEC:
+            eph.week -= 1
+
+        eph.toc = gpst2time(eph.week, toc)
+        eph.toe = gpst2time(eph.week, eph.toes)
 
         return eph
 
@@ -480,15 +535,15 @@ class RawNav():
         id2 = bs.unpack_from('u6', buff, 304+14)[0]
         id3 = bs.unpack_from('u6', buff, 304*2+14)[0]
 
+        if id1 != 10 or id2 != 11:
+            return None
+
+        if id3//10 != 3 and (sys == uGNSS.QZS and id3 != 61):
+            return None
+
         toe1 = bs.unpack_from('u11', buff, 70)[0]
         toe2 = bs.unpack_from('u11', buff, 304+38)[0]
         toc = bs.unpack_from('u11', buff, 304*2+60)[0]
-
-        if id1 != 10 or id2 != 11 or id3 != 30:
-            if sys == uGNSS.QZS and id3 == 61:
-                None
-            else:
-                return None
 
         if toe1 != toe2 or toe1 != toc:
             return None
@@ -518,6 +573,8 @@ class RawNav():
 
         eph.isc = np.zeros(6)
         sid = id3
+
+        wn_op = -1
 
         if sid in (30, 61):  # clock, iono, group delay
             tgd = bs.unpack_from('s13', buff, i)[0]
@@ -569,8 +626,7 @@ class RawNav():
         eph.M0 = M0*rCST.P2_32*rCST.SC2RAD
         eph.e = e*rCST.P2_34
         eph.omg = omg*rCST.P2_32*rCST.SC2RAD
-        eph.integ = isf
-        # eph.esf = esf
+        eph.integ = (alert << 2) | (esf << 1) | isf
 
         eph.wn_op = wn//256*256 + wn_op
 
@@ -588,10 +644,17 @@ class RawNav():
         eph.cuc = cuc*rCST.P2_30
 
         eph.mode = 1  # CNAV
+        eph.tot = gpst2time(eph.week, tow)
+        if toc < tow - rCST.HALFWEEK_SEC:
+            eph.week += 1
+        elif toc > tow + rCST.HALFWEEK_SEC:
+            eph.week -= 1
         eph.toc = gpst2time(eph.week, toc)
         eph.toe = gpst2time(eph.week, eph.toes)
-        eph.tot = bdt2time(eph.week, tow)
         eph.top = gpst2time(eph.wn_op, eph.tops)
+
+        if wn_op < 0:
+            return None
 
         return eph
 
@@ -673,8 +736,10 @@ class RawNav():
         eph.M0 = M0*rCST.P2_32*rCST.SC2RAD
         eph.e = e*rCST.P2_34
         eph.omg = omg*rCST.P2_32*rCST.SC2RAD
-        eph.integ = isf
-        # eph.esf = esf
+        if sys == uGNSS.GPS:
+            eph.integ = isf
+        else:
+            eph.integ = (esf << 1) | isf
 
         eph.wn_op = wn//256*256 + wn_op
 
@@ -692,9 +757,13 @@ class RawNav():
         eph.cuc = cuc*rCST.P2_30
 
         eph.mode = 2  # CNAV/2
+        eph.tot = gpst2time(eph.week, tow)
+        if toe < tow - rCST.HALFWEEK_SEC:
+            eph.week += 1
+        elif toe > tow + rCST.HALFWEEK_SEC:
+            eph.week -= 1
         eph.toe = gpst2time(eph.week, eph.toes)
         eph.toc = eph.toe
-        eph.tot = bdt2time(eph.week, tow)
         eph.top = gpst2time(eph.wn_op, eph.tops)
 
         return eph
@@ -815,6 +884,10 @@ class RawNav():
         eph.week, how, eph.iodc, eph.iode = bs.unpack_from(
             'u13u8u10u8', msg, i)
         i += 39
+
+        if (eph.iodc & 0xff) != eph.iode:
+            return None
+
         tow = how*3600+soh
         eph.tot = bdt2time(eph.week, tow)
 
@@ -829,25 +902,31 @@ class RawNav():
 
         # decode Subframe 3
         i = 608
-        page, eph.svh, eph.integ, eph.sismai = bs.unpack_from('u6u2u3u4',
+        page, eph.svh, eph.integ, eph.sismai = bs.unpack_from('u6u2u3s4',
                                                               msg, i)
         i += 15
         if page == 1:  # Iono, BDT-UTC
-            eph.sisai[0] = bs.unpack_from('u5', msg, i)[0]
+            eph.sisai[0] = bs.unpack_from('u5', msg, i)[0]  # SISAI_oe
             i += 5
             i = self.decode_bds_cnav_sisai(msg, eph, i)
         elif page == 2:  # Reduced almanac
             i = self.decode_bds_cnav_sisai(msg, eph, i)
             i += 22
         elif page == 3:  # EOP, BGTO
-            eph.sisai[0] = bs.unpack_from('u5', msg, i)[0]
+            eph.sisai[0] = bs.unpack_from('u5', msg, i)[0]  # SISAI_oe
             i += 5
+            # EOP
+            # BGTO
         elif page == 4:  # Midi almanac
             i = self.decode_bds_cnav_sisai(msg, eph, i)
             i += 22
+            # Midi Almanac
 
         # i += 264-15
         eph.mode = 1  # B-CNAV1
+
+        if page != 1:  # page 1 include SISAI*
+            return None
 
         return eph
 
@@ -855,7 +934,7 @@ class RawNav():
         """ BDS B2a (B-CNAV2 message decoder) [4] """
 
         sys, prn = sat2prn(sat)
-        sid, sow = bs.unpack_from('u6u18', msg, 6)
+        prn_, sid, sow = bs.unpack_from('u6u6u18', msg, 0)
 
         if sid not in (10, 11, 30, 34, 40):
             return None
@@ -874,7 +953,7 @@ class RawNav():
         id4, sow4 = bs.unpack_from('u6u18', buff, 320*3+6)
         id5, sow5 = bs.unpack_from('u6u18', buff, 320*4+6)
 
-        if id1 != 10 or id2 != 11 or id3 != 30 or id4 != 34 or id5 != 40:
+        if id1 != 10 or id2 != 11 or id3 != 30 or id5 != 40:
             return None
 
         if sow2 != sow1+1 or sow3 != sow2+1:
@@ -892,11 +971,13 @@ class RawNav():
         if id5 == 40:
             i = 320*4+42
             eph.sisai[0] = bs.unpack_from('u5', buff, i)[0]
+            i += 5
+            i = self.decode_bds_cnav_sisai(buff, eph, i)
 
         # decode MT10
         i = 30
         eph.week, ib2a, eph.sismai, ib1c, eph.iode = bs.unpack_from(
-            'u13u3u4u3u8', buff, i)
+            'u13u3s4u3u8', buff, i)
         i += 31
         i = self.decode_bds_cnav_eph1(buff, eph, i)
         eph.integ = (ib2a << 3)+ib1c
@@ -913,8 +994,12 @@ class RawNav():
 
         eph.iodc, tgd_b2ap, isc_b2ad = bs.unpack_from('u10s12s12', buff, i)
         i += 34
+
+        if (eph.iodc & 0xff) != eph.iode:
+            return None
+
         i = self.decode_bds_cnav_iono(buff, i)
-        tgd_b1cp = bs.unpack_from('u12', buff, i)[0]
+        tgd_b1cp = bs.unpack_from('s12', buff, i)[0]
 
         eph.tgd = tgd_b1cp*rCST.P2_34
         eph.isc[1] = isc_b2ad*rCST.P2_34
@@ -961,7 +1046,7 @@ class RawNav():
         i = self.decode_bds_cnav_eph1(buff, eph, i)
         i = self.decode_bds_cnav_eph2(buff, eph, i)
 
-        eph.integ, eph.sismai = bs.unpack_from('u3u4', buff, i)
+        eph.integ, eph.sismai = bs.unpack_from('u3s4', buff, i)
         i += 7
 
         # decode MT30
@@ -983,19 +1068,21 @@ class RawNav():
 
         return eph
 
-    def decode_bds_d1(self, week, time, sat, msg):
+    def decode_bds_d1(self, week, time, sat, msg, i=0):
         """ BDS D1 Message decoder """
 
         sys, prn = sat2prn(sat)
-
-        i = 0
         pre, _, sid, sow1 = bs.unpack_from('u11u4u3u8', msg, i)
-        i += 30
         if pre != 0x712:
             return None
 
+        if sid > 3:
+            return None
+
         buff = self.bds_d12[prn-1]
-        buff[(sid-1)*40:(sid-1)*40+40] = msg[0:40]
+        i0 = (sid-1)*40
+        # copy_buff(msg, buff, i, i0, 40*8-i)
+        buff[i0:i0+40] = msg[0:40]
 
         buff = bytes(buff)
         id1 = bs.unpack_from('u3', buff, 15)[0]
@@ -1009,8 +1096,8 @@ class RawNav():
         if id1 != 1 or id2 != 2 or id3 != 3:
             return None
 
-        if sow2 != sow1+6 or sow3 != sow2+6:
-            return None
+        # if sow2 != sow1+6 or sow3 != sow2+6:
+        #    return None
 
         eph = Eph(sat)
 
@@ -1039,7 +1126,7 @@ class RawNav():
         eph.crs = self.getbits2(buff, i+224, 8, i+240, 10)*rCST.P2_6
         sqrtA = self.getbitu2(buff, i+250, 12, i+270, 20)*rCST.P2_19
         eph.A = sqrtA**2
-        toe1 = bs.unpack_from('s2', buff, i+290)[0]
+        toe1 = bs.unpack_from('u2', buff, i+290)[0]
 
         # subframe 3
         i = 320*2
@@ -1060,9 +1147,9 @@ class RawNav():
 
         eph.toes = ((toe1 << 15)+toe2)*8.0
         eph.tot = bdt2gpst(bdt2time(eph.week, sow1))
-        if eph.toes > sow1+302400.0:
+        if eph.toes > sow1+rCST.HALFWEEK_SEC:
             eph.week += 1
-        elif eph.toes < sow1-302400.0:
+        elif eph.toes < sow1-rCST.HALFWEEK_SEC:
             eph.week -= 1
         eph.toc = bdt2time(eph.week, toc)
         eph.toe = bdt2time(eph.week, eph.toes)
@@ -1244,7 +1331,8 @@ class RawNav():
         eph.af1 = af1*rCST.P2_43
         eph.af2 = af2*rCST.P2_55
 
-        eph.urai = self.urai2sva(urai)
+        eph.urai = urai
+        eph.sva = self.urai2sva(urai)
         toc *= 16.0
         eph.tgd = tgd*rCST.P2_31
         eph.deln = deln*rCST.P2_41*rCST.SC2RAD
@@ -1279,6 +1367,177 @@ class RawNav():
         eph.mode = 0
         return eph
 
+    def decode_irn_l1nav_iono_grid(self, msg, i):
+        mask, regid = bs.unpack_from('u10u4', msg, i)
+        i += 14
+        for k in range(15):
+            givei, givd = bs.unpack_from('u10u4', msg, i)
+            i += 13
+        iodi = bs.unpack_from('u3', msg, i)[0]
+        i += 3+31
+        return i
+
+    def decode_irn_l1nav_alm(self, msg, i):
+        wna, e, toa, i0, OMGd, sqrtA, OMG0, omg, M0, af0, af1, prn_a = \
+            bs.unpack_from('u13u20u16s24s19u24s24s24s24s14s11u6', msg, i)
+        i += 243
+        return i
+
+    def decode_irn_l1nav_iono_nequick(self, msg, i):
+        for k in range(3):
+            modip_mac, modip_min, mlon_max, mlon_min, a0, a1, a2, idf = \
+                bs.unpack_from('s6s6s7s7u11s11s14u1', msg, i)
+            i += 63
+
+        iodn = bs.unpack_from('u2', msg, i)[0]
+        i += 2+52
+        return i
+
+    def decode_irn_l1nav_iono_klob(self, msg, i):
+        alp0, alp1, alp2, alp3 = \
+            bs.unpack_from('s8s8s10s12', msg, i)
+        i += 38
+        bet0, bet1, bet2, bet3 = \
+            bs.unpack_from('s8s8s11s14', msg, i)
+        i += 41
+
+        lon_max, lon_min, lat_max, lat_min, iodk = \
+            bs.unpack_from('u6u6s5s5u2', msg, i)
+        i += 24+2
+        return i
+
+    def decode_irn_l1nav_eop(self, msg, i):
+        teop, pmx, pmxd, pmy, pmyd, dut1, dut1d = \
+            bs.unpack_from('u16s21s15s21s15s31s19', msg, i)
+        i += 138
+        return i
+
+    def decode_irn_l1nav_utc(self, msg, i):
+        iodt, tug, wnug, dtls, wnlsf, dn, dtlsf = \
+            bs.unpack_from('u3u8u13s8u13u4s8', msg, i)
+        i += 57
+
+        a0utc, a1utc, a2utc = bs.unpack_from('s16s13s7', msg, i)
+        i += 36
+
+        flg_utc = bs.unpack_from('u1', msg, i)[0]
+        i += 1
+        if flg_utc:
+            a0n, a1n, a2n = bs.unpack_from('s16s13s7', msg, i)
+        i += 36
+
+        for k in range(3):
+            gnss, flg_gnss = bs.unpack_from('u3u1', msg, i)
+            i += 4
+            if flg_gnss:
+                a0g, a1g = bs.unpack_from('s16s13', msg, i)
+            i += 29
+        i += 14
+        return i
+
+    def decode_irn_l1nav(self, week, time, sat, msg):
+        """ NavIC L1NAV Message decoder """
+
+        sys, prn_ = sat2prn(sat)
+        eph = Eph(sat)
+
+        # subframe 1 (52 syms)
+        toi = bs.unpack_from('u9', msg, 0)[0]
+
+        # subframe 2 (600)
+        i = 52
+        wn, itow, alrt = bs.unpack_from('u13u8u1', msg, i)
+        i += 22
+        # data 548bit
+        svh, iodec, urai, toec, dA, Adot, deln, delnd, M0 = \
+            bs.unpack_from('u1u4s5u11s26s26s19s23s33', msg, i)
+        i += 148
+        e, omg, OMG0, OMGd, i0, idot, cis, cic, crs, crc, cus, cuc = \
+            bs.unpack_from('u33s33s33s25s33s15s16s16s24s24s21s21', msg, i)
+        i += 294
+        af0, af1, af2, tgd, isc1, isc2, rsf = \
+            bs.unpack_from('s29s22s15s12s12s12u1', msg, i)
+        i += 103+3
+        prn = bs.unpack_from('u6', msg, i)[0]
+
+        tow = itow*7200+toi*18
+
+        # subframe 3 (274)
+        i = 52+1200
+        msgid, ivld = bs.unpack_from('u6u1', msg, i)
+        i += 7
+
+        # message data
+        if msgid == 5:  # iono grid parameters
+            i = self.decode_irn_l1nav_iono_grid(msg, i)
+        elif msgid == 6:  # almanac
+            i = self.decode_irn_l1nav_alm(msg, i)
+        elif msgid == 8:  # NeQuick-N Iono parameters
+            i = self.decode_irn_l1nav_iono_nequick(msg, i)
+        elif msgid == 10:  # Klobuchar like Iono coefficient & EOP
+            i = self.decode_irn_l1nav_eop(msg, i)
+            i = self.decode_irn_l1nav_iono_klob(msg, i)
+        elif msgid == 17:  # NavIC Time offsets
+            i = self.decode_irn_l1nav_utc(msg, i)
+        elif msgid == 0:  # null message
+            None
+
+        i += 243
+
+        eph.isc = np.zeros(6)
+
+        eph.week = wn
+        eph.code = 2
+        eph.svh = svh
+
+        eph.iodc = iodec
+        eph.iode = iodec
+
+        # clock
+        eph.af2 = af2*rCST.P2_66
+        eph.af1 = af1*rCST.P2_50
+        eph.af0 = af0*rCST.P2_35
+        eph.urai = urai
+        eph.sva = self.urai2sva(urai)
+
+        # group-delay
+        eph.tgd = tgd*rCST.P2_35  # L1CA
+        eph.isc[4] = isc2*rCST.P2_35  # L1D
+        eph.isc[5] = isc1*rCST.P2_35  # L1P if rsf=0, S if rsf=1
+
+        # ephemeris
+        # eph.tops = top*300.0
+        A0 = 26559710.0 if sys == uGNSS.GPS else 42164200.0
+        eph.A = A0 + dA*rCST.P2_9
+        eph.Adot = Adot*rCST.P2_21
+        eph.deln = deln*rCST.P2_44*rCST.SC2RAD
+        eph.delnd = delnd*rCST.P2_57*rCST.SC2RAD
+        eph.M0 = M0*rCST.P2_32*rCST.SC2RAD
+        eph.e = e*rCST.P2_34
+        eph.omg = omg*rCST.P2_32*rCST.SC2RAD
+
+        eph.integ = rsf
+
+        eph.toes = toec*300.0
+        eph.OMG0 = OMG0*rCST.P2_32*rCST.SC2RAD
+        eph.i0 = i0*rCST.P2_32*rCST.SC2RAD
+        eph.OMGd = OMGd*rCST.P2_44*rCST.SC2RAD
+        eph.idot = idot*rCST.P2_44*rCST.SC2RAD
+
+        eph.cis = cis*rCST.P2_30
+        eph.cic = cic*rCST.P2_30
+        eph.crs = crs*rCST.P2_8
+        eph.crc = crc*rCST.P2_8
+        eph.cus = cus*rCST.P2_30
+        eph.cuc = cuc*rCST.P2_30
+
+        eph.mode = 2  # L1NAV
+        eph.toe = gst2time(eph.week, eph.toes)
+        eph.toc = eph.toe
+        eph.tot = gst2time(eph.week, tow)
+
+        return eph
+
     def decode_glo_fdma(self, week, time, sat, msg, freq=0):
         """ Glonass FDMA navigation message decoder """
 
@@ -1286,32 +1545,47 @@ class RawNav():
 
         sid = bs.unpack_from('u4', msg, 1)[0]
 
-        if sid == 0 or sid > 4:
+        if sid == 0 or sid > 5:
             return None
 
-        buff = self.glo_ca[prn-1]
+        if prn not in self.glo_ca:
+            self.glo_ca[prn] = bytearray(80)
 
-        if sid == 1:  # when tk is updated, clear buffer
-            tk = bs.unpack_from('u12', msg, 9)[0]
-            tk_ = bs.unpack_from('u12', bytes(buff), 9)[0]
-            if tk != tk_:
-                for sid_ in range(4):
-                    buff[sid_*12:sid_*12+12] = bytearray(12)
+        # if sid == 1:  # when tk is updated, clear buffer
+        #    tk = bs.unpack_from('u12', msg, 9)[0]
+        #    tk_ = bs.unpack_from('u12', bytes(buff), 9)[0]
+        #    if tk != tk_:
+        #        for sid_ in range(4):
+        #            buff[sid_*12:sid_*12+12] = bytearray(12)
+        i0 = (sid-1)*12
+        copy_buff(msg, self.glo_ca[prn], 0, i0*8, 96)
+        # self.glo_ca[prn][i0:i0+12] = msg[0:12]
+        # buff = bytes(buff)
 
-        buff[(sid-1)*12:(sid-1)*12+12] = msg[0:12]
-        buff = bytes(buff)
+        buff = self.glo_ca[prn]
+
+        st.pack_into('>L', buff, 60+(sid-1)*4, int(time))
 
         id1 = bs.unpack_from('u4', buff, 1)[0]
         id2 = bs.unpack_from('u4', buff, 96+1)[0]
         id3 = bs.unpack_from('u4', buff, 96*2+1)[0]
         id4 = bs.unpack_from('u4', buff, 96*3+1)[0]
+        id5 = bs.unpack_from('u4', buff, 96*4+1)[0]
+
+        t1 = st.unpack_from('>L', buff, 60)[0]
+        t2 = st.unpack_from('>L', buff, 64)[0]
+        t3 = st.unpack_from('>L', buff, 68)[0]
+        t4 = st.unpack_from('>L', buff, 72)[0]
 
         if id1 != 1 or id2 != 2 or id3 != 3 or id4 != 4:
             return None
 
+        if t4-t3 != 2 or t3-t2 != 2 or t2-t1 != 2:
+            return None
+
         geph = Geph(sat)
 
-        # frame 1
+        # string 1
         i = 7
         P1, tk_h, tk_m, tk_s = bs.unpack_from('u2u5u6u1', buff, i)
         i += 14
@@ -1322,7 +1596,7 @@ class RawNav():
         geph.pos[0] = self.getbitg(buff, i, 27)*rCST.P2_11*1e3
         i += 27
 
-        # frame 2
+        # string 2
         i = 96+5
         Bn, P2, tb = bs.unpack_from('u3u1u7', buff, i)
         i += 11+5
@@ -1333,7 +1607,7 @@ class RawNav():
         geph.pos[1] = self.getbitg(buff, i, 27)*rCST.P2_11*1e3
         i += 27
 
-        # frame 3
+        # string 3
         i = 96*2+5
         P3 = bs.unpack_from('u1', buff, i)[0]
         i += 1
@@ -1348,7 +1622,7 @@ class RawNav():
         geph.pos[2] = self.getbitg(buff, i, 27)*rCST.P2_11*1e3
         i += 27
 
-        # frame 4
+        # string 4
         i = 96*3+5
         geph.taun = self.getbitg(buff, i, 22)*rCST.P2_30
         i += 22
@@ -1357,12 +1631,24 @@ class RawNav():
         En, _, P4, FT, _, NT, slot, M = bs.unpack_from(
             'u5u14u1u4u3u11u5u2', buff, i)
 
-        geph.sat = prn2sat(uGNSS.GLO, slot)
+        if id5 == 5:
+            # string 5
+            i = 96*4+5
+            NA = bs.unpack_from('u11', buff, i)[0]
+            i += 11
+            geph.tau_c = self.getbitg(buff, i, 32)*rCST.P2_31
+            i += 32+1
+            N4 = bs.unpack_from('u5', buff, i)[0]
+            i += 5
+            geph.tau_gps = self.getbitg(buff, i, 22)*rCST.P2_30
+            i += 22
+
+        # geph.sat = prn2sat(uGNSS.GLO, slot)
 
         geph.svh = Bn
         geph.age = En
         geph.sva = FT
-        geph.frq = freq-8
+        geph.frq = freq
 
         geph.iode = tb
 
@@ -1388,6 +1674,226 @@ class RawNav():
         geph.mode = 0
         return geph
 
+    def decode_glo_l1oc(self, week, time, sat, msg):
+        """ Glonass CDMA L1OC navigation message decoder """
+        sid_t = {10: 0, 11: 1, 12: 2, 16: 3, 25: 4}
+
+        sys, prn = sat2prn(sat)
+        pre, sid = bs.unpack_from('u12u6', msg, 0)
+        if pre != 0x5f1:
+            return None
+        if sid not in (10, 11, 12):
+            return None
+
+        if sat not in self.glo_l1oc.keys():
+            self.glo_l1oc[sat] = bytearray(32*5)
+
+        buff = self.glo_l1oc[sat]
+        i0 = sid_t[sid]*32*8
+        copy_buff(msg, buff, 12, i0, 222)  # buffer without preamble
+        geph = self.decode_glo_cdma(week, time, sat, buff, 1)
+        return geph
+
+    def decode_glo_l3oc(self, week, time, sat, msg):
+        """ Glonass CDMA L3OC navigation message decoder """
+        sid_t = {10: 0, 11: 1, 12: 2, 16: 3, 25: 4}
+
+        pre, sid = bs.unpack_from('u20u6', msg, 0)
+        if pre != 0x494e:
+            return None
+
+        if sid not in sid_t:
+            return None
+
+        if sat not in self.glo_l3oc.keys():
+            self.glo_l3oc[sat] = bytearray(32*5)
+
+        buff = self.glo_l3oc[sat]
+        i0 = sid_t[sid]*32*8
+        copy_buff(msg, buff, 20, i0, 256)  # buffer without preamble
+        geph = self.decode_glo_cdma(week, time, sat, buff, 3)
+        return geph
+
+    def decode_glo_cdma(self, week, time, sat, buff, stype):
+        """ Glonass CDMA L3OC navigation message decoder """
+
+        sid10 = bs.unpack_from('u6', buff, 0)[0]
+        sid11 = bs.unpack_from('u6', buff, 32*8)[0]
+        sid12 = bs.unpack_from('u6', buff, 32*2*8)[0]
+        # sid16 = bs.unpack_from('u6', buff, 32*3*8)[0]
+
+        # note:
+        #  currently, only MT10,11,12 are broadcast in L1OC, L3OC
+        #  it need to be fixed to include MT16 once it is available.
+        if sid10 != 10 or sid11 != 11 or sid12 != 12:
+            return None
+
+        geph = Geph(sat)
+
+        # MT10
+        i = 6
+        # service field
+        if stype == 1:  # L1OS
+            blen = 32
+            svid, svh, valid, P1, P2, KP, A, ts = \
+                bs.unpack_from('u6u1u1u4u1u2u1u16', buff, i)
+        else:  # L3OS
+            blen = 31
+            ts, svid, svh, valid, P1, P2, KP, A = \
+                bs.unpack_from('u15u6u1u1u4u1u2u1', buff, i)
+        i += blen
+
+        N4, Nt, M, PS, tb, Ee, Et, Re, Rt = \
+            bs.unpack_from('u5u11u3u6u10u8u8u2u2', buff, i)
+        i += 55
+        geph.urai[0] = self.getbitg(buff, i, 5)  # Fe
+        i += 5
+        geph.urai[1] = self.getbitg(buff, i, 5)  # Ft
+        i += 5
+
+        # N4: four-year interval
+        # Nt: number of day
+
+        # PS: pseudoframe size
+
+        # Ee, Et: age of ephemeris, clock
+        # Re, Rt: regime for generation of ephemeris/clock
+        # Fe, Ft: ephemeris, clock accuracy index urai orb/clk
+
+        geph.taun = self.getbitg(buff, i, 32)*rCST.P2_38
+        i += 32
+        geph.gamn = self.getbitg(buff, i, 19)*rCST.P2_48
+        i += 19
+        geph.beta = self.getbitg(buff, i, 15)*rCST.P2_57
+        i += 15
+        geph.tau_c = self.getbitg(buff, i, 40)*rCST.P2_31
+        i += 40
+        geph.dtau_c = self.getbitg(buff, i, 13)*rCST.P2_49
+        i += 13
+
+        # MT11
+        i = 32*8+6
+        i += blen
+
+        geph.pos[0] = self.getbitg(buff, i, 40)*rCST.P2_20*1e3
+        i += 40
+        geph.pos[1] = self.getbitg(buff, i, 40)*rCST.P2_20*1e3
+        i += 40
+        geph.pos[2] = self.getbitg(buff, i, 40)*rCST.P2_20*1e3
+        i += 40
+        geph.vel[0] = self.getbitg(buff, i, 35)*rCST.P2_30*1e3
+        i += 35
+        geph.vel[1] = self.getbitg(buff, i, 35)*rCST.P2_30*1e3
+        i += 35
+
+        # MT12
+        i = 32*2*8+6
+        i += blen
+
+        geph.vel[2] = self.getbitg(buff, i, 35)*rCST.P2_30*1e3
+        i += 35
+        geph.acc[0] = self.getbitg(buff, i, 15)*rCST.P2_39*1e3
+        i += 15
+        geph.acc[1] = self.getbitg(buff, i, 15)*rCST.P2_39*1e3
+        i += 15
+        geph.acc[2] = self.getbitg(buff, i, 15)*rCST.P2_39*1e3
+        i += 15
+        geph.dpos[0] = self.getbitg(buff, i, 13)*rCST.P2_10
+        i += 13
+        geph.dpos[1] = self.getbitg(buff, i, 13)*rCST.P2_10
+        i += 13
+        geph.dpos[2] = self.getbitg(buff, i, 13)*rCST.P2_10
+        i += 13
+
+        # dtau_L2 (L1OS), dtau_L3 (L3OS)
+        j = 1 if stype == 1 else 2
+        geph.isc[j] = self.getbitg(buff, i, 18)*rCST.P2_38
+        i += 18
+        geph.tau_gps = self.getbitg(buff, i, 30)*rCST.P2_38
+        i += 30
+
+        # MT16
+        i = 32*3*8+6
+        i += blen
+
+        # the instant in signal time of noon/midnight turn maneuver start.
+        tin, psi, sn, wmax, win, dw, tau1, tau2 = \
+            bs.unpack_from('u22u15u1u17u17u15u13u17', buff, i)
+
+        geph.psi = psi*rCST.P2_14*rCST.SC2RAD
+        geph.win = win*rCST.P2_26*rCST.SC2RAD
+        geph.wmax = wmax*rCST.P2_26*rCST.SC2RAD
+        geph.dw = dw*rCST.P2_30*rCST.SC2RAD
+        geph.sn = sn  # sign flag of maneuver
+
+        geph.tin = tin*rCST.P2_5
+        geph.tau1 = tau1*rCST.P2_5
+        geph.tau2 = tau2*rCST.P2_5
+
+        # KP: expected UTC(SU) correection
+        # A: L1OCd time correction in next string  0: no plan
+
+        geph.sattype = M  # 0:M(L3),1:K1(L3),3:K1(L2/L3),2:K2(L1/L2/L3)
+        geph.svh = svh  # 0:health, 1:unhealthy
+        geph.status = valid  # data validity 0:valid, 1:invalid
+        geph.flag = P2  # 0: yaw steering, 1: rate-limited yaw manoeuvre
+        geph.src = (Re << 2) | Rt
+
+        geph.aode = Ee*0.25  # age of ephemeris [days]
+        geph.aodc = Et*0.25  # age of clock [days]
+
+        geph.toe = gep2time(N4, Nt, tb*90.0)
+        _, geph.toes = time2gpst(geph.toe)
+        geph.tof = gep2time(N4, Nt, ts*3.0)
+        geph.iode = tb
+
+        geph.mode = stype  # FDMA:0,L1OC:1,L2OC:2,L3OC:3
+
+        return geph
+
+    def decode_sbs_l1(self, week, tow, sat, msg):
+        ura_t = [2, 2.8, 4, 5.7, 8, 11.3, 16, 32,
+                 64, 128, 256, 512, 1024, 2048, 4096, 0]
+
+        pre, mt, iodn = bs.unpack_from('u8u6u8', msg, 0)
+        i = 22
+
+        if pre not in (0x53, 0x9a, 0xc6):
+            return None
+
+        if mt != 9:
+            return None
+
+        t0, ura, xg, yg, zg = bs.unpack_from('u13u4s30s30s25', msg, i)
+        i += 102
+        vxg, vyg, vzg = bs.unpack_from('s17s17s18', msg, i)
+        i += 52
+        axg, ayg, azg = bs.unpack_from('s10s10s10', msg, i)
+        i += 30
+        af0, af1 = bs.unpack_from('s12s8', msg, i)
+        i += 20
+
+        seph = Seph(sat)
+        seph.tof = gpst2time(week, tow)
+        seph.t0 = tod2tow(t0*16.0, seph.tof)
+        seph.iodn = iodn
+        seph.svh = 0 if ura != 15 else 1
+        seph.sva = ura_t[ura]
+        seph.mode = 0
+        seph.pos[0] = xg*0.08
+        seph.pos[1] = yg*0.08
+        seph.pos[2] = zg*0.4
+        seph.vel[0] = vxg*6.25e-4
+        seph.vel[1] = vyg*6.25e-4
+        seph.vel[2] = vzg*4.0e-3
+        seph.acc[0] = axg*1.25e-5
+        seph.acc[1] = ayg*1.25e-5
+        seph.acc[2] = azg*6.25e-5
+        seph.af0 = af0*rCST.P2_31
+        seph.af1 = af1*rCST.P2_40
+
+        return seph
+
 
 class rcvOpt():
     flg_qzslnav = False
@@ -1398,9 +1904,11 @@ class rcvOpt():
     flg_gpscnav2 = False
     flg_qzsl6 = False
     flg_gale6 = False
+    flg_qzsl1s = False
+    flg_qzsl5s = False
     flg_galinav = False
     flg_galfnav = False
-    flg_bdsb1cc = False
+    flg_bdsb1c = False
     flg_bdsb2a = False
     flg_bdsb2b = False
     flg_bdsd12 = False
@@ -1423,6 +1931,8 @@ class rcvDec():
     flg_gpscnav2 = False
     flg_qzsl6 = False
     flg_gale6 = False
+    flg_qzsl1s = False
+    flg_qzsl5s = False
     flg_galinav = False
     flg_galfnav = False
     flg_bdsb1c = False
@@ -1457,6 +1967,13 @@ class rcvDec():
     re = None  # placeholder for RINEX encoder
 
     sig_tab = {}
+
+    def __init__(self, opt=None, prefix='', gnss_t='GECJ'):
+        self.sig_tab = self.init_sig_tab(gnss_t)
+        if opt is not None:
+            self.init_param(opt, prefix)
+        self.nsig = {uTYP.C: 0, uTYP.L: 0, uTYP.D: 0, uTYP.S: 0}
+        self.prn_ref = -1
 
     def init_sig_tab(self, gnss_t='GEJ'):
         """ initialize signal table for RINEX output """
@@ -1512,10 +2029,14 @@ class rcvDec():
 
         if 'J' in gnss_t:
             sig_tab[uGNSS.QZS] = {
-                uTYP.C: [rSigRnx('JC1C'), rSigRnx('JC2L'), rSigRnx('JC5Q')],
-                uTYP.L: [rSigRnx('JL1C'), rSigRnx('JL2L'), rSigRnx('JL5Q')],
-                uTYP.D: [rSigRnx('JD1C'), rSigRnx('JD2L'), rSigRnx('JD5Q')],
-                uTYP.S: [rSigRnx('JS1C'), rSigRnx('JS2L'), rSigRnx('JS5Q')],
+                uTYP.C: [rSigRnx('JC1C'), rSigRnx('JC1E'), rSigRnx('JC1L'),
+                         rSigRnx('JC2L'), rSigRnx('JC5Q')],
+                uTYP.L: [rSigRnx('JL1C'), rSigRnx('JL1E'), rSigRnx('JL1L'),
+                         rSigRnx('JL2L'), rSigRnx('JL5Q')],
+                uTYP.D: [rSigRnx('JD1C'), rSigRnx('JD1E'), rSigRnx('JD1L'),
+                         rSigRnx('JD2L'), rSigRnx('JD5Q')],
+                uTYP.S: [rSigRnx('JS1C'), rSigRnx('JS1E'), rSigRnx('JS1L'),
+                         rSigRnx('JS2L'), rSigRnx('JS5Q')],
             }
 
         if 'S' in gnss_t:
@@ -1528,17 +2049,13 @@ class rcvDec():
 
         if 'I' in gnss_t:
             sig_tab[uGNSS.IRN] = {
-                uTYP.C: [rSigRnx('IC5A')], uTYP.L: [rSigRnx('IL5A')],
-                uTYP.D: [rSigRnx('ID5A')], uTYP.S: [rSigRnx('IS5A')],
+                uTYP.C: [rSigRnx('IC1P'), rSigRnx('IC5A')],
+                uTYP.L: [rSigRnx('IL1P'), rSigRnx('IL5A')],
+                uTYP.D: [rSigRnx('ID1P'), rSigRnx('ID5A')],
+                uTYP.S: [rSigRnx('IS1P'), rSigRnx('IS5A')],
             }
 
         return sig_tab
-
-    def __init__(self, opt=None, prefix='', gnss_t='GECJ'):
-        self.sig_tab = self.init_sig_tab(gnss_t)
-        if opt is not None:
-            self.init_param(opt, prefix)
-        self.nsig = {uTYP.C: 0, uTYP.L: 0, uTYP.D: 0, uTYP.S: 0}
 
     def init_param(self, opt: rcvOpt, prefix=''):
         if opt.flg_rnxnav or opt.flg_rnxobs:
@@ -1574,6 +2091,16 @@ class rcvDec():
             self.flg_qzsl6 = True
             self.file_qzsl6 = "qzsl6.txt"
             self.fh_qzsl6 = open(prefix+self.file_qzsl6, mode='w')
+        if opt.flg_qzsl1s:
+            self.flg_qzsl1s = True
+            if self.fh_sbas is None:
+                self.file_sbas = "sbas.txt"
+                self.fh_sbas = open(prefix+self.file_sbas, mode='w')
+        if opt.flg_qzsl5s:
+            self.flg_qzsl5s = True
+            if self.fh_sbas is None:
+                self.file_sbas = "sbas.txt"
+                self.fh_sbas = open(prefix+self.file_sbas, mode='w')
         if opt.flg_gale6:
             self.flg_gale6 = True
             self.file_gale6 = "gale6.txt"
@@ -1588,6 +2115,8 @@ class rcvDec():
             self.fh_galfnav = open(prefix+self.file_galfnav, mode='w')
         if opt.flg_bdsb1c:
             self.flg_bdsb1c = True
+            self.file_bdsb1c = "bdsb1c.txt"
+            self.fh_bdsb1c = open(prefix+self.file_bdsb1c, mode='w')
         if opt.flg_bdsb2a:
             self.flg_bdsb2a = True
         if opt.flg_bdsb2b:
@@ -1602,8 +2131,9 @@ class rcvDec():
             self.flg_irnnav = True
         if opt.flg_sbas:
             self.flg_sbas = True
-            self.file_sbas = "sbas.txt"
-            self.fh_sbas = open(prefix+self.file_sbas, mode='w')
+            if self.fh_sbas is None:
+                self.file_sbas = "sbas.txt"
+                self.fh_sbas = open(prefix+self.file_sbas, mode='w')
         if opt.flg_rnxnav:
             self.flg_rnxnav = True
             self.file_rnxnav = "rnx.nav"
@@ -1660,3 +2190,35 @@ class rcvDec():
 
         if self.fh_rnxobs is not None:
             self.fh_rnxobs.close()
+
+    def output_sbas(self, prn, msg, fh, itype=0):
+        """ output ascii encoded SBAS raw message into file. """
+        if itype == 3:  # QZSS L5S experimental message
+            pre_t = [0x5, 0xc, 0x6, 0x9, 0x3, 0xa]
+            preamble = msg[0]
+            s = msg[1] >> 6
+            if s == 0:
+                mt = 34
+            elif s == 1:
+                if preamble == 0x53:
+                    mt = 31  # DFMC mask
+                elif preamble == 0x9a:
+                    mt = 37  # DFMC OBAD
+                else:
+                    mt = 47  # DFMC SBAS almanac
+            elif s == 2:
+                mt = 32  # DFMC orbit/clock correction
+            else:  # s == 3:
+                mt = 63  # DFMC null
+            preamble = pre_t[int(self.tow) % 6]
+            msg[0] = (preamble << 4) | (mt >> 2)
+            msg[1] = ((mt & 0x3) << 6) | (msg[1] & 0x3f)
+        else:
+            bl = 4 if itype == 1 else 8
+            mt = bs.unpack_from('u6', msg, bl)[0]
+
+        fh.write("{:4d}{:7d}{:4d}{:3d} : ".
+                 format(self.week, int(self.tow), prn, mt))
+        for i in range(29):
+            fh.write("{:02X}".format(msg[i]))
+        fh.write("\n")

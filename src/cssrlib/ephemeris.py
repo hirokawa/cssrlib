@@ -355,6 +355,7 @@ def satpos(sat, t, nav, cs=None, orb=None):
             dorb = cs.lc[0].dorb[sat]  # radial,along-track,cross-track
 
             if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5):
+
                 dorb += cs.lc[0].dvel[sat] * \
                     (timediff(t, cs.lc[0].t0[sat][sCType.ORBIT]))
 
@@ -469,7 +470,7 @@ def satpos(sat, t, nav, cs=None, orb=None):
             dts[i] += dclk/rCST.CLIGHT
 
             if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5,
-                               sc.DGPS):
+                               sc.DGPS) and sys == uGNSS.GPS:
                 dts[i] -= eph.tgd
 
         elif nav.smode == 1 and nav.nf == 1:  # standalone positioning
@@ -546,12 +547,23 @@ def satposs(obs, nav, cs=None, orb=None):
                 continue
             dt = dts_[0]
 
-            if len(nav.eph) > 0:
+            if sys == uGNSS.GLO and len(nav.geph) > 0:
+                geph = findeph(nav.geph, t, sat)
+                if geph is None:
+                    svh[i] = 1
+                    continue
+                svh[i] = geph.svh
+
+                if sat not in nav.glo_ch:
+                    nav.glo_ch[sat] = geph.frq
+
+            elif len(nav.eph) > 0:
                 eph = findeph(nav.eph, t, sat)
                 if eph is None:
                     svh[i] = 1
                     continue
                 svh[i] = eph.svh
+
             else:
                 svh[i] = 0
 
@@ -606,7 +618,10 @@ def satposs(obs, nav, cs=None, orb=None):
                             else:
                                 continue
 
-                    dclk = cs.lc[0].dclk[sat]
+                    if sat in cs.lc[0].dclk:
+                        dclk = cs.lc[0].dclk[sat]
+                    else:
+                        continue
 
                     if cs.lc[0].cstat & (1 << sCType.HCLOCK) and \
                             sat in cs.lc[0].hclk.keys() and \
@@ -704,7 +719,8 @@ def satposs(obs, nav, cs=None, orb=None):
 
                 nav.dorb[sat] = dorb_
                 nav.dclk[sat] = dclk
-            elif nav.smode == 1 and nav.nf == 1:  # standalone positioing
+
+            elif nav.smode == 1 and nav.nf == 1:  # stand-alone positioning
                 dts[i] -= eph.tgd
 
             nsat += 1

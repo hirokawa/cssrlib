@@ -1,12 +1,20 @@
 """
 module for Compact SSR processing
+
+[1] Specification of Compact SSR Messages for Satellite Based Augmentation 
+    Service, v08, DOI: 10.13140/RG.2.2.10749.49129, 2019
+    
+@author Rui Hirokawa
+
 """
 
 import bitstruct as bs
+import copy
 import numpy as np
 from enum import IntEnum
 from cssrlib.gnss import gpst2time, rCST, prn2sat, uGNSS, gtime_t, rSigRnx
 from cssrlib.gnss import uSIG, uTYP, sat2prn, time2str, sat2id, timediff
+from cssrlib.gnss import copy_buff
 
 
 class sCSSRTYPE(IntEnum):
@@ -269,10 +277,13 @@ class cssr:
         self.cbias = []
         self.pbias = []
         self.inet = -1
-        self.facility_p = -1
+        self.facility = -1
+        self.pattern = -1
+        self.sid = -1
         self.cstat = 0
         self.local_pbias = True  # for QZS CLAS
         self.buff = bytearray(250*5)
+        self.buff_p = None
         self.sinfo = bytearray(160)
         self.grid = None
         self.prc = None
@@ -474,7 +485,8 @@ class cssr:
         """ convert from sGNSS to sys """
         tbl = {sGNSS.GPS: uGNSS.GPS, sGNSS.GLO: uGNSS.GLO,
                sGNSS.GAL: uGNSS.GAL, sGNSS.BDS: uGNSS.BDS,
-               sGNSS.QZS: uGNSS.QZS, sGNSS.SBS: uGNSS.SBS}
+               sGNSS.QZS: uGNSS.QZS, sGNSS.SBS: uGNSS.SBS,
+               sGNSS.BDS3: uGNSS.BDS}
         if gnss not in tbl:
             return -1
         sys = tbl[gnss]
@@ -546,16 +558,14 @@ class cssr:
         self.nsat_g = np.zeros(self.SYSMAX, dtype=int)
 
         for j in range(self.ngnss):
-            v = bs.unpack_from_dict('u4u40u16u1', ['gnssid', 'svmask',
-                                                   'sigmask', 'cma'], msg, i)
-            self.gnss_idx[j] = self.gnss2sys(v['gnssid'])
-            sys = self.gnss2sys(v['gnssid'])
+            gnss, svmask, sigmask, cma = bs.unpack_from('u4u40u16u1', msg, i)
+            sys = self.gnss_idx[j] = self.gnss2sys(gnss)
             i += 61
-            prn, nsat = self.decode_mask(v['svmask'], 40)
-            sig, nsig = self.decode_mask(v['sigmask'], 16, 0)
-            self.nsat_g[v['gnssid']] = nsat
+            prn, nsat = self.decode_mask(svmask, 40)
+            sig, nsig = self.decode_mask(sigmask, 16, 0)
+            self.nsat_g[gnss] = nsat
             self.nsat_n += nsat
-            if v['cma'] == 1:
+            if cma == 1:
                 vc = bs.unpack_from(('u'+str(nsig))*nsat, msg, i)
                 i += nsig*nsat
 
@@ -564,25 +574,27 @@ class cssr:
             sig_r = [self.ssig2rsig(sys, uTYP.L, s) for s in sig]
 
             for k in range(0, nsat):
-                if sys == uGNSS.QZS:
+                if gnss == sGNSS.QZS:
                     prn[k] += 192
+                elif gnss == sGNSS.BDS3:
+                    prn[k] += 18
                 sat = prn2sat(sys, prn[k])
                 self.sys_n.append(sys)
                 self.sat_n.append(sat)
-                self.gnss_n.append(v['gnssid'])
-                if v['cma'] == 1:
+                self.gnss_n.append(gnss)
+                if cma == 1:
                     sig_s, nsig_s = self.decode_mask(vc[k], nsig, 0)
                     sig_n = [sig_r[i] for i in sig_s]
                     self.nsig_n.append(nsig_s)
-                    self.nsig_total = self.nsig_total+nsig_s
+                    self.nsig_total += nsig_s
                     self.sig_n[sat] = sig_n
                 else:
                     self.nsig_n.append(nsig)
-                    self.nsig_total = self.nsig_total+nsig
+                    self.nsig_total += nsig
                     self.sig_n[sat] = sig_r
 
             if self.cssrmode == sCSSRTYPE.GAL_HAS_SIS:  # HAS only
-                self.nm_idx[v['gnssid']] = bs.unpack_from('u3', msg, i)[0]
+                self.nm_idx[gnss] = bs.unpack_from('u3', msg, i)[0]
                 i += 3
 
         if self.cssrmode == sCSSRTYPE.GAL_HAS_SIS:  # HAS only
@@ -1011,11 +1023,12 @@ class cssr:
         self.lc[inet].sat_n = self.decode_local_sat(netmask)
         self.lc[inet].nsat_n = nsat = len(self.lc[inet].sat_n)
         self.lc[inet].stec_quality = {}
-        if dfm['stec'] & 2 > 0:
+        if dfm['stec'] & 2 > 0:  # functional term is available
             self.lc[inet].ci = {}
             self.lc[inet].stype = {}
-        if dfm['stec'] & 1 > 0:
+        if dfm['stec'] & 1 > 0:  # residual term is available
             self.lc[inet].dstec = {}
+            self.lc[inet].s_sz = {}
 
         for k in range(nsat):
             sat = self.lc[inet].sat_n[k]
@@ -1037,6 +1050,7 @@ class cssr:
             if dfm['stec'] & 1 > 0:  # residual term
                 sz_idx = bs.unpack_from('u2', msg, i)[0]
                 i += 2
+                self.lc[inet].s_sz[sat] = sz_idx
                 sz = self.stec_sz_t[sz_idx]
                 scl = self.stec_scl_t[sz_idx]
                 v = bs.unpack_from(('s'+str(sz))*ng, msg, i)
@@ -1291,8 +1305,9 @@ class cssr:
     def decode_l6msg(self, msg, ofst):
         """decode QZS L6 message """
         fmt = 'u32u8u3u2u2u1u1'
-        names = ['preamble', 'prn', 'vendor', 'facility', 'res', 'sid',
+        names = ['preamble', 'prn', 'vendor', 'facility', 'pt', 'sid',
                  'alert']
+        facility_t = [[0, 2, 1, 3], [2, 0, 3, 1]]  # Table 4.1.2-2
         i = ofst*8
         l6head = bs.unpack_from_dict(fmt, names, msg, i)
         if l6head['preamble'] != 0x1acffc1d:
@@ -1300,18 +1315,44 @@ class cssr:
         i += 49
         if l6head['sid'] == 1:
             self.fcnt = 0
-        if self.facility_p >= 0 and l6head['facility'] != self.facility_p:
+            self.buff_p = copy.copy(self.buff)
+            self.buff = bytearray(250*5)
+
+        if l6head['vendor'] == 5:  # CLAS
+            facility = facility_t[l6head['pt']][l6head['facility']]
+        else:
+            facility = l6head['facility']
+        if self.facility >= 0 and facility != self.facility:
             self.fcnt = -1
-        self.facility_p = l6head['facility']
+        facility_p = self.facility
+        self.facility = facility
+        self.pattern = l6head['pt']
+        self.sid = l6head['sid']
         if self.fcnt < 0:
-            print("facility changed.")
+            print(f"facility changed: {facility_p} -> {facility}")
             return -1
-        j = 1695*self.fcnt
-        for k in range(53):
-            sz = 32 if k < 52 else 31
-            fmt = 'u'+str(sz)
-            b = bs.unpack_from(fmt, msg, i)
-            i += sz
-            bs.pack_into(fmt, self.buff, j, b[0])
-            j += sz
-        self.fcnt = self.fcnt+1
+
+        copy_buff(msg, self.buff, i, 1695*self.fcnt, 1695)
+        self.fcnt = self.fcnt + 1
+
+
+class cssre():
+    """ Class to encode the Compact SSR messages (experimental) """
+    monlevel = 0
+    dlen = 0
+    msgtype = 0
+
+    def __init__(self):
+        super().__init__()
+        self.len = 0
+        self.dlen = 0
+        self.msgtype = 0
+
+    def encode_mask(self, v, bitlen, ofst=1):
+        """ encode n-bit mask with offset """
+        d = 0
+        for p in v:
+            k = p-ofst
+            d |= 1 << (bitlen-k-1)
+
+        return d

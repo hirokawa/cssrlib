@@ -102,7 +102,7 @@ def searchIGP(t, posp, cs):
         if band not in cs.vtec or band not in cs.givei:
             continue
 
-        gp = cs.igp_t[band]
+        gp = cs.igp_t[band][cs.igp_idx[band]]
         for i in range(4):
             idx = np.where((gp[:, 0] == latp[i]) & (gp[:, 1] == lonp[i]))[0]
             if len(idx) == 0:
@@ -158,10 +158,12 @@ def ionoSBAS(t, pos, az, el, cs):
     if err:
         return diono, var
 
+    t0_igp = cs.lc[cs.inet].t0[0][sCType.VTEC]
+
     for i in range(4):
         if i not in igp:
             continue
-        dt = timediff(t, cs.t0_igp)
+        dt = timediff(t, t0_igp)
         diono += w[i]*igp[i][0]
         var += w[i]*givei_t[igp[i][1]]*9e-8*abs(dt)
 
@@ -177,6 +179,7 @@ class sbasDec(cssr):
         self.cssrmode = sCSSRTYPE.SBAS_L1
         self.nsig_max = 0
         self.sat_n = []
+        self.sat = []
 
         self.lc[0].dclk = {}
         self.lc[0].hclk = {}
@@ -205,6 +208,7 @@ class sbasDec(cssr):
         # intrgrity information
         self.cov = {}
         self.udrei = {}
+        self.dfrei = {}
         self.dRcorr = {}
         self.ai = {}
         self.deg_prm = np.zeros(16)
@@ -551,13 +555,13 @@ class sbasDec(cssr):
         self.lc[0].dorb[sat][1] = -self.sval(dy, 11, 0.125)
         self.lc[0].dorb[sat][2] = -self.sval(dz, 11, 0.125)
 
-        self.lc[0].dclk[sat] = -self.sval(db, 11, rCST.P2_31*rCST.CLIGHT)
+        self.lc[0].dclk[sat] = self.sval(db, 11, rCST.P2_31*rCST.CLIGHT)
         self.lc[0].dvel[sat] = np.zeros(3)
         self.lc[0].dvel[sat][0] = -self.sval(dxd, 8, rCST.P2_11)
         self.lc[0].dvel[sat][1] = -self.sval(dyd, 8, rCST.P2_11)
         self.lc[0].dvel[sat][2] = -self.sval(dzd, 8, rCST.P2_11)
 
-        self.lc[0].ddft[sat] = self.sval(db, 8, rCST.P2_39*rCST.CLIGHT)
+        self.lc[0].ddft[sat] = self.sval(dbd, 8, rCST.P2_39*rCST.CLIGHT)
 
         self.lc[0].cstat |= (1 << sCType.CLOCK) | (1 << sCType.ORBIT)
 
@@ -591,7 +595,7 @@ class sbasDec(cssr):
             i += 90
             self.add_sbas_corr(slot, iodn, dx, dy, dz, db, dxd, dyd, dzd, dbd)
 
-            toa = bs.unpack_from('u13', msg, i)
+            toa = bs.unpack_from('u13', msg, i)[0]
             i += 15
 
         self.iodssr_c[sCType.CLOCK] = iodp
@@ -741,62 +745,62 @@ class sbasDec(cssr):
         return i
 
     def decode_dfmc_integrity_mt34(self, msg, i):
-        """ Types 34 integrity message """
+        """ Types 34 integrity message (indexed) """
         iodm = bs.unpack_from('u2', msg, 214)[0]
         if iodm != self.iodm:
             i += 216
             return i
 
-        idx = []
+        dfreci = np.zeros(92, dtype=int)
         for k in range(92):
-            dfreci = bs.unpack_from('u2', msg, i)[0]
+            dfreci[k] = bs.unpack_from('u2', msg, i)[0]
             i += 2
-            if dfreci == 1:
-                idx += [k]
-            elif dfreci == 2:
-                None
-                # if self.udrei[k] < 15:
-                #    self.udrei[k] += 1
-            elif dfreci == 3:
-                None
-                # self.udrei[k] = 15
 
         dfrei = np.zeros(7, dtype=int)
         for k in range(7):
             dfrei[k] = bs.unpack_from('u4', msg, i)[0]
             i += 4
-        j = 0
-        for k in idx:
-            # self.udrei[k] = dfrei[j]
-            j += 1
-            if j > 7:
-                break
+
+        k = 0
+        for j in range(self.nsat):
+            sat = self.sat_n[j]
+            if dfreci[j] == 1:
+                if k < 7:
+                    self.dfrei[sat] = dfrei[k]
+                    k += 1
+            elif dfreci[j] == 2:
+                self.dfrei[sat] += 1
+                if self.dfrei[sat] > 14:
+                    self.dfrei[sat] = 14
+            elif dfreci[j] == 3:  # DNU
+                self.dfrei[sat] = 15
 
         i += 4
         return i
 
     def decode_dfmc_integrity_mt35(self, msg, i):
-        """ Types 35 integrity message """
+        """ Types 35 integrity message (for #1-53) """
         iodm = bs.unpack_from('u2', msg, 214)[0]
         if iodm != self.iodm:
             i += 216
             return i
 
         for k in range(53):
-            self.udrei[k] = bs.unpack_from('u4', msg, i)[0]
+            self.dfrei[k] = bs.unpack_from('u4', msg, i)[0]
             i += 4
+
         i += 4
         return i
 
     def decode_dfmc_integrity_mt36(self, msg, i):
-        """ Types 36 integrity message """
+        """ Types 36 integrity message (for #54-92) """
         iodm = bs.unpack_from('u2', msg, 214)[0]
         if iodm != self.iodm:
             i += 216
             return i
 
         for k in range(39):
-            self.udrei[k+53] = bs.unpack_from('u4', msg, i)[0]
+            self.dfrei[k+53] = bs.unpack_from('u4', msg, i)[0]
             i += 4
         i += 60
         return i
@@ -861,7 +865,7 @@ class sbasDec(cssr):
         iodg = bs.unpack_from('u2', msg, i)[0]
         i += 2
         if iodg != self.iodg:
-            i += 115
+            i += 115+99
             return i
 
         i0, e, a, te = bs.unpack_from('u33u30u31u13', msg, i)
@@ -937,7 +941,7 @@ class sbasDec(cssr):
 
         self.lc[0].cstat |= (1 << sCType.CLOCK) | (1 << sCType.ORBIT)
         self.lc[0].t0[sat] = {
-            sCType.CLOCK: self.time, sCType.ORBIT: self.time}
+            sCType.CLOCK: self.time0, sCType.ORBIT: self.time0}
 
         return sat
 
@@ -947,12 +951,15 @@ class sbasDec(cssr):
         i += 18
 
         if slot == 0:  # for DFMC SBAS only
-            return
+            i += 99+99
+            return i
 
         dx, dy, dz, db = bs.unpack_from('s11s11s11s12', msg, i)
         i += 45
         dxd, dyd, dzd, dbd, t0 = bs.unpack_from('s8s8s8s9u13', msg, i)
         i += 46
+
+        self.time0 = tod2tow(t0*16.0, self.time)
 
         i, C = self.decode_cov(msg, i)
 
@@ -969,10 +976,8 @@ class sbasDec(cssr):
             return i
 
         self.cov[sat] = C
-        self.udrei[sat] = dfrei
+        self.dfrei[sat] = dfrei
         self.dRcorr[sat] = dRcorr
-
-        self.time0 = tod2tow(t0*16.0, self.time)
 
         # self.iodssr = 0
 
@@ -1011,7 +1016,10 @@ class sbasDec(cssr):
         self.msgtype = mt
         # self.src = src
         if prn > 0:
-            self.sat_ref = prn2sat(uGNSS.SBS, prn)
+            if prn >= 193:
+                self.sat_ref = prn2sat(uGNSS.QZS, prn)
+            else:
+                self.sat_ref = prn2sat(uGNSS.SBS, prn)
 
         if mt == 1:  # PRN mask
             i = self.decode_sbas_mask(msg, i)
@@ -1061,13 +1069,13 @@ class sbasDec(cssr):
         elif mt == 40:  # SBAS ephemeris
             i = self.decode_dfmc_eph_mt40(msg, i)
         elif mt == 42:  # GNSS Time offsets
-            None
+            pass
         elif mt == 47:  # SBAS almanacs
             i = self.decode_dfmc_alm(msg, i)
         elif mt == 62:  # internal test message
-            None
+            pass
         elif mt == 63:  # Null
-            None
+            pass
 
         if self.monlevel > 3:
             self.fh.write("{:s} mt={:2d} \n".format(time2str(self.time), mt))

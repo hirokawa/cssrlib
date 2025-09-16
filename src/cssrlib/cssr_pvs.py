@@ -7,6 +7,12 @@ PVS (PPP via SouthPAN) correction data decoder
 [2] Service Definition Document for Data Access Services, SBAS-STN-0002,
     Revision 01, November 2023
 
+For use of SSR corrections see section A 3.9.2 in
+
+[3] EUROCAE, ED-259, Minimum Operational Performance Standards for Galileo -
+    Global Positioning System - Satellite-Based Augmentation System Airborne
+    Equipment
+
 """
 
 import numpy as np
@@ -81,10 +87,10 @@ class cssr_pvs(cssr):
 
     def adjust_time_week(self, time, time0):
         dt = timediff(time, time0)
-        if dt > rCST.HALFWEEK_SEC:
-            time = timeadd(time, -rCST.WEEK_SEC)
-        elif dt < -rCST.HALFWEEK_SEC:
-            time = timeadd(time,  rCST.WEEK_SEC)
+        if dt > rCST.DAY_SEC/2:
+            time = timeadd(time, -rCST.DAY_SEC)
+        elif dt < -rCST.DAY_SEC/2:
+            time = timeadd(time,  rCST.DAY_SEC)
         return time
 
     def check_validity(self, time):
@@ -113,36 +119,29 @@ class cssr_pvs(cssr):
 
         sat = self.slot2sat(slot)
 
-        if sat == 0 or t0 % 2 == 0:  # for DFMC SBAS only
+        # correction for PVS is available only if mod(t0/16,2)==1
+        if sat == 0 or t0 % 2 == 0:
             return
 
         if sat not in self.sat_n:
             self.sat_n.append(sat)
-
-        dorb = np.zeros(3)
-        dvel = np.zeros(3)
-
-        dorb[0] = dx*0.0625
-        dorb[1] = dy*0.0625
-        dorb[2] = dz*0.0625
-
-        dclk = db*0.03125
-
-        dvel[0] = dxd*0.00048828
-        dvel[1] = dyd*0.00048828
-        dvel[2] = dzd*0.00048828
-
-        ddft = dbd*0.00024414
 
         tow = self.tow0 + t0*16.0
         self.time = self.adjust_time_week(
             gpst2time(self.week, tow), self.time0)
 
         self.lc[0].iode[sat] = iodn
-        self.lc[0].dorb[sat] = -dorb
-        self.lc[0].dclk[sat] = dclk
-        self.lc[0].dvel[sat] = -dvel
-        self.lc[0].ddft[sat] = ddft
+        self.lc[0].dorb[sat] = np.zeros(3)
+        self.lc[0].dorb[sat][0] = -self.sval(dx, 11, 0.0625)
+        self.lc[0].dorb[sat][1] = -self.sval(dy, 11, 0.0625)
+        self.lc[0].dorb[sat][2] = -self.sval(dz, 11, 0.0625)
+        self.lc[0].dclk[sat] = self.sval(db, 12, 0.03125)
+
+        self.lc[0].dvel[sat] = np.zeros(3)
+        self.lc[0].dvel[sat][0] = -self.sval(dxd, 8, rCST.P2_11)
+        self.lc[0].dvel[sat][1] = -self.sval(dyd, 8, rCST.P2_11)
+        self.lc[0].dvel[sat][2] = -self.sval(dzd, 8, rCST.P2_11)
+        self.lc[0].ddft[sat] = self.sval(dbd, 9, rCST.P2_12)
 
         self.iodssr = 0
         self.lc[0].cstat |= (1 << sCType.CLOCK) | (1 << sCType.ORBIT)

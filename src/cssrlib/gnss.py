@@ -7,6 +7,7 @@ from enum import IntEnum
 from math import floor, sin, cos, sqrt, asin, atan2, fabs, tan
 import numpy as np
 from datetime import datetime, timezone
+import bitstruct.c as bs
 
 gpst0 = [1980, 1, 6, 0, 0, 0]  # GPS system time reference
 gst0 = [1999, 8, 22, 0, 0, 0]  # Galileo system time reference
@@ -77,6 +78,7 @@ class rCST():
     FREQ_S1 = 1575.42e6      # [Hz] SBS L1
     FREQ_S5 = 1176.45e6      # [Hz] SBS L5
 
+    FREQ_I1 = 1575.42e6      # [Hz] IRS L1
     FREQ_I5 = 1191.795e6     # [Hz] IRS L5
     FREQ_IS = 2492.028e6     # [Hz] IRS S
 
@@ -99,6 +101,7 @@ class rCST():
     P2_20 = 9.536743164062500E-07
     P2_21 = 4.768371582031250E-07
     P2_24 = 5.960464477539063e-08
+    P2_26 = 1.490116119384766e-08
     P2_27 = 7.450580596923828e-09
     P2_28 = 3.725290298461914E-09
     P2_29 = 1.862645149230957E-09
@@ -150,7 +153,7 @@ class uGNSS(IntEnum):
     BDSMAX = 63
     GLOMAX = 27
     SBSMAX = 39
-    IRNMAX = 10
+    IRNMAX = 14
 
     GPSMIN = 0
     GALMIN = GPSMIN+GPSMAX
@@ -479,7 +482,8 @@ class rSigRnx():
                    (s[1] == '6' and s[2] not in 'IQXDPZ'):
                     raise ValueError
             elif sys == uGNSS.IRN:
-                if (s[1] == '5' and s[2] not in 'ABCX') or \
+                if (s[1] == '1' and s[2] not in 'DPX') or \
+                   (s[1] == '5' and s[2] not in 'ABCX') or \
                    (s[1] == '9' and s[2] not in 'ABCX'):
                     raise ValueError
 
@@ -588,7 +592,9 @@ class rSigRnx():
             elif int(self.sig / 100) == 5:
                 return rCST.FREQ_S5
         elif self.sys == uGNSS.IRN:
-            if int(self.sig / 100) == 5:
+            if int(self.sig / 100) == 1:
+                return rCST.FREQ_I1
+            elif int(self.sig / 100) == 5:
                 return rCST.FREQ_I5
             elif int(self.sig / 100) == 9:
                 return rCST.FREQ_IS
@@ -612,6 +618,31 @@ class gtime_t():
     def __gt__(self, other):
         return self.time > other.time or \
             (self.time == other.time and self.sec > other.sec)
+
+
+class STOParam():
+    """ System Time and UTC Office """
+    sbas = 0  # SBAS ID
+    prm = [0, 0]  # System time offset parameter
+    t_ot = None  # reference epoch
+    t_t = 0.0  # transmission time of message (Time of week [sec])
+    a = np.zeros(3)  # a0, a1, a2
+
+
+class EOPParam():
+    """ Earth Orientation Parameter """
+    prm = np.zeros(9)
+    # EOP parameters (xp,dxp,ddxp,yp,dyp,ddyp,dut1,ddut1,dddut1)
+    t_ot = None  # reference epoch
+    t_t = 0.0  # transmission time of message (Time of week [sec])
+
+
+class IONParam():
+    """ Ionospheric delay model Parameter """
+    iod = 0
+    prm = np.zeros(9)  # ION parameters
+    t_tm = None  # transmission time
+    region = None
 
 
 class Obs():
@@ -690,15 +721,41 @@ class Geph():
     sva = 0
     age = 0.0
     toe = gtime_t()
+    toes = 0.0
     tof = gtime_t()
     pos = np.zeros(3)
     vel = np.zeros(3)
     acc = np.zeros(3)
     taun = 0.0         # SV clock bias [s]
-    gamn = 0.0         # relative frq bias
+    gamn = 0.0         # SV clock drift [s/s]
+    beta = 0.0         # SV clock drift rate [s/s^2]
     dtaun = 0.0        # delta between L1 and L2 [s]
     mode = 0
-    status = 0
+    status = 0  # data validity
+    flag = 0
+
+    tau_c = 0.0  # GLONASS time scale correction to UTC(SU) time
+    dtau_c = 0.0
+    tau_gps = 0.0  # correction to GPS time relative to GLONASS time
+
+    # for CDMA
+    urai = np.zeros(2, dtype=int)
+    dpos = np.zeros(3)
+
+    psi = 0.0  # yaw angle [rad]
+    sn = 0  # sign flag
+    win = 0.0  # angular rate [rad/s]
+    dw = 0.0  # angular accel [rad/s^2]
+    wmax = 0.0  # max angular rate[rad/s]
+    aode = 0
+    aodc = 0  # age of data orbit/clock [days]
+    tin = 0.0
+    tau1 = 0.0
+    tau2 = 0.0
+
+    src = 0  # source flags (b0-1: Rt, b2-3: Re)
+    sattype = 0  # 0 - M(L3), 1 - K1(L3), 3 - K1(L2/L3), 2 - K2 (L1/L2/L3)
+    isc = np.zeros(3)  # 0: ISC_L1OC, 1: ISC_L2OC, 2: ISC_L3OC
 
     def __init__(self, sat=0):
         self.sat = sat
@@ -759,8 +816,13 @@ class Nav():
             [0.1167E+06, -0.2294E+06, -0.1311E+06, 0.1049E+07]])
         self.ion_gim = np.zeros(9)
         self.ion_region = 0  # 0: wide-area, 1: Japan-aera (QZSS only)
-        self.sto = np.zeros(3)
-        self.sto_prm = np.zeros(4, dtype=int)
+        # self.sto = np.zeros(3)
+        # self.sto_prm = np.zeros(4, dtype=int)
+
+        self.sto_prm = {}
+        self.eop_prm = {}
+        self.ion_prm = {}
+
         self.eop = np.zeros(9)
         self.elmin = np.deg2rad(15.0)
         self.tidecorr = False
@@ -780,6 +842,11 @@ class Nav():
         self.armode = 0
         self.thresar = 3.0  # AR acceptance threshold
         self.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
+
+        # cycle-slip threshold of geometry-free combination of phase [m]
+        self.thresslip = 0.15
+
+        self.leaps = 18  # leap seconds [s]
 
         # Select tropospheric model
         #
@@ -821,11 +888,17 @@ class Nav():
         # Carrier-phase processed indicator
         self.vsat = np.zeros((uGNSS.MAXSAT, self.nf), dtype=int)
 
+        # geometry-free combination for cycle-slip detection
+        self.gf = np.zeros(uGNSS.MAXSAT)
+
         self.tt = 0
         self.t = gtime_t()
 
         # GLONASS frequency channel table
         self.glo_ch = {}
+
+        # number of satellite (observed, calculated, corrected)
+        self.nsat = [0, 0, 0]
 
 
 def epoch2time(ep):
@@ -1115,6 +1188,7 @@ def sat2id(sat):
     gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GLO: 'R', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
                 uGNSS.QZS: 'J', uGNSS.SBS: 'S', uGNSS.IRN: 'I'}
     if sys not in gnss_tbl:
+        print(f"{sat} {sys} {prn}")
         return -1
     if sys == uGNSS.QZS:
         prn -= 192
@@ -1214,10 +1288,10 @@ def dops_h(H):
     """ calculate DOP from H """
     Qinv = np.linalg.inv(np.dot(H.T, H))
     dop = np.diag(Qinv)
-    hdop = dop[0]+dop[1]  # TBD
-    vdop = dop[2]  # TBD
-    pdop = hdop+vdop
-    gdop = pdop+dop[3]
+    hdop = np.sqrt(dop[0]+dop[1])
+    vdop = np.sqrt(dop[2])
+    pdop = np.sqrt(np.sum(dop[0:3]))
+    gdop = np.sqrt(np.sum(dop[0:4]))
     dop = np.array([gdop, pdop, hdop, vdop])
     return dop
 
@@ -1239,14 +1313,7 @@ def dops(az, el, elmin=0):
         n += 1
     if n < 4:
         return None
-    Qinv = np.linalg.inv(np.dot(H.T, H))
-    dop = np.diag(Qinv)
-    hdop = dop[0]+dop[1]  # TBD
-    vdop = dop[2]  # TBD
-    pdop = hdop+vdop
-    gdop = pdop+dop[3]
-    dop = np.array([gdop, pdop, hdop, vdop])
-    return dop
+    return dops_h(H)
 
 
 def xyz2enu(pos):
@@ -1486,3 +1553,16 @@ def tropmodelHpf():
     trop_wet = (77.6e-6 * 11000.0 * 4810.0 * e/temp**2)/5.0
 
     return trop_dry, trop_wet, None
+
+
+def copy_buff(src, dst, ofst_s=0, ofst_d=0, blen=0):
+    """ copy bit-wise buffer copy """
+    b = blen//32
+    r = blen-b*32
+    for k in range(b):
+        d = bs.unpack_from('u32', src, k*32+ofst_s)[0]
+        bs.pack_into('u32', dst, k*32+ofst_d, d)
+    if r > 0:
+        fmt = 'u'+str(r)
+        d = bs.unpack_from(fmt, src, b*32+ofst_s)[0]
+        bs.pack_into(fmt, dst, b*32+ofst_d, d)

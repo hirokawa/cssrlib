@@ -46,7 +46,7 @@ def ionmodel(t, pos, az, el, nav=None, model=uIonoModel.KLOBUCHAR, cs=None):
         if cs is None or cs.iodi < 0:
             diono = ionKlobuchar(t, pos, az, el, nav.ion)
             return diono
-        diono, var = ionoSBAS(t, pos, az, el, cs)
+        diono, _ = ionoSBAS(t, pos, az, el, cs)
         if diono == 0.0:
             diono = ionKlobuchar(t, pos, az, el, nav.ion)
 
@@ -104,8 +104,8 @@ class stdpos(pppos):
 
         # Observation noise parameters
         #
-        self.nav.eratio = np.ones(self.nav.nf)*100  # [-] factor
-        self.nav.err = [0, 0.000, 0.003]       # [m] sigma
+        self.nav.eratio = np.ones(self.nav.nf)*50  # [-] factor
+        self.nav.err = [0, 0.01, 0.005]            # [m] sigma
 
         # Initial sigma for state covariance
         #
@@ -129,6 +129,7 @@ class stdpos(pppos):
 
         self.nav.elmin = np.deg2rad(10.0)
 
+        self.nsat = 0
         self.dop = None
 
         # Initial state vector
@@ -175,8 +176,6 @@ class stdpos(pppos):
 
     def csmooth(self, obs: Obs, sat, Pm, Lm, ns=100, dt_th=1, cs_th=10):
         """ Hatch filter for carrier smoothing """
-
-        sys, _ = sat2prn(sat)
 
         if Pm == 0.0 or Lm == 0.0:
             self.cs_cnt[sat] = 1
@@ -320,7 +319,7 @@ class stdpos(pppos):
                 PR = obs.P[i, 0]
                 CP = lam[0]*obs.L[i, 0]
             else:  # iono-free combination
-                iono = 0
+                iono = 0.0
                 if self.nav.rmode == 1:  # L1/L2 iono free combination
                     gam = (rCST.FREQ_G1/rCST.FREQ_G2)**2
                 if self.nav.rmode == 2:  # L1/L5 iono free combination
@@ -473,6 +472,8 @@ class stdpos(pppos):
             ns = len(iu)
 
         if ns < 4:
+            self.nav.t = obs.t
+            self.nsat = ns
             print(" too few satellites < 4: ns={:d}".format(ns))
             return
 

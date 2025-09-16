@@ -89,8 +89,8 @@ class pppos():
         #
         # Observation noise parameters
         #
-        self.nav.eratio = np.ones(self.nav.nf)*100  # [-] factor
-        self.nav.err = [0, 0.000, 0.003]       # [m] sigma
+        self.nav.eratio = np.ones(self.nav.nf)*50  # [-] factor
+        self.nav.err = [0, 0.01, 0.005]/np.sqrt(2)  # [m] sigma
 
         # Initial sigma for state covariance
         #
@@ -110,6 +110,7 @@ class pppos():
             self.nav.sig_qv = 1.0/np.sqrt(1)       # [m/s/sqrt(s)]
         self.nav.sig_qztd = 0.05/np.sqrt(3600)     # [m/sqrt(s)]
         self.nav.sig_qion = 10.0/np.sqrt(1)        # [m/s/sqrt(s)]
+        self.nav.sig_qb = 1e-4/np.sqrt(1)          # [m/s/sqrt(s)]
 
         # Processing options
         #
@@ -119,7 +120,10 @@ class pppos():
         # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
         self.nav.armode = 0
         self.nav.elmaskar = np.deg2rad(20.0)  # elevation mask for AR
-        self.nav.elmin = np.deg2rad(10.0)
+        self.nav.elmin = np.deg2rad(15.0)
+
+        self.nav.parmode = 2  # 1: normal, 2: PAR
+        self.nav.par_P0 = 0.995  # probability of sussefull AR
 
         # Initial state vector
         #
@@ -167,6 +171,14 @@ class pppos():
             else:
                 self.nav.q[4:4+uGNSS.MAXSAT] = self.nav.sig_qion**2
 
+        # ambiguity
+        if self.nav.pmode >= 1:  # kinematic
+            self.nav.q[7+uGNSS.MAXSAT:7 +
+                       (uGNSS.MAXSAT*self.nav.nf+1)] = self.nav.sig_qb**2
+        else:
+            self.nav.q[4+uGNSS.MAXSAT:4 +
+                       (uGNSS.MAXSAT*self.nav.nf+1)] = self.nav.sig_qb**2
+
         # Logging level
         #
         self.monlevel = 0
@@ -199,7 +211,7 @@ class pppos():
             self.nav.P[j, i] = self.nav.P[i, j] = v0 if i == j else 0
 
     def IB(self, s, f, na=3):
-        """ return index of phase ambguity """
+        """ return index of phase ambiguity """
         idx = na+uGNSS.MAXSAT*f+s-1
         return idx
 
@@ -335,7 +347,7 @@ class pppos():
 
                     if sys[i] == uGNSS.GLO:
                         if sat[i] not in self.nav.glo_ch:
-                            print("glonass channed not found: {:d}"
+                            print("glonass channel not found: {:d}"
                                   .format(sat[i]))
                             continue
                         f1 = sig1.frequency(self.nav.glo_ch[sat[i]])
@@ -536,11 +548,12 @@ class pppos():
             if self.nav.ephopt == 4:  # from Bias-SINEX
 
                 # Code and phase signal bias, converted from [ns] to [m]
-                # note: IGS uses sign convention different with RTCM
+                # Note: IGS uses sign convention different with RTCM
                 cbias = np.array(
                     [-bsx.getosb(sat, obs.t, s)*ns2m for s in sigsPR])
-                pbias = np.array(
-                    [-bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
+                if sys != uGNSS.GLO:
+                    pbias = np.array(
+                        [-bsx.getosb(sat, obs.t, s)*ns2m for s in sigsCP])
 
             elif cs is not None:  # from CSSR
 
@@ -589,13 +602,14 @@ class pppos():
 
             # Tropospheric delay
             #
-            if self.nav.iono_opt == 2:  # from cssr
+            if self.nav.trop_opt == 2:  # from cssr
                 trop = mapfh*trph*r_hs+mapfw*trpw*r_wet
             else:
                 trop = mapfh*trop_hs + mapfw*trop_wet
 
             # Ionospheric delay
-            if self.nav.iono_opt == 2:  # from cssr
+            #
+            if self.nav.iono_opt == 2 and inet > 0:  # from cssr
                 idx_l = cs.lc[inet].sat_n.index(sat)
                 iono = np.array([40.3e16/(f*f)*stec[idx_l] for f in frq])
             else:
@@ -657,10 +671,22 @@ class pppos():
                     elif sys == uGNSS.BDS:
                         sig0 = (rSigRnx("CC6I"),)
 
+                elif cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5):
+                    if sys == uGNSS.GPS:
+                        sig0 = (rSigRnx("GC1C"), rSigRnx("GC5Q"))
+                    elif sys == uGNSS.GAL:
+                        sig0 = (rSigRnx("EC1C"), rSigRnx("EC5Q"))
+                    elif sys == uGNSS.SBS:
+                        sig0 = (rSigRnx("SC1C"), rSigRnx("SC5Q"))
+
             # Receiver/satellite antenna offset
             #
-            antrPR = antModelRx(self.nav, pos, e[i, :], sigsPR, rtype)
-            antrCP = antModelRx(self.nav, pos, e[i, :], sigsCP, rtype)
+            if self.nav.rcv_ant is None:
+                antrPR = [0.0 for _ in sigsPR]
+                antrCP = [0.0 for _ in sigsCP]
+            else:
+                antrPR = antModelRx(self.nav, pos, e[i, :], sigsPR, rtype)
+                antrCP = antModelRx(self.nav, pos, e[i, :], sigsCP, rtype)
 
             if self.nav.ephopt == 4:
 
@@ -674,7 +700,8 @@ class pppos():
                                                     sc.GAL_HAS_IDD,
                                                     sc.IGS_SSR,
                                                     sc.RTCM3_SSR,
-                                                    sc.BDS_PPP):
+                                                    sc.BDS_PPP,
+                                                    sc.PVS_PPP):
 
                 antsPR = antModelTx(self.nav, e[i, :], sigsPR,
                                     sat, obs.t, rs[i, :], sig0)
@@ -858,6 +885,7 @@ class pppos():
                                             self.IT(self.nav.na)])))
 
                     if self.nav.niono > 0:  # iono is estimated
+
                         # SD ionosphere
                         #
                         idx_i = self.II(sat[i], self.nav.na)
@@ -930,7 +958,7 @@ class pppos():
                     nb[b] += 1  # counter for single-differences per signal
                     nv += 1  # counter for single-difference observations
 
-                b += 1  # counter for signal (pseudrange+carrier-phase)
+                b += 1  # counter for signal (pseudorange+carrier-phase)
 
         v = np.resize(v, nv)
         H = np.resize(H, (nv, self.nav.nx))
@@ -1042,7 +1070,7 @@ class pppos():
         ix = np.resize(ix, (nb, 2))
         return ix
 
-    def resamb_lambda(self, sat):
+    def resamb_lambda(self, sat, armode=1, P0=0.995):
         """ resolve integer ambiguity using LAMBDA method """
         nx = self.nav.nx
         na = self.nav.na
@@ -1060,8 +1088,9 @@ class pppos():
         Qab = self.nav.P[0:na, ix[:, 0]]-self.nav.P[0:na, ix[:, 1]]
 
         # MLAMBDA ILS
-        b, s = mlambda(y, Qb)
-        if s[0] <= 0.0 or s[1]/s[0] >= self.nav.thresar:
+        b, s, nfix, Ps = mlambda(y, Qb, armode=armode, P0=P0)
+        if nfix > 0 and (armode == 2 or s[0] <= 0.0 or
+                         s[1]/s[0] >= self.nav.thresar):
             self.nav.xa = self.nav.x[0:na].copy()
             self.nav.Pa = self.nav.P[0:na, 0:na].copy()
             bias = b[:, 0]
@@ -1072,6 +1101,13 @@ class pppos():
 
             # restore SD ambiguity
             xa = self.restamb(bias, nb)
+
+        elif armode == 2 and nfix == 0:
+            nb = 0
+            if self.nav.monlevel > 0:
+                self.nav.fout.write(
+                    "{:s}  Ps={:3.2f} nfix={:d}\n".
+                    format(time2str(self.nav.t), Ps, nfix))
         else:
             nb = 0
 
@@ -1260,6 +1296,32 @@ class pppos():
                                     obs.S[j, f]))
                     continue
 
+            # cycle-slip detection by geometry-free combination
+            if obs.L.shape[1] > 1:
+                L1R, L2R = obs.L[j, 0:2]
+                sys, _ = sat2prn(sat_i)
+                sig1, sig2 = obs.sig[sys][uTYP.L][0:2]
+                if sys == uGNSS.GLO:
+                    lam1 = sig1.wavelength(self.nav.glo_ch[sat_i])
+                    lam2 = sig2.wavelength(self.nav.glo_ch[sat_i])
+                else:
+                    lam1 = sig1.wavelength()
+                    lam2 = sig2.wavelength()
+                if L1R != 0.0 and L2R != 0.0:
+                    gf1 = (L1R*lam1-L2R*lam2)
+                    gf0 = self.nav.gf[sat_i]
+                    if gf1 != 0.0:
+                        self.nav.gf[sat_i] = gf1
+                    if gf0 != 0.0 and gf1 != 0.0 and \
+                            abs(gf1-gf0) > self.nav.thresslip:
+                        self.nav.edt[i, 0:2] = 1
+                        if self.nav.monlevel > 0:
+                            self.nav.fout.write(" {}  {} - edit {:4s} - GF slip gf0 {:6.3f} gf1 {:6.3f} gf0-gf1 {:6.3f} \n"
+                                                .format(time2str(obs.t),
+                                                        sat2id(sat_i),
+                                                        sig1.str(), gf0, gf1,
+                                                        gf0-gf1))
+
             # Store satellite which have passed all tests
             #
             if np.any(self.nav.edt[i, :] > 0):
@@ -1284,10 +1346,14 @@ class pppos():
         if len(obs.sat) == 0:
             return
 
+        self.nav.nsat[0] = len(obs.sat)
+
         # GNSS satellite positions, velocities and clock offsets
         # for all satellite in RINEX observations
         #
         rs, vs, dts, svh, nsat = satposs(obs, self.nav, cs=cs, orb=orb)
+
+        self.nav.nsat[1] = nsat
 
         if nsat < 6:
             print(" too few satellites < 6: nsat={:d}".format(nsat))
@@ -1310,6 +1376,8 @@ class pppos():
         else:  # RTK
             y, e, iu, obs_ = self.base_process(obs, obsb, rs, dts, svh)
             ns = len(iu)
+
+        self.nav.nsat[2] = ns
 
         if ns < 6:
             print(" too few satellites < 6: ns={:d}".format(ns))
@@ -1392,7 +1460,7 @@ class pppos():
         self.nav.smode = 5  # 4: fixed ambiguities, 5: float ambiguities
 
         if self.nav.armode > 0:
-            nb, xa = self.resamb_lambda(sat)
+            nb, xa = self.resamb_lambda(sat, self.nav.parmode, self.nav.par_P0)
             if nb > 0:
                 # Use position with fixed ambiguities xa
                 yu, eu, elu = self.zdres(obs, cs, bsx, rs, vs, dts, xa[0:3])
@@ -1404,6 +1472,10 @@ class pppos():
                     if self.nav.armode == 3:     # fix and hold
                         self.holdamb(xa)    # hold fixed ambiguity
                     self.nav.smode = 4           # fix
+                else:
+                    pass
+            else:
+                pass
 
         # Store epoch for solution
         #

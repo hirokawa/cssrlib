@@ -508,7 +508,7 @@ class atxdec():
         self.pcvs = []
         self.pcvr = []
 
-    def readpcv(self, fname):
+    def readpcv(self, fname, onlyReceiver=False):
         """ read ANTEX file """
 
         state = False
@@ -526,7 +526,7 @@ class atxdec():
                 elif "END OF ANTENNA" in line[60:]:
                     if pcv.sat is None:
                         self.pcvr.append(pcv)
-                    else:
+                    elif not onlyReceiver:
                         self.pcvs.append(pcv)
                     state = False
                 if not state:
@@ -664,7 +664,7 @@ def substSigTx(pcv, sig):
     #
     sig = sig.toTyp(uTYP.L).toAtt()
 
-    # Use directly if an corresponsing offset exists
+    # Use directly if an corresponding offset exists
     #
     if sig in pcv.off:
         return sig
@@ -678,7 +678,7 @@ def substSigTx(pcv, sig):
         if sig.sig == uSIG.L3:
             sig = rSigRnx(sig.sys, sig.typ, uSIG.L2)
     elif sig.sys == uGNSS.BDS:
-        if sig.sig == uSIG.L8:  # BDS-3 Ba+b
+        if sig.sig == uSIG.L8:  # BDS-3 B2a+b
             sig = rSigRnx(sig.sys, sig.typ, uSIG.L5)
 
     return sig
@@ -686,7 +686,7 @@ def substSigTx(pcv, sig):
 
 def substSigRx(pcv, sig):
     """
-    Substitute frequency band for PCO/PCV selection of receving antenna.
+    Substitute frequency band for PCO/PCV selection of receiving antenna.
 
     This function converts a RINEX observation code to a phase observation code
     without tracking attribute. If the signal is not available in the list of
@@ -709,7 +709,7 @@ def substSigRx(pcv, sig):
     #
     sig = sig.toTyp(uTYP.L).toAtt()
 
-    # Use directly if an corresponsing offset exists
+    # Use directly if an corresponding offset exists
     #
     if sig in pcv.off:
         return sig
@@ -894,17 +894,17 @@ def antModelRx(nav, pos, e, sigs, rtype=1):
     else:  # for base
         ant = nav.rcv_ant_b
 
-    # Elevation angle, zenit angle and zenit angle grid
+    # Elevation angle, zenith angle and zenith angle grid
     #
     za = np.rad2deg(np.arccos(e[2]))
     za_t = np.arange(ant.zen[0], ant.zen[1]+ant.zen[2], ant.zen[2])
 
-    # Loop over singals
+    # Loop over signals
     #
     dant = np.zeros(len(sigs))
     for i, sig_ in enumerate(sigs):
 
-        # Subsititute signal if not available
+        # Substitute signal if not available
         #
         sig = substSigRx(ant, sig_)
 
@@ -1238,7 +1238,7 @@ def sunmoonpos(tutc, erpv, rsun=False, rmoon=False, gmst=False):
 
 class bias_t():
     def __init__(self, sat: int, tst: gtime_t, ted: gtime_t, sig1: rSigRnx,
-                 sig2=rSigRnx(), bias=0.0, std=0.0, svn=0):
+                 sig2=rSigRnx(), bias=0.0, std=0.0):
         self.sat = sat
         self.tst = tst
         self.ted = ted
@@ -1246,7 +1246,6 @@ class bias_t():
         self.sig2 = sig2
         self.bias = bias
         self.std = std
-        self.svn = svn
 
 
 class biasdec():
@@ -1312,7 +1311,7 @@ class biasdec():
 
         return std
 
-    def parse(self, fname):
+    def parse(self, fname, siteID=None):
         with open(fname, "r", encoding='latin-1') as fh:
             status = False
             for line in fh:
@@ -1324,17 +1323,21 @@ class biasdec():
                     status = False
                 if status and line[0:5] == ' DSB ':
 
-                    # Skip station DSBs
-                    sname = line[15:24]
-                    if sname.strip():
-                        continue
-
                     # Differential Signal Bias
 
                     sys = char2sys(line[6])
-                    svn = int(line[7:10])
                     prn = line[11:14]
-                    sat = id2sat(prn)
+                    site = line[15:24].strip()
+
+                    # Skip station DSBs
+                    #
+                    if site and not prn[1:].strip():
+                        continue
+
+                    # Skip GLONASS biases if site ID does not match
+                    #
+                    if sys == 'R' and not site == siteID:
+                        continue
 
                     sig1 = rSigRnx(sys, line[25:28])
                     sig2 = rSigRnx(sys, line[30:33])
@@ -1365,22 +1368,26 @@ class biasdec():
                         slope = float(line[104:125])
                         std_s = float(line[126:137])
                     """
-                    dcb = bias_t(sat, tst, ted, sig1, sig2, bias, std, svn)
+                    dcb = bias_t(id2sat(prn), tst, ted, sig1, sig2, bias, std)
                     self.dcb.append(dcb)
 
                 elif status and line[0:5] == ' OSB ':
 
-                    # Skip station OSBs
-                    sname = line[15:24]
-                    if sname.strip():
-                        continue
-
-                    # Differential Signal Bias
+                    # Observable-specific Signal Bias
 
                     sys = char2sys(line[6])
-                    svn = int(line[7:10])
                     prn = line[11:14]
-                    sat = id2sat(prn)
+                    site = line[15:24].strip()
+
+                    # Skip station OSBs
+                    #
+                    if site and not prn[1:].strip():
+                        continue
+
+                    # Skip GLONASS biases if site ID does not match
+                    #
+                    if sys == uGNSS.GLO and not site == siteID:
+                        continue
 
                     sig1 = rSigRnx(sys, line[25:28])
                     sig2 = rSigRnx()
@@ -1406,7 +1413,7 @@ class biasdec():
                         slope = float(line[104:125])
                         std_s = float(line[126:137])
                     """
-                    osb = bias_t(sat, tst, ted, sig1, sig2, bias, std, svn)
+                    osb = bias_t(id2sat(prn), tst, ted, sig1, sig2, bias, std)
                     self.osb.append(osb)
 
 
@@ -1416,7 +1423,6 @@ if __name__ == '__main__':
     obsfile = bdir+"../data/sp3/igs15904.sp3"
     clkfile = bdir+"../data/sp3/igs15904.clk"
     atxfile = bdir+"../../data/igs05.atx"
-    dcbfile = bdir+"../../data/dcb/DLR0MGXFIN_20223310000_01L_07D_DCB.BSX"
 
     time = epoch2time([2010, 7, 1, 0, 0, 0])
     sat = 3
@@ -1456,27 +1462,3 @@ if __name__ == '__main__':
         assert np.all(abs((rsun-rs)/rsun) < 0.03)
         assert np.all(abs((rmoon-rm)/rmoon) < 0.03)
 
-    if True:
-
-        bd = biasdec()
-        bd.parse(dcbfile)
-
-        time = epoch2time([2022, 12, 31, 0, 0, 0])
-        sat = id2sat("G03")
-        sig = rSigRnx("GC1W")
-
-        bias, std, = bd.getosb(sat, time, sig)
-        assert bias == 7.6934
-        assert std == 0.0
-
-        print("{:s} {:s} {:8.5f} {:6.4f}"
-              .format(sat2id(sat), sig.str(), bias, std))
-
-        sig = rSigRnx("GL1W")
-
-        bias, std, = bd.getosb(sat, time, sig)
-        assert bias == 0.00038
-        assert std == 0.0
-
-        print("{:s} {:s} {:8.5f} {:6.4f}"
-              .format(sat2id(sat), sig.str(), bias, std))
