@@ -4,9 +4,9 @@ RTCM 3 decoder
 [1] RTCM Standard 10403.4 with Amendment 1
     Differential GNSS (Global Navigation Satellite Systems)
     Services - Version 3, 2024
-[2] RTCM Standard 13400.11 (Working Draft)
+[2] RTCM Standard 13400.00 (Working Draft)
     Integrity for High Accuracy GNSS based Applications
-    - Version 0.1, 2024
+    - Version 0.91, 2025
 [3] IGS SSR Format version 1.00, 2020
 
 @author Rui Hirokawa
@@ -153,10 +153,10 @@ class Integrity():
     b_intc_t = [0.00, 0.01, 0.02, 0.05, 0.10, 0.25, 0.50, -1]
     # bounding inter-frequency bias
     b_intf_t = [0.00, 0.04, 0.07, 0.10, 0.20, 0.30, 0.50, -1]
-    # GMM component expection
+    # GMM component expection Table 8-40
     mu_k_t = [0.00, 0.04, 0.07, 0.10, 0.20, 0.30, 0.50, 1, 2, 5, 10, 20, 50,
               80, 100, -1]
-    # GMM component stdev
+    # GMM component stdev Table 8-41
     sig_k_t = [0.0, 0.04, 0.07, 0.10, 0.20, 0.25, 0.30, 0.40, 0.50, 0.70,
                1, 2, 5, 7, 10, -1]
 
@@ -2369,7 +2369,9 @@ class rtcm(cssr):
 
         # GPS Epoch Time (TOW) DFi008
         # number of area points DFi201
-        tow, narea, nslice, mcf = bs.unpack_from('u30u8u6u1', msg, i)
+        # Number of Azimuth Slices DFi205
+        # Message Continuation Flag DFi021
+        tow, narea, naz, mcf = bs.unpack_from('u30u8u6u1', msg, i)
         i += 45
         self.integ.pos = np.zeros((narea, 3))
 
@@ -2384,12 +2386,12 @@ class rtcm(cssr):
 
             self.integ.pos[k, :] = [lat*1.1e-8, lon*1.1e-8, alt]
 
-        self.integ.azel = np.zeros((nslice, 2))
+        self.integ.azel = np.zeros((naz, 2))
 
         # Azimuth DFi206
         # Elevation Mask DFi208
         az = 0
-        for k in range(nslice):
+        for k in range(naz):
             daz, mask_el = bs.unpack_from('u9u7', msg, i)
             i += 16
             az += daz
@@ -2416,54 +2418,74 @@ class rtcm(cssr):
         self.integ.pos = np.zeros((narea, 3))
         self.integ.mm_id = mm_id
 
-        for k in range(narea):
-            # Area Point - Lat DFi202
-            # Area Point - Lon DFi203
-            # Area Point - Height DFi204
-            lat, lon, alt = bs.unpack_from('s34s35s14', msg, i)
-            i += 83
+        if mm_id == 0:
 
-            self.integ.pos[k, :] = [lat*1.1e-8, lon*1.1e-8, alt]
+            for k in range(narea):
+                # Area Point - Lat DFi202
+                # Area Point - Lon DFi203
+                # Area Point - Height DFi204
+                lat, lon, alt = bs.unpack_from('s34s35s14', msg, i)
+                i += 83
+
+                self.integ.pos[k, :] = [lat*1.1e-8, lon*1.1e-8, alt]
+
+        elif mm_id == 1 or mm_id == 2:
+            sigmask = np.array(narea, dtype=np.int32)
+            for k in range(narea):
+                # GNSS Signal Modulation Mask - DFi214
+                # Area Point - Lat DFi202
+                # Area Point - Lon DFi203
+                # Area Point - Height DFi204
+                sigmask[k], lat, lon, alt = bs.unpack_from(
+                    'u8s34s35s14', msg, i)
+                i += 91
+
+                self.integ.pos[k, :] = [lat*1.1e-8, lon*1.1e-8, alt]
 
         if mm_id == 0:
             # Number of GMM components DFi210
-            # GMM component probability DFi211
-            # GMM component expectation DFi212
-            # GMM component standard deviation DFi213
-            nc, prob, exp_, std_ = bs.unpack_from('u2u4u4u4', msg, i)
-            i += 14
-            prob *= 0.0625
-            exp = self.integ.mu_k_t[exp_]
-            std = self.integ.sig_k_t[std_]
-            self.integ.mm_param = [mm_id, prob, exp, std]
+            ngmm = bs.unpack_from('u2', msg, i)[0]
+            i += 2
 
-        elif mm_id == 1:
-            # GNSS signal modulation DFi214
-            # Multipath parameter a DFi215
-            # Multipath parameter b DFi216
-            # Multipath parameter c DFi217
-            smod = bs.unpack_from('u3', msg, i)[0]
-            i += 3
+            self.integ.mm_param = np.zeros((ngmm, 3))
 
-            for k in range(smod):
-                pa = bs.unpack_from('u4', msg, i)[0]
-                i += 4
+            for k in range(ngmm):
+                # GMM component probability DFi211
+                # GMM component expectation DFi212
+                # GMM component standard deviation DFi213
+                prob, exp_, std_ = bs.unpack_from('u4u4u4', msg, i)
+                i += 12
 
-            for k in range(smod):
-                pb = bs.unpack_from('s5', msg, i)[0]
-                i += 5
+                prob *= 0.0625
+                exp = self.integ.mu_k_t[exp_]
+                std = self.integ.sig_k_t[std_]
+                self.integ.mm_param[k, :] = [prob, exp, std]
 
-            for k in range(smod):
-                pc = bs.unpack_from('s5', msg, i)[0]
-                i += 5
-        elif mm_id == 2:
-            # GNSS signal modulation DFi214
-            # Multipath parameter a DFi215
-            # Multipath parameter b DFi216
-            # Multipath parameter c DFi217
-            # Multipath parameter d DFi218
-            smod, pa, pb, pc, pd = bs.unpack_from('u3u4s5s5u8', msg, i)[0]
-            i += 25
+        elif mm_id == 1 or mm_id == 2:
+            self.integ.mm_param = {}
+            n = 3 if mm_id == 1 else 4
+
+            for k in range(narea):
+                sig_t, nsig = self.decode_mask(sigmask[k], 8, ofst=0)
+                prm = np.zeros((nsig, n))
+
+                for j in range(nsig):
+                    # Multipath parameter a DFi215
+                    # Multipath parameter b DFi216
+                    # Multipath parameter c DFi217
+                    a, b, c = bs.unpack_from('u4s5s5', msg, i)
+                    i += 14
+
+                    a = self.integ.sig_k_t[a]
+                    prm[j, 0:3] = [a, b*0.25, c*0.0625]
+
+                    if mm_id == 2:
+                        # Multipath parameter d DFi218
+                        d = bs.unpack_from('u8', msg, i)[0]
+                        i += 8
+                        prm[j, 3] = d*0.3515625
+
+                self.integ.mm_param[k] = prm
 
         return i
 
