@@ -860,6 +860,7 @@ class rnxdec:
             #
             obs.P = np.empty((0, self.nsig[uTYP.C]), dtype=np.float64)
             obs.L = np.empty((0, self.nsig[uTYP.L]), dtype=np.float64)
+            obs.D = np.empty((0, self.nsig[uTYP.D]), dtype=np.float64)
             obs.S = np.empty((0, self.nsig[uTYP.S]), dtype=np.float64)
             obs.lli = np.empty((0, self.nsig[uTYP.L]), dtype=np.int32)
             obs.sat = np.empty(0, dtype=np.int32)
@@ -895,6 +896,8 @@ class rnxdec:
                               dtype=np.float64)
                 ll = np.zeros(len(self.getSignals(sys, uTYP.L)),
                               dtype=np.int32)
+                dp = np.zeros(len(self.getSignals(sys, uTYP.D)),
+                              dtype=np.float64)
                 cn = np.zeros(len(self.getSignals(sys, uTYP.S)),
                               dtype=np.float64)
 
@@ -925,6 +928,8 @@ class rnxdec:
                     elif sig.typ == uTYP.L:
                         cp[j] = val
                         ll[j] = lli
+                    elif sig.typ == uTYP.D:
+                        dp[j] = val
                     elif sig.typ == uTYP.S:
                         cn[j] = val
                     else:
@@ -934,12 +939,14 @@ class rnxdec:
                 #
                 obs.P = np.append(obs.P, pr)
                 obs.L = np.append(obs.L, cp)
+                obs.D = np.append(obs.D, dp)
                 obs.S = np.append(obs.S, cn)
                 obs.lli = np.append(obs.lli, ll)
                 obs.sat = np.append(obs.sat, sat)
 
             obs.P = obs.P.reshape(len(obs.sat), self.nsig[uTYP.C])
             obs.L = obs.L.reshape(len(obs.sat), self.nsig[uTYP.L])
+            obs.D = obs.D.reshape(len(obs.sat), self.nsig[uTYP.D])
             obs.S = obs.S.reshape(len(obs.sat), self.nsig[uTYP.S])
             obs.lli = obs.lli.reshape(len(obs.sat), self.nsig[uTYP.L])
 
