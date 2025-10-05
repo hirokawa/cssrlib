@@ -652,6 +652,7 @@ class Obs():
         self.t = gtime_t()
         self.P = []
         self.L = []
+        self.D = []
         self.S = []
         self.lli = []
         self.sat = []
