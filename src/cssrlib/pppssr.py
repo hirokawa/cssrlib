@@ -1309,9 +1309,15 @@ class pppos():
                     lam2 = sig2.wavelength()
                 if L1R != 0.0 and L2R != 0.0:
                     gf1 = (L1R*lam1-L2R*lam2)
-                    gf0 = self.nav.gf[sat_i]
+                    if rr is None:  # rover
+                        gf0 = self.nav.gf[sat_i]
+                    else:  # base
+                        gf0 = self.nav.gf_r[sat_i]
                     if gf1 != 0.0:
-                        self.nav.gf[sat_i] = gf1
+                        if rr is None:  # rover
+                            self.nav.gf[sat_i] = gf1
+                        else:  # base
+                            self.nav.gf_r[sat_i] = gf1
                     if gf0 != 0.0 and gf1 != 0.0 and \
                             abs(gf1-gf0) > self.nav.thresslip:
                         self.nav.edt[i, 0:2] = 1
