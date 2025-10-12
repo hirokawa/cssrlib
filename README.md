@@ -82,7 +82,8 @@ Other samples with dataset are also available in a separate repository [`cssrlib
 - QZSS MADOCA-PPP processing example
 - QZSS CLAS PPP-RTK processing example
 - IGS (SP3+BIAS) PPP-AR processing example
-- (experimental) PPP via SouthPAN (PVS) processing example
+- PPP via SouthPAN (PVS) processing example
+- JPL GDGPS (GPSHAS) processing example
 - Binary message parser for Septentrio receiver (Mosaic/PolaRX5)
 
 
