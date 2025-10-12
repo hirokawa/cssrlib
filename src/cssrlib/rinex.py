@@ -1,5 +1,5 @@
 """
-module for RINEX 3.0x processing
+module for RINEX 3.0x/4.0x processing
 
 [1] RINEX: The Receiver Independent Exchange Format Version 4.02, 2024
 
@@ -16,6 +16,8 @@ from cssrlib.gnss import IONParam
 
 
 class pclk_t:
+    """ class for precise clock data """
+
     def __init__(self, time=None):
         if time is not None:
             self.time = time

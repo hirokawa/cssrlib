@@ -891,6 +891,7 @@ class Nav():
 
         # geometry-free combination for cycle-slip detection
         self.gf = np.zeros(uGNSS.MAXSAT)
+        self.gf_r = np.zeros(uGNSS.MAXSAT)
 
         self.tt = 0
         self.t = gtime_t()

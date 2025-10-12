@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cssrlib"
-version = "1.1.0"
+version = "1.2.0"
 description = "Python Toolkit for PPP/PPP-RTK positioning"
 authors = [
     {name="Rui Hirokawa", email="rui.hirokawa@gmail.com"},
@@ -15,6 +15,7 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "scipy",
     "bitstruct",
     "galois",
     "crccheck",
