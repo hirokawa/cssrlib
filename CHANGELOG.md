@@ -3,6 +3,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+# [1.2.0] 2025-10-14
+
+### Added
+
+- Add SBAS based PPP for PPP via SouthPAN (cssr_pvs)
+- Add L1 SBAS and L1/L5(DFMC) SBAS (sbas)
+- Add authentication for Galileo OSNMA and QZSS QZNMA (osnma, qznma)
+- Add EWSS for QZSS and Galileo (ewss)
+- draft RTCM SC134 messages (rtcm)
+- Add BDS signals for QZSS MADOCA-PPP
+- Decoder for u-blox receiver (on cssrlib-data)
+- Improved LAMBDA AR from LAMBDA 4.0 toolbox (mlambda)
+- Support for RINEX 4.02 (rinex)
+- Add NavIC L1 (rawnav)
+- Add doppler for RINEX (@inuex35)
+
+### Fixed
+
+- Fixed GLONASS ephemeris decoder (rawnav)
+
 # [1.1.0] 2024-07-15
 
 ### Added

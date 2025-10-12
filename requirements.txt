@@ -1,3 +1,4 @@
+scipy
 bitstruct
 galois
 crccheck
