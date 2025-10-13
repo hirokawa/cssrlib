@@ -63,8 +63,8 @@ class cssr_mdc(cssr):
         latd, lond = np.rad2deg(pos[0:2])
         self.reg = self.area = -1
 
-        for reg in self.pnt.key():
-            for area in self.pnt[reg].key():
+        for reg in self.pnt.keys():
+            for area in self.pnt[reg].keys():
                 p = self.pnt[reg][area]
                 if p.sid == 0:  # rectangle shape:
                     if p.latr-p.lats <= latd and latd <= p.latr+p.lats and \
@@ -102,14 +102,14 @@ class cssr_mdc(cssr):
         """ calculate STEC correction by interporation """
         if self.inet < 0:
             print("get_stec: region, area not defined.")
-            return 0.0
+            return np.zeros(self.nsat_n)
 
         p = self.lc[self.inet]
         # if p.inet_ref != self.iodssr:
         #    return 0.0
-        stec = np.zeros(self.nsat_n)
+        stec = np.zeros(p.nsat_n)
 
-        for i, sat in enumerate(self.sat_n):
+        for i, sat in enumerate(p.sat_n):
             stec[i] = [1, dlat, dlon, dlat*dlon, dlat**2, dlon**2]@p.ci[sat]
 
         return stec
@@ -147,6 +147,9 @@ class cssr_mdc(cssr):
 
     def get_inet(self, reg, area):
         """ region, area to inet conversion """
+
+        if reg < 0 or area < 0:
+            return -1
 
         inet = 0
         for r in self.narea_t.keys():
