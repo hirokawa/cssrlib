@@ -23,5 +23,4 @@ dependencies = [
     "numpy",
     "matplotlib",
     "cartopy",
-    "pysolid",
 ]

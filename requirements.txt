@@ -6,4 +6,3 @@ notebook
 numpy
 matplotlib
 cartopy
-pysolid
