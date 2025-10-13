@@ -5,10 +5,10 @@ Emergency Warning Satellite Service (EWSS) Decoder
     Specification Issue 1.0, 2024
 
 [2] Quasi-Zenith Satellite System Interface Specification
-    DCX Service (IS-QZSS-DCX-001), 2024
+    DCX Service (IS-QZSS-DCX-003), March, 2025
 
 [3] Quasi-Zenith Satellite System Interface Specification
-    DC Report Service (IS-QZSS-DCR-013), 2024
+    DC Report Service (IS-QZSS-DCR-014), April, 2025
 
 @author Rui Hirokawa
 
@@ -16,7 +16,7 @@ Emergency Warning Satellite Service (EWSS) Decoder
 
 import bitstruct as bs
 from cssrlib.gnss import time2str, epoch2time, time2epoch, timeadd, \
-    time2gpst, gpst2time
+    time2gpst, gpst2time, utc2gpst
 from enum import IntEnum
 import json
 import numpy as np
@@ -691,8 +691,13 @@ class jmaDec(ewsDec):
 
     def decode(self, msg, i):
         """ decode DC-report messages """
+
         self.rc, self.dc = bs.unpack_from('u3u4', msg, i)
         i += 7
+
+        if self.dc not in self.dc_m_t.keys() or \
+                self.rc not in self.rc_m_t.keys():
+            return -1
 
         if self.monlevel > 0:
             print(f"[DCR] {self.rc_m_t[self.rc]} {self.dc_m_t[self.dc]}")
@@ -739,7 +744,7 @@ class camfDec(ewsDec):
             self.pref_t = json.load(fh)
 
         # JIS X0402
-        self.mc_t = pd.read_csv(bdir+'000323625.csv', encoding='sjis')
+        self.mc_t = pd.read_csv(bdir+'000323625.csv', encoding='utf-8')
 
         self.bdir = bdir
         self.city_t = None
@@ -1070,10 +1075,6 @@ class camfDec(ewsDec):
 
         # for Japan
         if self.pid == 1:  # L-Alert
-            if self.city_t is None:
-                with open(self.bdir+'City_list.json', 'r',
-                          encoding='utf-8') as fh:
-                    self.city_t = json.load(fh)
 
             # EX1 target area code
             # EX2 Evacuate Direction Type
@@ -1092,18 +1093,26 @@ class camfDec(ewsDec):
             ex5, ex6, ex7, vn = bs.unpack_from('u5u5u7u6', msg, i)
             i += 23
 
-            pref_code = '{:02d}'.format(ex1//1000)
-            city_code = '{:03d}'.format(ex1 % 1000)
+            v = self.mc_t[self.mc_t['tiiki-code'] == ex1]
 
             if ex1 == 0:
                 return i
 
-            name = ''
-            for city in self.city_t['cities']:
-                if city['pref_code'] == pref_code and \
-                        city['city_code'] == city_code:
-                    name = city['name']
-                    break
+            if len(v) > 0:
+                pref = v['ken-name'].item()
+
+                if v['sityouson-name1'].isna().item():
+                    if v['sityouson-name2'].isna().item():
+                        if v['sityouson-name3'].isna().item():
+                            city = None
+                        else:
+                            city = v['sityouson-name3'].item()
+                    else:
+                        city = v['sityouson-name2'].item()
+                else:
+                    city = v['sityouson-name1'].item()
+
+            name = pref + city
 
             if len(name) == 0:
                 return i
@@ -1205,27 +1214,24 @@ class camfDec(ewsDec):
         self.severity = self.severity_t[sev]
 
         # 3.3 Hazard Chronology (beginning of hazard)
+
         wn, tow, dur = bs.unpack_from('u1u14u2', msg, i)
         i += 17
 
         # wn: 0:current week, 1: next week
         # tow: 1:mon 00:00, 2:mon 00:01, 3:mon 00:02
         # .. sun 23:59
-        dow_ = (tow-1) // 1440
-        min_ = (tow-1) % 1440
-        hour_ = min_ // 60
-        min_ -= hour_*60
-
-        week, tow = time2gpst(self.time)
+        week, _ = time2gpst(self.time)
         week += wn
-        tow_ = dow_*86400+hour_*3600+min_*60
+
+        tow = (tow-1)*60+86400  # sec from sun
+        if tow >= 604800:
+            tow -= 604800
+            week += 1
 
         # harzrd onset (UTC)
-        self.th = gpst2time(week, tow_)
-
+        self.th = gpst2time(week, tow)
         self.epoch = time2epoch(self.th)
-
-        # self.epoch = [wn, dow_, hour_, min_]
 
         # duration (A8) : 0:unknown,1:<6h,2:6h<=d<12h,3:12h<=d<24h
         self.duration = self.duration_t[dur]
