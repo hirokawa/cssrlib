@@ -123,6 +123,7 @@ class rnxdec:
                             self.sig_tab[sys][typ][i] = sig.toAtt(a)
 
     def flt(self, u, c=-1):
+        """ convert string to float """
         if c >= 0:
             u = u[19*c+4:19*(c+1)+4]
         if u.isspace():
@@ -130,6 +131,7 @@ class rnxdec:
         return float(u.replace("D", "E"))
 
     def adjday(self, t: gtime_t, t0: gtime_t):
+        """ adjust time to within 1 day of t0 """
         tt = timediff(t, t0)
         if tt < -43200.0:
             return timeadd(t, 86400.0)
@@ -138,6 +140,7 @@ class rnxdec:
         return t
 
     def decode_time(self, s, ofst=0, slen=2):
+        """ decode time from string """
         year = int(s[ofst+0:ofst+4])
         month = int(s[ofst+5:ofst+7])
         day = int(s[ofst+8:ofst+10])
@@ -783,6 +786,7 @@ class rnxdec:
 
     # TODO: decode GLONASS FCN lines
     def decode_obsh(self, obsfile):
+        """ decode RINEX Observation header from file """
         self.fobs = open(obsfile, 'rt')
         for line in self.fobs:
             if line[60:73] == 'END OF HEADER':
@@ -997,6 +1001,7 @@ class rnxenc:
         self.rec_eph = {}
 
     def rnx_nav_header(self, fh=None, ver=4.02):
+        """ write RINEX navigation header to file """
         tutc = timeget()
         tgps = utc2gpst(tutc)
         leaps = timediff(tgps, tutc)
@@ -1015,6 +1020,7 @@ class rnxenc:
                  format("", "END OF HEADER"))
 
     def rnx_obs_header(self, ts: gtime_t, fh=None, ver=4.02):
+        """ write RINEX observation header to file """
 
         if self.rnx_obs_header_sent:
             return
@@ -1119,6 +1125,7 @@ class rnxenc:
         return s
 
     def rnx_obs_body(self, obs=None, fh=None):
+        """ write RINEX observation message to file """
 
         ep = time2epoch(obs.time)
         nsat = len(obs.sat)
@@ -1152,6 +1159,7 @@ class rnxenc:
             fh.write("\n")
 
     def rnx_nav_body(self, eph=None, fh=None):
+        """ write RINEX navigation message to file """
         if eph.sat in self.rec_eph.keys():
             if eph.mode in self.rec_eph[eph.sat].keys() and \
                     self.rec_eph[eph.sat][eph.mode][0] == eph.iode:
@@ -1332,6 +1340,7 @@ class rnxenc:
                          format(tot_, "", "", ""))
 
     def rnx_gnav_body(self, geph=None, fh=None):
+        """ write RINEX navigation message for GLONASS to file """
         if geph.sat in self.rec_eph.keys():
             if geph.mode in self.rec_eph[geph.sat].keys() and \
                     self.rec_eph[geph.sat][geph.mode][0] == geph.iode:
@@ -1403,6 +1412,7 @@ class rnxenc:
                             tot_))
 
     def rnx_snav_body(self, seph=None, fh=None):
+        """ write RINEX navigation message for SBAS to file """
         if seph.sat in self.rec_eph.keys():
             if seph.mode in self.rec_eph[seph.sat].keys() and \
                     self.rec_eph[seph.sat][seph.mode][0] == seph.iodn:

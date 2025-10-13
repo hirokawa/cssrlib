@@ -170,6 +170,7 @@ class Integrity():
 
 
 class rtcm(cssr):
+    """ class to decode RTCM3 messages """
     def __init__(self, foutname=None):
         super().__init__(foutname)
         self.len = 0
@@ -200,17 +201,20 @@ class rtcm(cssr):
         self.test_mode = False  # for interop testing in SC134
 
     def is_msmtype(self, msgtype):
+        """ check if the message type is MSM """
         for sys_ in self.msm_t.keys():
             if msgtype >= self.msm_t[sys_] and msgtype <= self.msm_t[sys_]+6:
                 return True
         return False
 
     def adjustweek(self, week: int, tref: gtime_t):
+        """ adjust week number considering reference time """
         week_, _ = time2gpst(tref)
         week_ref = (week_//1024)*1024
         return (week % 1024) + week_ref
 
     def msmtype(self, msgtype):
+        """ get system and msm type from message type """
         sys = uGNSS.NONE
         msm = 0
         for sys_ in self.msm_t.keys():
@@ -221,6 +225,7 @@ class rtcm(cssr):
         return sys, msm
 
     def ssrtype(self, msgtype):
+        """ get system and ssr type from message type """
         sys = uGNSS.NONE
         ssr = 0
         for sys_ in self.ssr_t.keys():
@@ -231,6 +236,7 @@ class rtcm(cssr):
         return sys, ssr
 
     def svid2sat(self, sys, svid):
+        """ convert svid to sat """
         prn = svid
         if sys == uGNSS.QZS:
             prn += 192
@@ -239,6 +245,7 @@ class rtcm(cssr):
         return prn2sat(sys, prn)
 
     def ssig2rsig(self, sys: uGNSS, utyp: uTYP, ssig):
+        """ convert ssig to rSigRnx """
         gps_tbl = {
             0: uSIG.L1C,
             1: uSIG.L1P,
@@ -349,6 +356,7 @@ class rtcm(cssr):
         return rSigRnx(sys, utyp, usig_tbl[ssig])
 
     def msm2rsig(self, sys: uGNSS, utyp: uTYP, ssig):
+        """ convert ssig to rSigRnx for MSM """
         gps_tbl = {
             2: uSIG.L1C,
             3: uSIG.L1P,
@@ -465,6 +473,7 @@ class rtcm(cssr):
         return rSigRnx(sys, utyp, usig_tbl[ssig])
 
     def sys2str(self, sys: uGNSS):
+        """ convert system enum to string """
         gnss_t = {uGNSS.GPS: "GPS", uGNSS.GLO: "GLO", uGNSS.GAL: "GAL",
                   uGNSS.BDS: "BDS", uGNSS.QZS: "QZS", uGNSS.SBS: "SBAS",
                   uGNSS.IRN: "NAVIC"}
@@ -473,9 +482,11 @@ class rtcm(cssr):
         return gnss_t[sys]
 
     def sync(self, buff, k):
+        """ check if the buffer has a sync pattern """
         return buff[k] == 0xd3
 
     def checksum(self, msg, k, maxlen=0):
+        """ check the checksum of the message """
         len_ = st.unpack_from('>H', msg, k+1)[0] & 0x3ff
         if len_ < 6:
             return False
@@ -490,6 +501,7 @@ class rtcm(cssr):
         return cs == 0
 
     def decode_head(self, msg, i, sys):
+        """ decode the header of ssr message """
         if self.msgtype == 4076 or sys != uGNSS.GLO:
             blen = 20
         else:
@@ -521,6 +533,7 @@ class rtcm(cssr):
         return i, v
 
     def decode_sat(self, msg, i, sys=uGNSS.NONE):
+        """ decode satellite id """
         if self.msgtype == 4076:
             blen = 6
         else:
@@ -538,6 +551,7 @@ class rtcm(cssr):
         return i, sat
 
     def decode_orb_sat(self, msg, i, k, sys=uGNSS.NONE, inet=0):
+        """ decode orbit correction of cssr """
         if self.msgtype == 4076:
             blen = 8
         else:
@@ -573,13 +587,14 @@ class rtcm(cssr):
         return i
 
     def decode_hclk_sat(self, msg, i, k, inet=0):
-        """ decoder clock correction of cssr """
+        """ decoder high-rate clock correction of cssr """
         dclk, ddclk, dddclk = bs.unpack_from('s22', msg, i)[0]
         i += 22
         self.dclk_n[k] = self.sval(dclk, 22, 0.1e-3)
         return i
 
     def get_ssr_sys(self, msgtype):
+        """ get system from ssr message type """
         if msgtype == 4076:
             return self.sysref
         else:
@@ -601,6 +616,7 @@ class rtcm(cssr):
                 return tbl_t[msgtype]
 
     def decode_cssr_orb(self, msg, i, inet=0):
+        """ decode RTCM Orbit Correction message """
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         nsat = v['nsat']
@@ -637,6 +653,7 @@ class rtcm(cssr):
         return i
 
     def decode_cssr_clk(self, msg, i, inet=0):
+        """decode RTCM Clock Correction message """
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         nsat = v['nsat']
@@ -661,7 +678,7 @@ class rtcm(cssr):
         return i
 
     def decode_cssr_cbias(self, msg, i, inet=0):
-        """decode Code Bias Correction message """
+        """decode RTCM Code Bias Correction message """
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         nsat = v['nsat']
@@ -697,7 +714,7 @@ class rtcm(cssr):
         return i
 
     def decode_cssr_pbias(self, msg, i, inet=0):
-        """decode Phase Bias Correction message """
+        """decode RTCM Phase Bias Correction message """
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         nsat = v['nsat']
@@ -739,6 +756,7 @@ class rtcm(cssr):
         return i
 
     def decode_cssr_comb(self, msg, i, inet=0):
+        """ decode RTCM Combined Orbit and Clock Correction message """
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         nsat = v['nsat']
@@ -783,6 +801,7 @@ class rtcm(cssr):
         return i
 
     def decode_cssr_ura(self, msg, i, inet=0):
+        """ decode RTCM URA message """
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         nsat = v['nsat']
@@ -804,6 +823,7 @@ class rtcm(cssr):
         return i
 
     def decode_cssr_hclk(self, msg, i, inet=0):
+        """ decode RTCM High-rate Clock Correction message """
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         # if self.iodssr != v['iodssr']:
@@ -825,6 +845,7 @@ class rtcm(cssr):
         return i
 
     def decode_vtec(self, msg, i, inet=0):
+        """ decode RTCM VTEC Grid Point Data message """
         sys = uGNSS.NONE
         i, v = self.decode_head(msg, i, sys)
         # if self.iodssr != v['iodssr']:
@@ -859,6 +880,7 @@ class rtcm(cssr):
         return i
 
     def decode_igsssr(self, msg, i=0):
+        """ decode IGS SSR message """
         sys_t = {2: uGNSS.GPS,  4: uGNSS.GLO,  6: uGNSS.GAL,
                  8: uGNSS.QZS, 10: uGNSS.BDS, 12: uGNSS.SBS}
         ver, subtype = bs.unpack_from('u3u8', msg, i)
@@ -899,6 +921,7 @@ class rtcm(cssr):
         return i
 
     def nrtktype(self, msgtype):
+        """ get system from nrtk message type """
         gnss_t = {1030: uGNSS.GPS, 1031: uGNSS.GLO,
                   1303: uGNSS.BDS, 1304: uGNSS.GAL, 1305: uGNSS.QZS}
 
@@ -911,6 +934,7 @@ class rtcm(cssr):
         return sys, nrtk
 
     def decode_nrtk_time(self, msg, i):
+        """ decode Network RTK Time Message """
         sys, nrtk = self.nrtktype(self.msgtype)
 
         sz = 20 if sys != uGNSS.GLO else 17
@@ -946,6 +970,7 @@ class rtcm(cssr):
         return i
 
     def decode_time(self, msg):
+        """ decode time from message """
         i = 24
         self.msgtype = bs.unpack_from('u12', msg, i)[0]
         i += 12
@@ -970,6 +995,7 @@ class rtcm(cssr):
         return False
 
     def out_log_ssr_clk(self, sys):
+        """ output ssr clock correction to log file """
         self.fh.write(" {:s}\t{:s}\n".format("SatID", "dclk [m]"))
         for k, sat_ in enumerate(self.lc[0].dclk.keys()):
             sys_, _ = sat2prn(sat_)
@@ -979,6 +1005,7 @@ class rtcm(cssr):
                                                     self.lc[0].dclk[sat_]))
 
     def out_log_ssr_orb(self, sys):
+        """ output ssr orbit correction to log file """
         self.fh.write(" {:s}\t{:s}\t{:s}\t{:s}\t{:s}\n"
                       .format("SatID", "IODE", "Radial[m]",
                               "Along[m]", "Cross[m]"))
@@ -994,6 +1021,7 @@ class rtcm(cssr):
                                  self.lc[0].dorb[sat_][2]))
 
     def out_log(self, obs=None, eph=None, geph=None, seph=None):
+        """ output ssr message to log file """
         sys = self.get_ssr_sys(self.msgtype)
         inet = self.inet
         self.fh.write("{:4d}\t{:s}\n".format(self.msgtype,
@@ -1175,6 +1203,7 @@ class rtcm(cssr):
             None
 
     def decode_msm_time(self, sys, week, t):
+        """ decode msm time """
         if sys == uGNSS.GLO:
             dow = (t >> 27) & 0x1f
             tow = (t & 0x7ffffff)*1e-3
@@ -1189,6 +1218,7 @@ class rtcm(cssr):
         return time, tow
 
     def decode_msm(self, msg, i):
+        """ decode MSM message """
         sys, msm = self.msmtype(self.msgtype)
 
         self.refid, tow_, self.mi, self.iods = bs.unpack_from(
@@ -1842,6 +1872,7 @@ class rtcm(cssr):
         return i, seph
 
     def decode_unicode_text(self, msg, i):
+        """ RTCM SC-104 Unicode Text Message"""
         refid, mjd, sod, nch, ncp = bs.unpack_from('u12u16u17u7u8', msg, i)
         i += 12+16+17+7+8
         ic = i//8
