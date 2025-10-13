@@ -10,7 +10,7 @@ QZSS MADOCA-PPP correction data decoder
 import numpy as np
 import bitstruct as bs
 from cssrlib.cssrlib import cssr, sCSSRTYPE, sCSSR, local_corr, sCType
-from cssrlib.gnss import gpst2time, uGNSS, prn2sat, rCST
+from cssrlib.gnss import gpst2time, time2str, uGNSS, prn2sat, rCST, sat2id
 
 
 class areaInfo():
@@ -46,6 +46,8 @@ class cssr_mdc(cssr):
         self.ci = {}
 
         self.area = -1
+        self.reg = -1
+        self.alrt = 0
         self.narea_t = {1: 8, 2: 16, 3: 5, 4: 1, 5: 8}
         self.MAXNET = np.sum(list(self.narea_t.values()))
 
@@ -108,9 +110,10 @@ class cssr_mdc(cssr):
         # if p.inet_ref != self.iodssr:
         #    return 0.0
         stec = np.zeros(p.nsat_n)
+        v = np.array([1, dlat, dlon, dlat*dlon, dlat**2, dlon**2])
 
         for i, sat in enumerate(p.sat_n):
-            stec[i] = [1, dlat, dlon, dlat*dlon, dlat**2, dlon**2]@p.ci[sat]
+            stec[i] = v@p.ci[sat]
 
         return stec
 
@@ -121,6 +124,9 @@ class cssr_mdc(cssr):
         self.tow0 = tow//3600*3600
         reg, alrt, len_, narea = bs.unpack_from('u8u1u16u5', buff, i)
         i += 30
+        self.reg = reg
+        self.alrt = alrt
+
         if reg not in self.pnt:
             self.pnt[reg] = {}
 
@@ -130,14 +136,14 @@ class cssr_mdc(cssr):
 
             if sid == 0:  # rectangle shape
                 latr, lonr, lats, lons = bs.unpack_from('s11u12u8u8', buff, i)
-                if self.monlevel > 2:
+                if self.monlevel >= 2:
                     print(f"{reg} {area:2d} {sid} {latr*0.1:5.1f} "
                           f"{lonr*0.1:5.1f} {lats*0.1:3.1f} {lons*0.1:3.1f}")
                 self.pnt[reg][area] = areaInfo(
                     sid, latr*0.1, lonr*0.1, lats*0.1, lons*0.1)
             else:  # circle range
                 latr, lonr, rng = bs.unpack_from('s15u16u8', buff, i)
-                if self.monlevel > 2:
+                if self.monlevel >= 2:
                     print(f"{reg} {area:2d} {sid} {latr*0.01:6.2f} "
                           f"{lonr*0.01:6.2f} {rng*10}")
                 self.pnt[reg][area] = areaInfo(
@@ -167,6 +173,9 @@ class cssr_mdc(cssr):
         i += 21
         reg, area, stype_ = bs.unpack_from('u8u5u2', buff, i)
         i += 15
+
+        self.reg = reg
+        self.area = area
 
         nsat = bs.unpack_from('u5u5u5u5u5', buff, i)
         i += 25
@@ -224,6 +233,48 @@ class cssr_mdc(cssr):
 
         return i
 
+    def out_log(self):
+        # if self.msgtype not in (1, 2):
+        #    return super(cssr_mdc, self).out_log()
+
+        sz_t = [1, 3, 4, 6]
+
+        if self.time == -1:
+            return
+
+        self.fh.write("{:4d}\t{:s}\n".format(self.msgtype,
+                                             time2str(self.time)))
+
+        if self.msgtype == 1:
+
+            self.fh.write(f"Reg\tArea\tsid\t"
+                          f"latr\tlonr\tlats\tlons\n")
+
+            for area in self.pnt[self.reg].keys():
+                p = self.pnt[self.reg][area]
+                self.fh.write(f"{self.reg}\t{area:2d}\t{p.sid}\t"
+                              f"{p.latr:3.1f}\t{p.lonr:4.1f}\t")
+
+                if p.sid == 0:
+                    self.fh.write(f"{p.lats:3.1f}\t{p.lons:3.1f}\n")
+                else:
+                    self.fh.write(f"{p.rng:3.1f}\n")
+
+        elif self.msgtype == 2:
+            inet = self.get_inet(self.reg, self.area)
+
+            self.fh.write(f"Reg:{self.reg}\tArea:{self.area:2d}\n")
+            self.fh.write("Sat,stype,c00,c01,c10,c11,c20,c02\n")
+
+            for sat in self.lc[inet].sat_n:
+                stype = self.lc[inet].stype[sat]
+                ci = self.lc[inet].ci[sat]
+                self.fh.write(f"{sat2id(sat)}\t{stype}")
+                for k in range(sz_t[stype]):
+                    self.fh.write(f"\t{ci[k]:6.2f}")
+                self.fh.write("\n")
+        self.fh.flush()
+
     def decode_cssr(self, msg, i=0):
         """decode Compact SSR message with MADOCA-PPP extension """
         df = {'msgtype': 4073}
@@ -233,6 +284,7 @@ class cssr_mdc(cssr):
             if df['msgtype'] not in [1, 2, 4073]:
                 return -1
 
+            self.msgtype = df['msgtype']
             self.subtype = df['subtype']
             if df['msgtype'] == 4073:  # Compact SSR
                 if self.subtype == sCSSR.MASK:
