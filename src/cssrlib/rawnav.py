@@ -58,6 +58,7 @@ def gep2time(N4, Nt, sod):
 
 
 class RawNav():
+    """ Raw Navigation Message decoder """
     def __init__(self, opt=None, prefix=''):
         self.gps_lnav = {}
         for k in range(uGNSS.GPSMAX):
@@ -1368,6 +1369,7 @@ class RawNav():
         return eph
 
     def decode_irn_l1nav_iono_grid(self, msg, i):
+        """ NavIC L1NAV Ionosphere delay at grid points """
         mask, regid = bs.unpack_from('u10u4', msg, i)
         i += 14
         for k in range(15):
@@ -1378,12 +1380,14 @@ class RawNav():
         return i
 
     def decode_irn_l1nav_alm(self, msg, i):
+        """ NavIC L1NAV Almanac """
         wna, e, toa, i0, OMGd, sqrtA, OMG0, omg, M0, af0, af1, prn_a = \
             bs.unpack_from('u13u20u16s24s19u24s24s24s24s14s11u6', msg, i)
         i += 243
         return i
 
     def decode_irn_l1nav_iono_nequick(self, msg, i):
+        """ NavIC L1NAV NeQuick Iono parameters """
         for k in range(3):
             modip_mac, modip_min, mlon_max, mlon_min, a0, a1, a2, idf = \
                 bs.unpack_from('s6s6s7s7u11s11s14u1', msg, i)
@@ -1394,6 +1398,7 @@ class RawNav():
         return i
 
     def decode_irn_l1nav_iono_klob(self, msg, i):
+        """ NavIC L1NAV Klobuchar like Iono parameters """
         alp0, alp1, alp2, alp3 = \
             bs.unpack_from('s8s8s10s12', msg, i)
         i += 38
@@ -1407,12 +1412,14 @@ class RawNav():
         return i
 
     def decode_irn_l1nav_eop(self, msg, i):
+        """ NavIC L1NAV Earth Orientation Parameters """
         teop, pmx, pmxd, pmy, pmyd, dut1, dut1d = \
             bs.unpack_from('u16s21s15s21s15s31s19', msg, i)
         i += 138
         return i
 
     def decode_irn_l1nav_utc(self, msg, i):
+        """ NavIC L1NAV UTC parameters """
         iodt, tug, wnug, dtls, wnlsf, dn, dtlsf = \
             bs.unpack_from('u3u8u13s8u13u4s8', msg, i)
         i += 57
@@ -1852,6 +1859,7 @@ class RawNav():
         return geph
 
     def decode_sbs_l1(self, week, tow, sat, msg):
+        """ SBAS L1 navigation message decoder """
         ura_t = [2, 2.8, 4, 5.7, 8, 11.3, 16, 32,
                  64, 128, 256, 512, 1024, 2048, 4096, 0]
 
@@ -1896,6 +1904,7 @@ class RawNav():
 
 
 class rcvOpt():
+    """ template class for receiver options """
     flg_qzslnav = False
     flg_gpslnav = False
     flg_qzscnav = False
@@ -2058,6 +2067,7 @@ class rcvDec():
         return sig_tab
 
     def init_param(self, opt: rcvOpt, prefix=''):
+        """ initialize parameters and file handlers """
         if opt.flg_rnxnav or opt.flg_rnxobs:
             self.re = rnxenc(sig_tab=self.sig_tab)
 
@@ -2146,6 +2156,7 @@ class rcvDec():
             # self.re.rnx_obs_header(self.fh_rnxobs)
 
     def file_close(self):
+        """ close file handlers """
         if self.fh_qzsl6 is not None:
             self.fh_qzsl6.close()
 
