@@ -11,6 +11,7 @@ import bitstruct as bs
 import galois
 from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE
 from cssrlib.gnss import gpst2time
+from binascii import unhexlify
 
 
 class cssr_has(cssr):
@@ -26,8 +27,6 @@ class cssr_has(cssr):
         self.cb_scl = 0.02
         self.pb_blen = 11
         self.pb_scl = 0.01  # cycles
-
-        self.GF = galois.GF(256)
 
     def sval(self, u, n, scl):
         """ calculate signed value based on n-bit int, lsb """
@@ -59,6 +58,7 @@ class cssr_has(cssr):
         return i
 
     def decode_head(self, msg, i, st=-1):
+        """ decode header part of HAS messages """
 
         if st == sCSSR.MASK:
             ui = 0
@@ -75,6 +75,8 @@ class cssr_has(cssr):
         return head, i
 
     def decode_cssr(self, msg, i=0):
+        """ decode HAS messages """
+
         # Galileo HAS-SIS only defines MT=1, MT=4073 is CSSR message used in the
         # Galileo HAS test dataset
         #
@@ -127,7 +129,29 @@ class cssr_has(cssr):
             if self.monlevel > 0 and self.fh is not None:
                 self.out_log()
 
+
+class cnav_msg():
+    """ class to handle Galileo E6 (CNAV) message """
+
+    def __init__(self):
+        self.mid_decoded = []
+        self.mid_ = -1
+        self.ms_ = -1
+        self.rec = []
+        self.has_pages = np.zeros((255, 53), dtype=int)
+        self.gMat = None
+        self.GF = galois.GF(256)
+
+        self.icnt = 0
+        self.msgtype = -1
+
+        self.monlevel = 0
+
+    def load_gmat(self, file_gm):
+        self.gMat = np.genfromtxt(file_gm, dtype="u1", delimiter=",")
+
     def decode_has_header(self, buff, i):
+        """ decode header of HAS pages (obsoleted) """
         if bs.unpack_from('u24', buff, i)[0] == 0xaf3bc3:
             return 0, 0, 0, 0, 0
 
@@ -144,5 +168,59 @@ class cssr_has(cssr):
             Dinv = np.linalg.inv(self.GF(gMat[idx, :k]))  # kxk
             Md = Dinv@Wd  # decoded message (kx53)
             HASmsg = np.array(Md).tobytes()
+
+        return HASmsg
+
+    def decode_cnav(self, tow, vi):
+        """ decode Galileo CNAV message """
+
+        HASmsg = None
+
+        for vn in vi:
+            buff = unhexlify(vn['nav'])
+            i = 14
+            if bs.unpack_from('u24', buff, i)[0] == 0xaf3bc3:
+                continue
+            hass, res = bs.unpack_from('u2u2', buff, i)
+            i += 4
+            if hass >= 2:  # 0:test,1:operational,2:res,3:dnu
+                continue
+            mt, mid, ms, pid = bs.unpack_from('u2u5u5u8', buff, i)
+
+            self.msgtype = mt
+            ms += 1
+            i += 20
+
+            if self.mid_ == -1 and mid not in self.mid_decoded:
+                self.mid_ = mid
+                self.ms_ = ms
+            if mid == self.mid_ and pid-1 not in self.rec:
+                page = bs.unpack_from('u8'*53, buff, i)
+                self.rec += [pid-1]
+                self.has_pages[pid-1, :] = page
+
+            if self.monlevel >= 2:
+                print(f"{mt} {mid} {ms} {pid}")
+
+        if len(self.rec) >= self.ms_:
+            if self.monlevel >= 2:
+                print(" data collected mid={:2d} ms={:2d} tow={:.0f}"
+                      .format(self.mid_, self.ms_, tow))
+            HASmsg = self.decode_has_page(
+                self.rec, self.has_pages, self.gMat, self.ms_)
+            self.rec = []
+
+            self.mid_decoded += [self.mid_]
+            self.mid_ = -1
+            if len(self.mid_decoded) > 10:
+                self.mid_decoded = self.mid_decoded[1:]
+        else:
+            self.icnt += 1
+            if self.icnt > 2*self.ms_ and self.mid_ != -1:
+                self.icnt = 0
+                if self.monlevel >= 2:
+                    print(f" reset mid={self.mid_} ms={self.ms_} tow={tow}")
+                self.rec = []
+                self.mid_ = -1
 
         return HASmsg

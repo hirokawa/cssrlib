@@ -5,6 +5,7 @@ module for plotting
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+import matplotlib.dates as md
 from cssrlib.gnss import uGNSS, sat2prn, sat2id
 from cssrlib.gnss import rCST
 
@@ -111,3 +112,74 @@ def draw_circle(ax, ccrs, p, col, nc=10, alpha=0.5):
 
     ax.fill(lonr_, latr_, color=col, alpha=alpha,
             transform=ccrs)
+
+
+def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, figtype=1):
+    """ plot ENU coordinates """
+
+    lbl_t = ['East [m]', 'North [m]', 'Up [m]']
+    fmt = '%H:%M'
+
+    fig = plt.figure(figsize=[7, 9])
+    fig.set_rasterized(True)
+
+    if smode is not None:
+        idx4 = np.where(smode == 4)[0]  # fix
+        idx5 = np.where(smode == 5)[0]  # float
+        idx0 = np.where(smode == 0)[0]  # none
+
+    if figtype == 1:  # ENU versus t
+
+        nfig = 3 if ztd is None else 4
+
+        for k in range(3):
+            plt.subplot(nfig, 1, k+1)
+            if smode is None:
+                plt.plot(t, enu[:, k])
+            else:
+                plt.plot(t[idx0], enu[idx0, k], 'r.', label='none')
+                plt.plot(t[idx5], enu[idx5, k], 'y.', label='float')
+                plt.plot(t[idx4], enu[idx4, k], 'g.', label='fix')
+
+            plt.ylabel(lbl_t[k])
+            plt.grid()
+            plt.ylim([-ylim, ylim])
+            plt.gca().xaxis.set_major_formatter(md.DateFormatter(fmt))
+
+        if ztd is not None:
+            plt.subplot(nfig, 1, 4)
+            if smode is None:
+                plt.plot(t, ztd*1e2, 'r.', markersize=8, label='none')
+            else:
+                plt.plot(t[idx0], ztd[idx0]*1e2, 'r.',
+                         markersize=8, label='none')
+                plt.plot(t[idx5], ztd[idx5]*1e2, 'y.',
+                         markersize=8, label='float')
+                plt.plot(t[idx4], ztd[idx4]*1e2, 'g.',
+                         markersize=8, label='fix')
+
+            plt.ylabel('ZTD [cm]')
+            plt.grid()
+            plt.gca().xaxis.set_major_formatter(md.DateFormatter(fmt))
+
+            plt.xlabel('Time [HH:MM]')
+
+        plt.legend()
+
+    elif figtype == 2:  # horizontal coordinates
+        fig.add_subplot(111)
+
+        if smode is None:
+            plt.plot(enu[:, 0], enu[:, 1])
+        else:
+            plt.plot(enu[idx0, 0], enu[idx0, 1], 'r.', label='none')
+            plt.plot(enu[idx5, 0], enu[idx5, 1], 'y.', label='float')
+            plt.plot(enu[idx4, 0], enu[idx4, 1], 'g.', label='fix')
+
+        plt.xlabel('Easting [m]')
+        plt.ylabel('Northing [m]')
+        plt.grid()
+        plt.legend()
+        ax = plt.gca()
+        ax.set(xlim=(-ylim, ylim), ylim=(-ylim, ylim))
+        ax.set_aspect('equal', 'box')
