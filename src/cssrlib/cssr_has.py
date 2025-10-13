@@ -183,8 +183,13 @@ class cnav_msg():
                 continue
             hass, res = bs.unpack_from('u2u2', buff, i)
             i += 4
+            # HAS status
             if hass >= 2:  # 0:test,1:operational,2:res,3:dnu
                 continue
+            # mt: type of message
+            # mid: id of the message
+            # ms: size of non-encoded message in number of pages 0:1,...
+            # pid: id of the transmitted HAS encoded page
             mt, mid, ms, pid = bs.unpack_from('u2u5u5u8', buff, i)
 
             self.msgtype = mt
@@ -202,7 +207,7 @@ class cnav_msg():
             if self.monlevel >= 2:
                 print(f"{mt} {mid} {ms} {pid}")
 
-        if len(self.rec) >= self.ms_:
+        if self.ms_ > 0 and len(self.rec) >= self.ms_:
             if self.monlevel >= 2:
                 print(" data collected mid={:2d} ms={:2d} tow={:.0f}"
                       .format(self.mid_, self.ms_, tow))
