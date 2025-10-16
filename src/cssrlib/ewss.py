@@ -16,7 +16,7 @@ Emergency Warning Satellite Service (EWSS) Decoder
 
 import bitstruct as bs
 from cssrlib.gnss import time2str, epoch2time, time2epoch, timeadd, \
-    time2gpst, gpst2time, utc2gpst
+    time2gpst, gpst2time, utc2gpst, gtime_t
 from enum import IntEnum
 import json
 import numpy as np
@@ -180,6 +180,7 @@ class ewsDec():
         self.msg_path = bdir
         self.monlevel = 0
         self.year = year
+        self.time = gtime_t()
 
     def decode(self, msg, i):
         None
@@ -252,6 +253,10 @@ class jmaDec(ewsDec):
         self.lv_t = self.load_msg('tab4_1_2_44.txt')
         self.reg_fl_t = self.load_msg('tab4_1_2_45.txt')
 
+        # Typhoon
+        self.sr_t = self.load_msg('tab4_1_2_48.txt')
+        self.ic_t = self.load_msg('tab4_1_2_49.txt')
+
         # for Marine
         self.dw_m_t = self.load_msg('tab4_1_2_52.txt')
         self.reg_m_t = self.load_msg('tab4_1_2_53.txt')
@@ -259,13 +264,16 @@ class jmaDec(ewsDec):
         self.pidx = 0
         self.msg = bytearray(512)
 
-        self.vn = -1
+        self.te = gtime_t()
+        self.pos = np.array([])
+        self.params = None
+        self.vn = -1  # version
 
     def decode_jma_earthquake(self, msg, i):
         """ JMA Earthquake """
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
-        itype, _ = bs.unpack_from('u2u4', msg, i)
+        self.it, _ = bs.unpack_from('u2u4', msg, i)
         i += 6
 
         lgL1, lgU1 = bs.unpack_from('u3u3', msg, i)
@@ -306,7 +314,7 @@ class jmaDec(ewsDec):
         i += 12
 
         if self.monlevel > 0:
-            print(f"Earthquake ({self.itype_t[itype]}) " +
+            print(f"Earthquake ({self.itype_t[self.it]}) " +
                   f"{month:2d}/{day:02d} {hour:2d}:{minute:02d}")
 
             for k in range(3):
@@ -323,13 +331,23 @@ class jmaDec(ewsDec):
                 s_ += self.pre_t[reg]+" "
             print(s_)
 
+        ep = time2epoch(self.time)
+        self.year = ep[0]
+        self.month = ep[1]
+        self.ta = epoch2time([self.year, month, day, hour, minute, 0.0])
+        self.tb = epoch2time([self.year, month, d1, h1, m1, 0.0])
+
+        self.params = []
+        self.params.append(reg_)
+        self.params.append([de, ma, ep, L1, U1])
+
         return i
 
     def decode_jma_hypocenter(self, msg, i):
         """ JMA Epicenter """
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
-        itype, _ = bs.unpack_from('u2u10', msg, i)
+        self.it, _ = bs.unpack_from('u2u10', msg, i)
         i += 12
 
         co_ = []
@@ -361,7 +379,7 @@ class jmaDec(ewsDec):
         i += 12
 
         if self.monlevel > 0:
-            print(f"Epicenter ({self.itype_t[itype]})" +
+            print(f"Epicenter ({self.itype_t[self.it]})" +
                   f" {month:2d}/{day:02d} {hour:2d}:{minute:02d}")
 
             for k in range(3):
@@ -372,13 +390,24 @@ class jmaDec(ewsDec):
             print(f"depth={de}km mag={ma:.1f}")
             print(f"epicenter:{self.ep_t[ep]} lat {lat:.4f} lon {lon:.4f}")
 
+        ep = time2epoch(self.time)
+        self.year = ep[0]
+        self.month = ep[1]
+        self.ta = epoch2time([self.year, month, day, hour, minute, 0.0])
+
+        self.pos = [lat, lon]
+
+        self.params = []
+        self.params.append(co_)
+        self.params.append([de, ma, ep])
+
         return i
 
     def decode_jma_seismic_intencity(self, msg, i):
         """ JMA Seismic Intensity """
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
-        itype, _ = bs.unpack_from('u2u10', msg, i)
+        self.it, _ = bs.unpack_from('u2u10', msg, i)
         i += 12
 
         d1, h1, m1 = bs.unpack_from('u5u5u6', msg, i)
@@ -400,12 +429,22 @@ class jmaDec(ewsDec):
         i += 12
 
         if self.monlevel > 0:
-            print(f"Intensity ({self.itype_t[itype]})" +
+            print(f"Intensity ({self.itype_t[self.it]})" +
                   f" {month:2d}/{day:02d} {hour:2d}:{minute:02d}")
 
             print(f"occurance time: {month}/{d1} {h1:2d}:{m1:02d}")
             for k, reg in enumerate(reg_):
                 print(f"{self.mag_i_t[es_[k]]} {self.pre_i_t[reg]}")
+
+        ep = time2epoch(self.time)
+        self.year = ep[0]
+        self.month = ep[1]
+        self.ta = epoch2time([self.year, month, day, hour, minute, 0.0])
+        self.tb = epoch2time([self.year, month, d1, h1, m1, 0.0])
+
+        self.params = []
+        self.params.append(es_)
+        self.params.append(reg_)
 
         return i
 
@@ -413,7 +452,7 @@ class jmaDec(ewsDec):
         """ JMA Nankai Earthquake """
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
-        itype, _, is_ = bs.unpack_from('u2u10u4', msg, i)
+        self.it, _, is_ = bs.unpack_from('u2u10u4', msg, i)
         i += 16
 
         txt = bytearray(18)
@@ -431,27 +470,40 @@ class jmaDec(ewsDec):
         i += 12
 
         if self.monlevel > 0:
-            print(f"Nankai Trough Earthquake ({self.itype_t[itype]}) " +
+            print(f"Nankai Trough Earthquake ({self.itype_t[self.it]}) " +
                   f"{self.isc_t[is_]} " +
                   f"{month:2d}/{day:02d} {hour:2d}:{minute:02d} {pn}/{pm}")
             if self.pidx == (1 << pm)-1:
                 print(self.msg.decode('utf-8'))
+
+        ep = time2epoch(self.time)
+        self.year = ep[0]
+        self.month = ep[1]
+        self.ta = epoch2time([self.year, month, day, hour, minute, 0.0])
+
+        self.params = []
+        self.params.append(txt)
+        self.params.append([pn, pm])
+
         return i
 
     def decode_jma_tsunami(self, msg, i):
         """ JMA Tsunami """
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
-        itype, _ = bs.unpack_from('u2u10', msg, i)
+        self.it, _ = bs.unpack_from('u2u10', msg, i)
         i += 12
 
         if self.monlevel > 0:
-            print(f"Tsunami ({self.itype_t[itype]}) " +
+            print(f"Tsunami ({self.itype_t[self.it]}) " +
                   f"{month:2d}/{day:02d} {hour:2d}:{minute:02d}")
+
+        co_ = []
 
         for k in range(3):
             co = bs.unpack_from('u9', msg, i)[0]
             i += 9
+            co_.append(co)
 
             if self.monlevel > 0:
                 if co > 0 and co in self.co_t:
@@ -464,6 +516,16 @@ class jmaDec(ewsDec):
             if dw > 0 and dw in self.dw_t:
                 print(f"{self.dw_w_t[dw]}")
 
+        ep = time2epoch(self.time)
+        self.year = ep[0]
+        self.month = ep[1]
+        self.ta = epoch2time([self.year, month, day, hour, minute, 0.0])
+
+        self.tb = []
+        self.params = []
+        self.params.append(co_)
+        self.params.append([dw])
+
         for k in range(5):
             d, h, m = bs.unpack_from('u1u5u6', msg, i)
             i += 12
@@ -473,21 +535,29 @@ class jmaDec(ewsDec):
             if d == 0 and h == 0 and m == 0 and th == 0 and reg == 0:
                 continue
 
+            tb = epoch2time([self.year, month, d, h, m, 0.0])
+            self.tb.append(tb)
+
+            self.params.append([th, reg])
+
             if self.monlevel > 0:
                 print(f"{d} {h:2d}:{m:02d} " +
                       f"{self.th_w_t[th]} {self.reg_w_t[reg]}")
 
         self.vn = bs.unpack_from('u6', msg, i)[0]
         i += 12
-
         return i
 
     def decode_jma_nw_pacific_tsunami(self, msg, i):
         """ JMA North Pacific Tsunami """
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
-        itype, _, tp = bs.unpack_from('u2u10u3', msg, i)
+        self.it, _, tp = bs.unpack_from('u2u10u3', msg, i)
         i += 15
+
+        self.tb = []
+        self.params = []
+        self.params.append(tp)
 
         for k in range(5):
             d, h, m = bs.unpack_from('u1u5u6', msg, i)
@@ -495,14 +565,23 @@ class jmaDec(ewsDec):
             th, reg = bs.unpack_from('u9u7', msg, i)
             i += 16
 
+            tb = epoch2time([self.year, month, d, h, m, 0.0])
+            self.tb.append(tb)
+            self.params.append([th, reg])
+
         i += 18
         self.vn = bs.unpack_from('u6', msg, i)[0]
         i += 12
 
         if self.monlevel > 0:
             print(
-                f"NP Tsunami ({itype}) {month:2d}/{day:02d} " +
+                f"NP Tsunami ({self.it}) {month:2d}/{day:02d} " +
                 f"{hour:2d}:{minute:02d}")
+
+        ep = time2epoch(self.time)
+        self.year = ep[0]
+        self.month = ep[1]
+        self.ta = epoch2time([self.year, month, day, hour, minute, 0.0])
 
         return i
 
@@ -510,7 +589,7 @@ class jmaDec(ewsDec):
         """ JMA Volcano """
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
-        itype, _, du = bs.unpack_from('u2u7u3', msg, i)
+        self.it, _, du = bs.unpack_from('u2u7u3', msg, i)
         i += 12
 
         d1, h1, m1 = bs.unpack_from('u5u5u6', msg, i)
@@ -529,7 +608,7 @@ class jmaDec(ewsDec):
         i += 12
 
         if self.monlevel > 0:
-            print(f"Volcano ({self.itype_t[itype]}) " +
+            print(f"Volcano ({self.itype_t[self.it]}) " +
                   f"{month:2d}/{day:02d} {hour:2d}:{minute:02d}")
             print(f"du={du} activity time: {month}/{d1} {h1:2d}:{m1:02d}")
             print(f"{self.dw_v_t[dw]} {self.vo_t[vo]}")
@@ -537,13 +616,22 @@ class jmaDec(ewsDec):
             for reg in reg_:
                 print(self.reg_v_t[reg])
 
+        ep = time2epoch(self.time)
+        self.year = ep[0]
+        self.month = ep[1]
+        self.ta = epoch2time([self.year, month, day, hour, minute, 0.0])
+        self.tb = epoch2time([self.year, month, d1, h1, m1, 0.0])
+
+        self.params = [du, dw, vo]
+        self.params.append(reg_)
+
         return i
 
     def decode_jma_ash_fall(self, msg, i):
         """ JMA Ash Fall """
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
-        itype = bs.unpack_from('u2', msg, i)[0]
+        self.it = bs.unpack_from('u2', msg, i)[0]
         i += 12
 
         d1, h1, m1, dw1, vo = bs.unpack_from('u5u5u6u2u12', msg, i)
@@ -555,18 +643,26 @@ class jmaDec(ewsDec):
                       2: "Ash Fall Forecast (Detailed)"}
 
         if self.monlevel > 0:
-            print(f"Ash Fall ({self.itype_t[itype]}) " +
+            print(f"Ash Fall ({self.itype_t[self.it]}) " +
                   f"{month:2d}/{day:02d} {hour:2d}:{minute:02d}")
             print(f" {month}/{d1} {h1:2d}:{m1:02d} {self.dw1_t[dw1]} {vo_}")
 
+        self.params = [dw1, vo]
         for k in range(4):
             ho, dw2, reg = bs.unpack_from('u3u3u23', msg, i)
             i += 29
             if reg > 0:
+                self.params.append([ho, dw2, reg])
                 reg_ = self.reg_v_t[reg]
                 dw_ = self.dw_t[dw2]
                 if self.monlevel > 0:
                     print(f"{ho}h {dw_} {reg_}")
+
+        ep = time2epoch(self.time)
+        self.year = ep[0]
+        self.month = ep[1]
+        self.ta = epoch2time([self.year, month, day, hour, minute, 0.0])
+        self.tb = epoch2time([self.year, month, d1, h1, m1, 0.0])
 
         i += 15
         self.vn = bs.unpack_from('u6', msg, i)[0]
@@ -578,23 +674,31 @@ class jmaDec(ewsDec):
         """ JMA Weather """
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
-        itype, _, ar = bs.unpack_from('u2u10u3', msg, i)
+        # ar: warning state
+        self.it, _, ar = bs.unpack_from('u2u10u3', msg, i)
         i += 15
-
         self.ar_t = {1: "issue", 2: "cansellation"}
 
         if self.monlevel > 0:
-            print(f"Weather ({self.itype_t[itype]}) " +
+            print(f"Weather ({self.itype_t[self.it]}) " +
                   f"{month:2d}/{day:02d} {hour:2d}:{minute:02d} " +
                   f"{self.ar_t[ar]}")
 
+        self.params = [ar]
         for k in range(6):
             ww, pl = bs.unpack_from('u5u19', msg, i)
             i += 24
             if ww == 0 or pl == 0:
                 continue
+
+            self.params.append([ww, pl])
             if self.monlevel > 0:
                 print(f"{self.ww_t[ww]} {self.reg_ww_t[pl]}")
+
+        ep = time2epoch(self.time)
+        self.year = ep[0]
+        self.month = ep[1]
+        self.ta = epoch2time([self.year, month, day, hour, minute, 0.0])
 
         i += 14  # spare 2
         self.vn = bs.unpack_from('u6', msg, i)[0]
@@ -605,36 +709,55 @@ class jmaDec(ewsDec):
         """ JMA Flood """
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
-        itype, _ = bs.unpack_from('u2u10', msg, i)
+        self.it, _ = bs.unpack_from('u2u10', msg, i)
         i += 12
 
         if self.monlevel > 0:
-            print(f"Flood ({self.itype_t[itype]}) " +
+            print(f"Flood ({self.itype_t[self.it]}) " +
                   f"{month:2d}/{day:02d} {hour:2d}:{minute:02d}")
 
+        self.params = []
         for k in range(3):
             lv, reg = bs.unpack_from('u4u40', msg, i)
             i += 44
 
             if lv == 0 and reg == 0:
                 continue
+
+            self.params.append([lv, reg])
+
             if self.monlevel > 0:
                 print(f"{self.lv_t[lv]} {self.reg_fl_t[reg]}")
 
         i += 29
+
+        ep = time2epoch(self.time)
+        self.year = ep[0]
+        self.month = ep[1]
+        self.ta = epoch2time([self.year, month, day, hour, minute, 0.0])
+
         self.vn = bs.unpack_from('u6', msg, i)[0]
         i += 12
         return i
 
     def decode_jma_typhoon(self, msg, i):
         """ JMA Tyhoon """
+
+        # month, day, hour, minute: Report time (UTC)
+        # itype: information type
+        # d1, h1, m1: reference time
+        # dt: Type of Reference Time
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
-        itype, _, d1, h1, m1, dt = bs.unpack_from('u2u10u5u5u6u3', msg, i)
+        self.it, _, d1, h1, m1, dt = bs.unpack_from('u2u10u5u5u6u3', msg, i)
         i += 31+8
 
         self.dt_tp_t = {1: 'Analysis', 2: 'Estimate', 3: 'Forecast'}
 
+        # du: elapsed time
+        # tn: typhoon number
+        # sr: scale category
+        # ic: intensity category
         du, tn, sr, ic = bs.unpack_from('u7u7u4u4', msg, i)
         i += 22
 
@@ -650,14 +773,27 @@ class jmaDec(ewsDec):
         if s == 1:
             lon = -lon
 
+        # pr: central pressure
+        # w1: Maximum wind speed
+        # w2: Maximum wind gust speed
         pr, w1, w2 = bs.unpack_from('u11u7u7', msg, i)
         i += 71
 
         if self.monlevel > 0:
-            print(f"Typhoon ({self.itype_t[itype]}) #{tn} ({sr}/{ic}) " +
+            print(f"Typhoon ({self.itype_t[self.it]}) #{tn} ({sr}/{ic}) " +
                   f"{month:2d}/{day:02d} {hour:2d}:{minute:02d} " +
                   f"{month}/{d1} {h1:2d}:{m1:02d} {self.dt_tp_t[dt]} {du}h " +
                   f"lat={lat:.4f} lon={lon:.4f} pr={pr} w1={w1} w2={w2}")
+
+        ep = time2epoch(self.time)
+        self.year = ep[0]
+        self.month = month
+
+        self.ta = epoch2time([self.year, month, day, hour, minute, 0.0])
+        self.tb = epoch2time([self.year, month, d1, h1, m1, 0.0])
+
+        self.pos = np.array([lat, lon])
+        self.params = [dt, du, tn, sr, ic, pr, w1, w2]
 
         self.vn = bs.unpack_from('u6', msg, i)[0]
         i += 12
@@ -667,20 +803,28 @@ class jmaDec(ewsDec):
         """ JMA Marine """
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
-        itype = bs.unpack_from('u2', msg, i)[0]
+        self.it = bs.unpack_from('u2', msg, i)[0]
         i += 12
 
+        ep = time2epoch(self.time)
+        self.year = ep[0]
+        self.month = month
+        self.ta = epoch2time([self.year, month, day, hour, minute, 0.0])
+
         if self.monlevel > 0:
-            print(f"Manine ({self.itype_t[itype]}) " +
+            print(f"Manine ({self.itype_t[self.it]}) " +
                   f"{month:2d}/{day:02d} {hour:2d}:{minute:02d}")
 
+        # dw: warning code #1-8
+        # maring forecast region #1-8
+        self.params = []
         for k in range(8):
             dw, reg = bs.unpack_from('u5u14', msg, i)
             i += 19
 
             if dw == 0 and reg == 0:
                 continue
-
+            self.params.append([dw, reg])
             if self.monlevel > 0:
                 print(f"{self.dw_m_t[dw]} {self.reg_m_t[reg]}")
 
@@ -688,6 +832,35 @@ class jmaDec(ewsDec):
         self.vn = bs.unpack_from('u6', msg, i)[0]
         i += 12
         return i
+
+    def gen_msg(self, dc):
+        """ generate message """
+        msg = ""
+
+        if dc == 12:  # typhoon
+            msg = f"Typhoon ({self.itype_t[self.it]})\n"
+            msg += f" report time: {time2str(self.ta)}\n"
+            msg += f" typhoon #{self.params[2]}\n"
+            msg += f" reference time: {time2str(self.tb)}\n"
+            msg += f" reference type: {self.dt_tp_t[self.params[0]]}\n"
+            msg += f" elapsed time: {self.params[1]}h\n"
+            if self.params[3] > 0:
+                msg += f" magnitute: {self.sr_t[self.params[3]]}\n"
+            if self.params[4] > 0:
+                msg += f" intensity: {self.ic_t[self.params[4]]}\n"
+            msg += f" lat/lon: {self.pos[0]:.4f}/{self.pos[1]:.4f}\n"
+            msg += f" central pressure: {self.params[5]} hPa\n"
+            msg += f" maximum wind: {self.params[6]} m/s\n"
+            msg += f" maximum instant wind: {self.params[7]} m/s\n"
+
+        if dc == 14:  # marine
+            msg = f"Marine ({self.itype_t[self.it]})\n"
+            msg += f" report time: {time2str(self.ta)}\n"
+            for dw, reg in self.params:
+                msg += f" code: {self.dw_m_t[dw]}\t"
+                msg += f" region: {self.reg_m_t[reg]}\n"
+
+        return msg
 
     def decode(self, msg, i):
         """ decode DC-report messages """
@@ -739,12 +912,12 @@ class camfDec(ewsDec):
         self.hazard_t = self.load_msg('hazard.txt')
 
         # JIS X0401
-        with open(bdir+'jisx0401-en.json', 'r',
-                  encoding='utf-8') as fh:
+        with open(bdir+'jisx0401-en.json', 'r', encoding='utf-8') as fh:
             self.pref_t = json.load(fh)
 
         # JIS X0402
-        self.mc_t = pd.read_csv(bdir+'000323625.csv', encoding='utf-8')
+        self.mc_t = pd.read_csv(
+            bdir+'000323625.csv', encoding='utf-8')
 
         self.bdir = bdir
         self.city_t = None
@@ -755,7 +928,8 @@ class camfDec(ewsDec):
 
         self.region_t = self.load_msg('region.txt')
 
-        self.severity_t = ('unknown', 'moderate', 'severe', 'extreme')
+        self.severity_t = ('unknown', 'moderate',
+                           'severe', 'extreme')
 
         self.duration_t = ('unknown', 'duration<6h', '6h<duration<12h',
                            '12h<duration<24h')
@@ -848,7 +1022,8 @@ class camfDec(ewsDec):
                       'D3 – Extreme Drought – PDSI = -4.0 to -4.9',
                       'D4 – Exceptional Drought – PDSI = -5.0 or less')
         # D19 – Avalanche Warning Level
-        self.d19_t = ('Low', 'Moderate', 'Considerable', 'High', 'Very high')
+        self.d19_t = ('Low', 'Moderate',
+                      'Considerable', 'High', 'Very high')
         # D20 – Ash Fall Amount and Impact
         self.d20_t = ('Less than 1 mm ash thickness',
                       '1-5 mm ash thickness',
@@ -1061,7 +1236,6 @@ class camfDec(ewsDec):
             5: 'Keep away from Water area.',
             6: 'Keep away from Building where chemicals are handled, such as a factory.',
             7: 'Keep away from Cliffs and areas at risk of collapse.',
-
         }
 
     def decode_ext(self, msg, i):
@@ -1087,7 +1261,8 @@ class camfDec(ewsDec):
             self.ed_t = ('Leave the additional target area range.',
                          'Head to the additional target area range.')
 
-            ex1, ex2, ex3, ex4 = bs.unpack_from('u16u1u17u17', msg, i)
+            ex1, ex2, ex3, ex4 = bs.unpack_from(
+                'u16u1u17u17', msg, i)
             i += 51
 
             ex5, ex6, ex7, vn = bs.unpack_from('u5u5u7u6', msg, i)
@@ -1098,21 +1273,16 @@ class camfDec(ewsDec):
             if ex1 == 0:
                 return i
 
+            name = ""
             if len(v) > 0:
-                pref = v['ken-name'].item()
+                name = v['ken-name'].item()
 
-                if v['sityouson-name1'].isna().item():
-                    if v['sityouson-name2'].isna().item():
-                        if v['sityouson-name3'].isna().item():
-                            city = None
-                        else:
-                            city = v['sityouson-name3'].item()
-                    else:
-                        city = v['sityouson-name2'].item()
-                else:
-                    city = v['sityouson-name1'].item()
-
-            name = pref + city
+                if v['sityouson-name1'].isna().item() == False:
+                    name += v['sityouson-name1'].item()
+                if v['sityouson-name2'].isna().item() == False:
+                    name += v['sityouson-name2'].item()
+                if v['sityouson-name3'].isna().item() == False:
+                    name += v['sityouson-name3'].item()
 
             if len(name) == 0:
                 return i
@@ -1198,7 +1368,7 @@ class camfDec(ewsDec):
         #  pid=2 (FDMA) or pid=3 (Related Ministries) -> J-Alert
         #  pid=4 (Municipality) -> municipality-transmitted info
 
-        # 3.2 Hazard
+        # 3.2 Hazard (A4, A5)
         hcat, sev = bs.unpack_from('u7u2', msg, i)
         i += 9
 
@@ -1213,8 +1383,7 @@ class camfDec(ewsDec):
         # sev: 0:unknown,1:moderate,2:severe,3:extreme
         self.severity = self.severity_t[sev]
 
-        # 3.3 Hazard Chronology (beginning of hazard)
-
+        # 3.3 Hazard Chronology (beginning of hazard) A6, A7, A8
         wn, tow, dur = bs.unpack_from('u1u14u2', msg, i)
         i += 17
 
@@ -1275,7 +1444,7 @@ class camfDec(ewsDec):
         #  list-B(5): Tab. 4.2-15
         self.ver += 1
 
-        # 3.6 Target Area
+        # 3.6 Target Area A12, A13, A14, A15, A16
         lati, loni, smai, smii, azi = bs.unpack_from('u16u17u5u5u6', msg, i)
         i += 49
 
@@ -1286,7 +1455,7 @@ class camfDec(ewsDec):
         self.Lm = self.r_t[smii]  # semi-minor axis [km]
         self.az = -90.0+180.0/64*azi
 
-        # 3.7 Main Subject for Specific Settings
+        # 3.7 Main Subject for Specific Settings A17
         subj = bs.unpack_from('u2', msg, i)[0]
         i += 2
 
@@ -1491,7 +1660,7 @@ class camfDec(ewsDec):
             i += 15
 
         if self.monlevel > 0:
-            print(f"[DCX] {time2str(self.th)} hcat={hcat} " +
+            print(f"[DCX] {time2str(self.th)} hcat={hcat} subj={subj} " +
                   f"pid={self.pid} {self.severity} {self.hazard} " +
                   f"inst={inst} info={info} {s} ")
 
