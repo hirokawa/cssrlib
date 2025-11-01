@@ -1347,6 +1347,7 @@ class cssre():
         self.len = 0
         self.dlen = 0
         self.msgtype = 0
+        self.iodssr = 0
 
     def encode_mask(self, v, bitlen, ofst=1):
         """ encode n-bit mask with offset """
