@@ -282,7 +282,7 @@ class cssr:
         self.sid = -1
         self.cstat = 0
         self.local_pbias = True  # for QZS CLAS
-        self.buff = bytearray(250*5)
+        self.buff = bytearray(250*10)
         self.buff_p = None
         self.sinfo = bytearray(160)
         self.grid = None
@@ -1316,7 +1316,7 @@ class cssr:
         if l6head['sid'] == 1:
             self.fcnt = 0
             self.buff_p = copy.copy(self.buff)
-            self.buff = bytearray(250*5)
+            self.buff = bytearray(250*10)
 
         if l6head['vendor'] == 5:  # CLAS
             facility = facility_t[l6head['pt']][l6head['facility']]
@@ -1347,6 +1347,7 @@ class cssre():
         self.len = 0
         self.dlen = 0
         self.msgtype = 0
+        self.iodssr = 0
 
     def encode_mask(self, v, bitlen, ofst=1):
         """ encode n-bit mask with offset """

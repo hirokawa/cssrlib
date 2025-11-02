@@ -57,9 +57,15 @@ class sRTCM(IntEnum):
 
 class Integrity():
     """ class for integrity information in SC-134 """
-    pid = 0  # provider id DFi027 (0-4095)
+    pid = 0  # augmentation provider id DFi027 (0-4095)
     vp = 0  # validity period DFi065 (0-15)
     uri = 0  # update rate interval DFi067 (b16)
+
+    # placeholder for RTCM SSR
+    pidssr = 0  # SSR provider ID
+    sidssr = 0  # SSR solution type
+    iodssr = 0  # SSR iod
+
     tow = 0
     iod_sys = {}  # issue of GNSS satellite mask DFi010 (b2)
     sts = {}  # constellation integrity status DFi029 (b16)
@@ -166,11 +172,12 @@ class Integrity():
 
     def __init__(self):
         self.sys_r_tbl = {self.sys_tbl[s]: s for s in self.sys_tbl.keys()}
-        None
+        self.vp_r_tbl = {s: k for k, s in enumerate(self.vp_tbl)}
 
 
 class rtcm(cssr):
     """ class to decode RTCM3 messages """
+
     def __init__(self, foutname=None):
         super().__init__(foutname)
         self.len = 0
@@ -179,6 +186,9 @@ class rtcm(cssr):
         self.nsig_max = 4
         self.lock = {}
         self.mask_pbias = False
+
+        self.pid = 0  # SSR Provider ID
+        self.sid = 0  # SSR Solution Type
 
         self.nrtk_r = {}
 
@@ -528,6 +538,9 @@ class rtcm(cssr):
             i += 6
         else:
             nsat = 0
+
+        self.pid = pid
+        self.sid = sid
 
         v = {'iodssr': iodssr, 'nsat': nsat}
         return i, v
@@ -2522,36 +2535,34 @@ class rtcm(cssr):
 
     def decode_integrity_ssr(self, msg, i):
         """ RTCM SC-134 SSR integrity message (MT11,12,13) """
-        pid, tow, mask_sys = bs.unpack_from('u12u30u16', msg, i)
-        i += 58
-        tow *= 1e-3
+        self.integ.pid = bs.unpack_from('u12', msg, i)[0]
+        i += 12
 
-        # update rate interval DFi067
+        # SSR provider ID, solution type, iod
+        self.pid, self.sid, self.iodssr = bs.unpack_from('u16u4u4', msg, i)
+        i += 24
 
         # mask_sys:: DFi013 0:GPS,1:GLO,2:GAL,3:BDS,4:QZS,5:IRN
+        tow, mask_sys = bs.unpack_from('u30u16', msg, i)
+        i += 46
 
-        if self.msgtype == 11:
-            vp, uri = bs.unpack_from('u4u16', msg, i)
-            i += 20
-            # Validity Period DFi065 (0-15)
-            self.integ.vp = self.integ.vp_tbl[vp]
-            self.integ.uri = uri*0.1  # update rate interval DFi067 (0.1)
+        self.integ.tow = tow*1e-3
+        self.integ.mask_sys = mask_sys
+
+        vp, uri = bs.unpack_from('u4u16', msg, i)
+        i += 20
+        self.integ.vp = self.integ.vp_tbl[vp]  # Validity Period DFi065 (0-15)
+        self.integ.uri = uri*0.1  # update rate interval DFi067 (0.1)
 
         sys_t, nsys = self.decode_mask(mask_sys, 16, ofst=0)
         iod_sys = {}
-        for k in range(nsys):
-            sys = self.integ.sys_tbl[sys_t[k]]
-            iod_sys[sys] = bs.unpack_from('u2', msg, i)[0]
-            i += 2
-
         flag_t = {}
-        nid = {}
         for sys_ in sys_t:
-            nid_, mask_sat = bs.unpack_from('u8u64', msg, i)
-            i += 72
+            sys = self.integ.sys_tbl[sys_]
+            mask_sat, iod_sys[sys] = bs.unpack_from('u64u2', msg, i)
+            i += 66
             svid_t, nsat = self.decode_mask(mask_sat, 64)
             sys = self.integ.sys_tbl[sys_]
-            nid[sys] = nid_
             flag_t[sys] = {}
             for svid in svid_t:
                 ofst = 192 if sys == uGNSS.QZS else 0
@@ -2560,11 +2571,7 @@ class rtcm(cssr):
                 flag_t[sys][sat] = bs.unpack_from('u2', msg, i)[0]
                 i += 2
 
-        self.integ.mask_sys = mask_sys
-        self.integ.pid = pid
-        self.integ.tow = tow
         self.integ.iod_sys = iod_sys
-        self.integ.nid = nid
         self.integ.flag = flag_t
 
     def decode(self, msg, subtype=None):
@@ -2702,6 +2709,9 @@ class rtcme(cssre):
         super().__init__()
         self.integ = Integrity()
 
+        self.pid = 0  # SSR Provider ID
+        self.sid = 0  # SSR Solution Type
+
     def set_sync(self, msg, k):
         msg[k] = 0xd3
 
@@ -2732,27 +2742,27 @@ class rtcme(cssre):
         for sys in sys_t:
             gnss_t.append(self.integ.sys_r_tbl[sys])
 
+        # mask_sys:: DFi013 0:GPS,1:GLO,2:GAL,3:BDS,4:QZS,5:IRN
         mask_sys = self.encode_mask(gnss_t, 16, ofst=0)
 
-        bs.pack_into('u12', msg, i, self.integ.pid)  # provider id DFi027
+        # augmentation service provider id DFi027
+        bs.pack_into('u12', msg, i, self.integ.pid)
         i += 12
-        bs.pack_into('u30', msg, i, self.integ.tow)  # tow DFi008
+
+        # SSR provider id, soluition type, iod
+        bs.pack_into('u16u4u4', msg, i, self.pid, self.sid, self.iodssr)
+        i += 24
+
+        bs.pack_into('u30', msg, i, self.integ.tow*1e3)  # tow DFi008
         i += 30
         bs.pack_into('u16', msg, i, mask_sys)  # GNSS constellation mask DFi013
         i += 16
 
-        # mask_sys:: DFi013 0:GPS,1:GLO,2:GAL,3:BDS,4:QZS,5:IRN
-
-        if self.msgtype == 11:
-            # validity period DFi065
-            # update rate interval DFi067
-            bs.pack_into('u4u16', msg, i, self.integ.vp, self.integ.uri)
-            i += 20
-
-        for sys in sys_t:
-            # issue of GNSS satellite mask DFi010
-            bs.pack_into('u2', msg, i, self.integ.iod_sys[sys])
-            i += 2
+        # validity period DFi065
+        # update rate interval DFi067
+        vp = self.integ.vp_r_tbl[self.integ.vp]
+        bs.pack_into('u4u16', msg, i, vp, self.integ.uri*10)
+        i += 20
 
         for sys in sys_t:
             flag = self.integ.flag[sys]
@@ -2763,12 +2773,10 @@ class rtcme(cssre):
                 ofst = 192 if sys == uGNSS.QZS else 0
                 svid_t.append(prn-ofst)
 
-            mask_sat = self.encode_mask(svid_t, 64)
-            nid_ = self.integ.nid[sys]
-            # network id DFi071
             # GNSS satellite mask DFi009
-            bs.pack_into('u8u64', msg, i, nid_, mask_sat)
-            i += 72
+            mask_sat = self.encode_mask(svid_t, 64)
+            bs.pack_into('u64u2', msg, i, mask_sat, self.integ.iod_sys[sys])
+            i += 66
 
             for f in flag.values():
                 # integrity flag DFi068

@@ -497,6 +497,7 @@ class pppos():
         if self.nav.trop_opt == 2 or self.nav.iono_opt == 2:  # from cssr
             inet = cs.find_grid_index(pos)
             dlat, dlon = cs.get_dpos(pos)
+            cs.inet = inet
         else:
             inet = -1
 
