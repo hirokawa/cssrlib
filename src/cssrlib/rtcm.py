@@ -2769,8 +2769,8 @@ class rtcme(cssre):
             sat_t = flag.keys()
             svid_t = []
             for sat in sat_t:
-                sys, prn = sat2prn(sat)
-                ofst = 192 if sys == uGNSS.QZS else 0
+                sys_, prn = sat2prn(sat)
+                ofst = 192 if sys_ == uGNSS.QZS else 0
                 svid_t.append(prn-ofst)
 
             # GNSS satellite mask DFi009
