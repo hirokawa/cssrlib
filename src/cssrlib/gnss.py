@@ -149,7 +149,7 @@ class uGNSS(IntEnum):
 
     GPSMAX = 32
     GALMAX = 36
-    QZSMAX = 10
+    QZSMAX = 17
     BDSMAX = 63
     GLOMAX = 27
     SBSMAX = 39
