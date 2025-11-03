@@ -215,7 +215,7 @@ class osnma():
 
         if curve is None:
             return False
-        pk = ec.EllipticCurvePublicKey.from_encoded_point(curve, pnt)
+        pk = ec.EllipticCurvePublicKey.from_encoded_point(curve, bytes(pnt))
         return pk
 
     def load_mt(self, file):
@@ -339,9 +339,9 @@ class osnma():
         l_pdk = len(p_dk)
         return h[0:l_pdk] == p_dk
 
-    def verify_pdp(self, m0, p_dp):
+    def verify_pdp(self, mi, p_dp):
         """ verify P_DP """
-        msg = self.root_mt + m0
+        msg = self.root_mt + mi
         h = self.process_hash(msg)
         l_pdp = len(p_dp)
         return h[0:l_pdp] == p_dp
@@ -432,29 +432,29 @@ class osnma():
             l_npk = self.npk_len_t[npkt]
         i0 = 130+l_npk//8
         npk = self.dsm[did][130:i0]
-        l_pdp = l_dp - 1040 - l_npk
+        l_pdp = l_dp - 1040 - l_npk  # Eq.3
         if l_pdp < 0:
             return False
         p_dp = self.dsm[did][i0:i0+l_pdp//8]
 
-        m0 = bytearray([self.dsm[did][129]])+npk  # NPKT||NPKID||NPK
+        mi = bytearray([self.dsm[did][129]])+npk  # mi=(NPKT||NPKID||NPK) Eq.11
 
-        # A7.3 Verification of the PDP
-        if not self.verify_pdp(m0, p_dp):
+        # 3.2.2.7 Verification of the PDP with Eq.4
+        if not self.verify_pdp(mi, p_dp):
             return False
 
-        # A7.2 DSM-PKR Verification
-        h = self.process_hash(m0)
+        # 6.2 DSM-PKR Verification
+        x = self.process_hash(mi)  # Eq.12
         for k in range(4):
             itn_b = itn[k*32:(k+1)*32]
             if mid % 2 == 0:
-                msg = h+itn_b
+                msg = x+itn_b
             else:
-                msg = itn_b+h
-            h = self.process_hash(msg)
+                msg = itn_b+x
+            x = self.process_hash(msg)  # Eq.13
             mid >>= 1
 
-        result = (h == self.root_mt)
+        result = (x == self.root_mt)
         if not result:
             return False
 
@@ -468,11 +468,22 @@ class osnma():
     def decode_hk(self, hk, prn):
         """ decode HKROOT message """
         self.nma_header = hk[0]
+
+        # NMA Status (nmas): 1: Test, 2: Operational, 3: Don'use
+        # Chain ID (cid)
+        # Chain and Public Key Status (CPKS):
+        # 1: Nominal
+        # 2: End of Chain (EOC)
+        # 3: Chain Revoked (CREV)
+        # 4: New Public Key (NPK)
+        # 5: Public Key Revoked (PKREV)
+        # 6: New Markle Tree (NMT)
+        # 7: Alert Message (AM)
         nmas, cid, cpks, _ = bs.unpack_from('u2u2u3u1', hk, 0)
         did, bid = bs.unpack_from('u4u4', hk, 8)
         if nmas != 1 and nmas != 2:
             return False
-        if cpks != 1:  # nominal only
+        if cpks == 0:  # skip reserved
             return False
 
         if did not in self.flg_dsm.keys():
@@ -495,10 +506,14 @@ class osnma():
             self.nb[did] = nb_ + 6  # number of blocks
 
         result = False
+
+#       if did > 11 and bid == 6:  # (debug) missing bid=6 of DSM-PKR
+#           self.fh.write(f"### DSM[{did}] bid={bid}\n")
+
         if self.monlevel > 1:
             print(f"flg_dsm[did={did}]={self.flg_dsm[did]:2x} "
                   f"nb={self.nb[did]:2d} bid={bid} prn={prn}")
-        if did in self.nb.keys() and \
+        if did in self.nb.keys() and self.nb[did] > 0 and \
                 self.flg_dsm[did] == (1 << self.nb[did])-1:
             if did <= 11:  # DSM-KROOT
                 result = self.decode_dsm_kroot(did)
