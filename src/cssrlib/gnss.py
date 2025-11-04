@@ -16,30 +16,30 @@ bdt0 = [2006, 1, 1, 0, 0, 0]  # BeiDou system time reference
 
 class rCST():
     """ class for constants """
-    CLIGHT = 299792458.0
-    MU_GPS = 3.9860050E14
-    MU_GLO = 3.9860044E14
-    MU_GAL = 3.986004418E14
-    MU_BDS = 3.986004418E14
-    J2_GLO = 1.0826257E-3
-    GME = 3.986004415E+14
-    GMS = 1.327124E+20
-    GMM = 4.902801E+12
-    OMGE = 7.2921151467E-5
-    OMGE_GLO = 7.292115E-5
-    OMGE_GAL = 7.2921151467E-5
-    OMGE_BDS = 7.2921150E-5
-    RE_WGS84 = 6378137.0
-    FE_WGS84 = (1.0/298.257223563)
-    RE_GLO = 6378136.0
-    AU = 149597870691.0
-    D2R = 0.017453292519943295
-    R2D = 57.29577951308232
-    AS2R = D2R/3600.0
-    DAY_SEC = 86400.0
-    WEEK_SEC = 604800.0
-    HALFWEEK_SEC = 302400.0
-    CENTURY_SEC = DAY_SEC*36525.0
+    CLIGHT = 299792458.0 # speed of light (m/s)
+    MU_GPS = 3.9860050E14  # gravitational constant for GPS
+    MU_GLO = 3.9860044E14 # gravitational constant for GLONASS
+    MU_GAL = 3.986004418E14 # gravitational constant for Galileo
+    MU_BDS = 3.986004418E14 # gravitational constant for BeiDou
+    J2_GLO = 1.0826257E-3 # J2 harmonic for GLONASS
+    GME = 3.986004415E+14 # [m^3/s^2] Earth gravitational constant
+    GMS = 1.327124E+20 # [m^3/s^2] Sun gravitational constant
+    GMM = 4.902801E+12 # [m^3/s^2] Moon gravitational constant
+    OMGE = 7.2921151467E-5 # [rad/s] Earth rotation rate
+    OMGE_GLO = 7.292115E-5 # [rad/s] Earth rotation rate for GLONASS
+    OMGE_GAL = 7.2921151467E-5 # [rad/s] Earth rotation rate for Galileo
+    OMGE_BDS = 7.2921150E-5 # [rad/s] Earth rotation rate for BeiDou
+    RE_WGS84 = 6378137.0   # Earth radius in WGS84
+    FE_WGS84 = (1.0/298.257223563) # Earth flattening in WGS84
+    RE_GLO = 6378136.0  # Earth radius for GLONASS
+    AU = 149597870691.0 # astronomical unit (m)
+    D2R = 0.017453292519943295 # deg to rad
+    R2D = 57.29577951308232 # rad to deg
+    AS2R = D2R/3600.0   # arc sec to rad
+    DAY_SEC = 86400.0  # seconds in one day
+    WEEK_SEC = 604800.0 # seconds in one week
+    HALFWEEK_SEC = 302400.0 # seconds in half week
+    CENTURY_SEC = DAY_SEC*36525.0 # seconds in one century
 
     PI = 3.1415926535898
     HALFPI = 1.5707963267949
@@ -129,7 +129,7 @@ class rCST():
     P2_60 = 8.673617379884035E-19
     P2_66 = 1.355252715606880E-20
     P2_68 = 3.388131789017201E-21
-    SC2RAD = 3.1415926535898
+    SC2RAD = 3.1415926535898 # semi-circle to radian
 
 
 class uGNSS(IntEnum):
@@ -320,6 +320,7 @@ class uIonoModel(IntEnum):
 
 
 class rSigRnx():
+    """ class for RINEX signal representation """
 
     def __init__(self, *args, **kwargs):
         """ Constructor """
@@ -615,34 +616,41 @@ class gtime_t():
         self.time = time
         self.sec = sec
 
-    def __gt__(self, other):
+    def __gt__(self, other): # greater than operator
         return self.time > other.time or \
             (self.time == other.time and self.sec > other.sec)
 
 
 class STOParam():
     """ System Time and UTC Office """
-    sbas = 0  # SBAS ID
-    prm = [0, 0]  # System time offset parameter
-    t_ot = None  # reference epoch
-    t_t = 0.0  # transmission time of message (Time of week [sec])
-    a = np.zeros(3)  # a0, a1, a2
+
+    def __init__(self):
+        self.iod = 0
+        self.sbas = 0  # SBAS ID
+        self.prm = np.zeros(2)  # System time offset parameter
+        self.t_ot = None  # reference epoch
+        self.a = np.zeros(3)  # a0, a1, a2
 
 
 class EOPParam():
     """ Earth Orientation Parameter """
-    prm = np.zeros(9)
-    # EOP parameters (xp,dxp,ddxp,yp,dyp,ddyp,dut1,ddut1,dddut1)
-    t_ot = None  # reference epoch
-    t_t = 0.0  # transmission time of message (Time of week [sec])
+
+    def __init__(self):
+        self.iod = 0
+        # EOP parameters (xp,dxp,ddxp,yp,dyp,ddyp,dut1,ddut1,dddut1)
+        self.prm = np.zeros(9)
+        self.t_ot = None  # reference epoch
+        self.t_t = 0.0  # transmission time of message (Time of week [sec])
 
 
 class IONParam():
     """ Ionospheric delay model Parameter """
-    iod = 0
-    prm = np.zeros(9)  # ION parameters
-    t_tm = None  # transmission time
-    region = None
+
+    def __init__(self):
+        self.iod = 0
+        self.prm = np.zeros(9)  # ION parameters
+        self.t_tm = None  # transmission time
+        self.region = None
 
 
 class Obs():
@@ -661,147 +669,145 @@ class Obs():
 
 class Eph():
     """ class to define ephemeris """
-    sat = 0
-    iode = 0
-    iodc = 0
-    af0 = 0.0
-    af1 = 0.0
-    af2 = 0.0
-    week = 0
-    toc = 0
-    toe = 0
-    tot = 0
-    wn_op = 0
-    top = 0
-    crs = 0.0
-    crc = 0.0
-    cus = 0.0
-    cus = 0.0
-    cis = 0.0
-    cic = 0.0
-    e = 0.0
-    i0 = 0.0
-    A = 0.0
-    Adot = 0.0
-    deln = 0.0
-    delnd = 0.0
-    M0 = 0.0
-    OMG0 = 0.0
-    OMGd = 0.0
-    omg = 0.0
-    idot = 0.0
-    tgd = 0.0
-    tgd_b = 0.0
-    tgd_c = 0.0
-    sva = 0
-    svh = 0
-    fit = 0
-    toes = 0
-    tops = 0
-    l2p = 0
-    sattype = 0
-    sismai = 0
-    code = 0
-    urai = None
-    sisai = None
-    isc = None
-    integ = 0
-    # 0:LNAV,INAV,D1/D2, 1:CNAV/CNAV1/FNAV, 2: CNAV2, 3: CNAV3, 4:FDMA, 5:SBAS
-    mode = 0
 
     def __init__(self, sat=0):
         self.sat = sat
+        self.iode = 0
+        self.iodc = 0
+        self.af0 = 0.0
+        self.af1 = 0.0
+        self.af2 = 0.0
+        self.week = 0
+        self.toc = 0
+        self.toe = 0
+        self.tot = 0
+        self.wn_op = 0
+        self.top = 0
+        self.crs = 0.0
+        self.crc = 0.0
+        self.cus = 0.0
+        self.cus = 0.0
+        self.cis = 0.0
+        self.cic = 0.0
+        self.e = 0.0
+        self.i0 = 0.0
+        self.A = 0.0
+        self.Adot = 0.0
+        self.deln = 0.0
+        self.delnd = 0.0
+        self.M0 = 0.0
+        self.OMG0 = 0.0
+        self.OMGd = 0.0
+        self.omg = 0.0
+        self.idot = 0.0
+        self.tgd = 0.0
+        self.tgd_b = 0.0
+        self.tgd_c = 0.0
+        self.sva = 0
+        self.svh = 0
+        self.fit = 0
+        self.toes = 0
+        self.tops = 0
+        self.l2p = 0
+        self.sattype = 0
+        self.sismai = 0
+        self.code = 0
+        self.urai = None
+        self.sisai = None
+        self.isc = None
+        self.integ = 0
+        # 0:LNAV,INAV,D1/D2, 1:CNAV/CNAV1/FNAV, 2: CNAV2,
+        # 3: CNAV3, 4:FDMA, 5:SBAS
+        self.mode = 0
 
 
 class Geph():
     """ class to define GLONASS ephemeris """
-    sat = 0
-    iode = 0  # IODE: 0-6bit of tb field
-    frq = 0
-    svh = 0
-    sva = 0
-    age = 0.0
-    toe = gtime_t()
-    toes = 0.0
-    tof = gtime_t()
-    pos = np.zeros(3)
-    vel = np.zeros(3)
-    acc = np.zeros(3)
-    taun = 0.0         # SV clock bias [s]
-    gamn = 0.0         # SV clock drift [s/s]
-    beta = 0.0         # SV clock drift rate [s/s^2]
-    dtaun = 0.0        # delta between L1 and L2 [s]
-    mode = 0
-    status = 0  # data validity
-    flag = 0
-
-    tau_c = 0.0  # GLONASS time scale correction to UTC(SU) time
-    dtau_c = 0.0
-    tau_gps = 0.0  # correction to GPS time relative to GLONASS time
-
-    # for CDMA
-    urai = np.zeros(2, dtype=int)
-    dpos = np.zeros(3)
-
-    psi = 0.0  # yaw angle [rad]
-    sn = 0  # sign flag
-    win = 0.0  # angular rate [rad/s]
-    dw = 0.0  # angular accel [rad/s^2]
-    wmax = 0.0  # max angular rate[rad/s]
-    aode = 0
-    aodc = 0  # age of data orbit/clock [days]
-    tin = 0.0
-    tau1 = 0.0
-    tau2 = 0.0
-
-    src = 0  # source flags (b0-1: Rt, b2-3: Re)
-    sattype = 0  # 0 - M(L3), 1 - K1(L3), 3 - K1(L2/L3), 2 - K2 (L1/L2/L3)
-    isc = np.zeros(3)  # 0: ISC_L1OC, 1: ISC_L2OC, 2: ISC_L3OC
 
     def __init__(self, sat=0):
         self.sat = sat
+        self.iode = 0  # IODE: 0-6bit of tb field
+        self.frq = 0
+        self.svh = 0
+        self.sva = 0
+        self.age = 0.0
+        self.toe = gtime_t()
+        self.toes = 0.0
+        self.tof = gtime_t()
+        self.pos = np.zeros(3)
+        self.vel = np.zeros(3)
+        self.acc = np.zeros(3)
+        self.taun = 0.0         # SV clock bias [s]
+        self.gamn = 0.0         # SV clock drift [s/s]
+        self.beta = 0.0         # SV clock drift rate [s/s^2]
+        self.dtaun = 0.0        # delta between L1 and L2 [s]
+        self.mode = 0
+        self.status = 0  # data validity
+        self.flag = 0
+
+        self.tau_c = 0.0  # GLONASS time scale correction to UTC(SU) time
+        self.dtau_c = 0.0
+        self.tau_gps = 0.0  # correction to GPS time relative to GLONASS time
+
+        # for CDMA
+        self.urai = np.zeros(2, dtype=int)
+        self.dpos = np.zeros(3)
+
+        self.psi = 0.0  # yaw angle [rad]
+        self.sn = 0  # sign flag
+        self.win = 0.0  # angular rate [rad/s]
+        self.dw = 0.0  # angular accel [rad/s^2]
+        self.wmax = 0.0  # max angular rate[rad/s]
+        self.aode = 0
+        self.aodc = 0  # age of data orbit/clock [days]
+        self.tin = 0.0
+        self.tau1 = 0.0
+        self.tau2 = 0.0
+
+        self.src = 0  # source flags (b0-1: Rt, b2-3: Re)
+        # 0 - M(L3), 1 - K1(L3), 3 - K1(L2/L3), 2 - K2 (L1/L2/L3)
+        self.sattype = 0
+        self.isc = np.zeros(3)  # 0: ISC_L1OC, 1: ISC_L2OC, 2: ISC_L3OC
 
 
 class Seph():
     """ class to define SBAS ephemeris """
-    sat = 0
-    iodn = 0
-    t0 = gtime_t()
-    tof = gtime_t()
-    svh = 0
-    sva = 0
-    pos = np.zeros(3)
-    vel = np.zeros(3)
-    acc = np.zeros(3)
-    af0 = 0.0
-    af1 = 0.0
-    mode = 0
 
     def __init__(self, sat=0):
         self.sat = sat
+        self.iodn = 0
+        self.t0 = gtime_t()
+        self.tof = gtime_t()
+        self.svh = 0
+        self.sva = 0
+        self.pos = np.zeros(3)
+        self.vel = np.zeros(3)
+        self.acc = np.zeros(3)
+        self.af0 = 0.0
+        self.af1 = 0.0
+        self.mode = 0
 
 
 class Alm():
     """ class to define almanac """
-    sat = 0
-    af0 = 0.0
-    af1 = 0.0
-    toa = gtime_t()
-    toas = 0.0
-    week = 0
-    e = 0.0
-    i0 = 0.0
-    A = 0.0
-    M0 = 0.0
-    OMG0 = 0.0
-    OMGd = 0.0
-    omg = 0.0
-    svh = 0
-    sattype = 0
-    mode = 0
 
     def __init__(self, sat=0):
         self.sat = sat
+        self.af0 = 0.0
+        self.af1 = 0.0
+        self.toa = gtime_t()
+        self.toas = 0.0
+        self.week = 0
+        self.e = 0.0
+        self.i0 = 0.0
+        self.A = 0.0
+        self.M0 = 0.0
+        self.OMG0 = 0.0
+        self.OMGd = 0.0
+        self.omg = 0.0
+        self.svh = 0
+        self.sattype = 0
+        self.mode = 0
 
 
 class Nav():
@@ -922,6 +928,7 @@ def epoch2time(ep):
     return time
 
 
+# leap seconds [y,m,d,h,m,s,utc-gpst]
 leaps_ = [[2017, 1, 1, 0, 0, 0, -18],
           [2015, 7, 1, 0, 0, 0, -17],
           [2012, 7, 1, 0, 0, 0, -16],
@@ -951,6 +958,7 @@ def timeget():
 
 
 def glo2time(tref: gtime_t, tod):
+    """ convert to UTC time from GLONASS time """
     time = timeadd(gpst2utc(tref), 10800.0)
     week, tow = time2gpst(time)
     tod_p = tow % 86400.0
@@ -964,6 +972,7 @@ def glo2time(tref: gtime_t, tod):
 
 
 def gpst2utc(t: gtime_t):
+    """ convert from gps-time to utc """
     for i in range(len(leaps_)):
         tu = timeadd(t, leaps_[i][6])
         if timediff(tu, epoch2time(leaps_[i])) >= 0.0:
@@ -972,6 +981,7 @@ def gpst2utc(t: gtime_t):
 
 
 def utc2gpst(t: gtime_t):
+    """ convert from utc to gps-time """
     for i in range(len(leaps_)):
         if timediff(t, epoch2time(leaps_[i])) >= 0.0:
             return timeadd(t, -leaps_[i][6])
@@ -1444,9 +1454,9 @@ def tropmapf(t, pos, el, model=uTropoModel.SAAST):
     Tropo mapping function
     """
 
-    if model == uTropoModel.SAAST:
+    if model == uTropoModel.SAAST: # Saastamoinen model
         return tropmapfNiell(t, pos, el)
-    elif model == uTropoModel.HOPF:
+    elif model == uTropoModel.HOPF: # Hopfield model
         return tropmapfHpf(el)
     else:
         return 0
@@ -1457,9 +1467,9 @@ def tropmodel(t, pos, el=np.pi/2, humi=0.7, model=uTropoModel.SAAST):
     Tropospheric delay model
     """
 
-    if model == uTropoModel.SAAST:
+    if model == uTropoModel.SAAST: # Saastamoinen model
         return tropmodelSaast(t, pos, el, humi)
-    elif model == uTropoModel.HOPF:
+    elif model == uTropoModel.HOPF: # Hopfield model
         return tropmodelHpf()
     else:
         return 0
@@ -1558,7 +1568,7 @@ def tropmodelHpf():
 
 
 def copy_buff(src, dst, ofst_s=0, ofst_d=0, blen=0):
-    """ copy bit-wise buffer copy """
+    """ bit-wise buffer copy """
     b = blen//32
     r = blen-b*32
     for k in range(b):
