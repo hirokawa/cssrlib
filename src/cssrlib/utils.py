@@ -9,7 +9,7 @@ from copy import deepcopy
 import matplotlib.pyplot as plt
 import numpy as np
 from cssrlib.gnss import time2str, sys2str, ecef2pos, ecef2enu, timediff
-from cssrlib.gnss import gtime_t, char2sys, rSigRnx, uGNSS, uTYP, uSIG
+from cssrlib.gnss import gtime_t, rSigRnx
 from cssrlib.peph import atxdec, searchpcv
 from cssrlib.plot import plot_enu
 
@@ -126,13 +126,15 @@ class process:
     def save_output(self, t, ne, ppp=None):
         """ output result """
 
-        self.t[ne] = timediff(self.nav.t, self.t0)/86400.0
+        self.t[ne] = timediff(t, self.t0)/86400.0
 
         sol = self.nav.xa[0:3] if self.nav.smode == 4 else self.nav.x[0:3]
         self.enu[ne, :] = ecef2enu(self.pos_ref, sol-self.xyz_ref)
         self.smode[ne] = self.nav.smode
 
-        if ppp is not None:
+        if ppp is None:
+            self.ztd = None
+        else:
             self.ztd[ne] = self.nav.xa[ppp.IT(self.nav.na)] \
                 if self.nav.smode == 4 else self.nav.x[ppp.IT(self.nav.na)]
 
@@ -175,7 +177,8 @@ class process:
         """ plot utility """
 
         if fig_type == 1:
-            plot_enu(self.t, self.enu, self.smode, ylim=ylim, ylim_v=ylim_v)
+            plot_enu(self.t, self.enu, self.smode,
+                     self.ztd, ylim=ylim, ylim_v=ylim_v)
         elif fig_type == 2:
             plot_enu(self.t, self.enu, self.smode, figtype=fig_type, ylim=ylim)
 

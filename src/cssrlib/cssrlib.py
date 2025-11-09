@@ -449,7 +449,7 @@ class cssr:
 
     def set_time(self, t):
         """ set observation time (week, tow) """
-        self.time = t
+        self.time0 = t
         week, tow = time2gpst(t)
         self.week = week
         self.tow0 = tow//86400*86400
