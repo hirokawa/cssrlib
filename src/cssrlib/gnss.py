@@ -7,7 +7,8 @@ from enum import IntEnum
 from math import floor, sin, cos, sqrt, asin, atan2, fabs, tan
 import numpy as np
 from datetime import datetime, timezone
-import bitstruct.c as bs
+import bitstruct as bs
+import yaml
 
 gpst0 = [1980, 1, 6, 0, 0, 0]  # GPS system time reference
 gst0 = [1999, 8, 22, 0, 0, 0]  # Galileo system time reference
@@ -16,30 +17,30 @@ bdt0 = [2006, 1, 1, 0, 0, 0]  # BeiDou system time reference
 
 class rCST():
     """ class for constants """
-    CLIGHT = 299792458.0 # speed of light (m/s)
+    CLIGHT = 299792458.0  # speed of light (m/s)
     MU_GPS = 3.9860050E14  # gravitational constant for GPS
-    MU_GLO = 3.9860044E14 # gravitational constant for GLONASS
-    MU_GAL = 3.986004418E14 # gravitational constant for Galileo
-    MU_BDS = 3.986004418E14 # gravitational constant for BeiDou
-    J2_GLO = 1.0826257E-3 # J2 harmonic for GLONASS
-    GME = 3.986004415E+14 # [m^3/s^2] Earth gravitational constant
-    GMS = 1.327124E+20 # [m^3/s^2] Sun gravitational constant
-    GMM = 4.902801E+12 # [m^3/s^2] Moon gravitational constant
-    OMGE = 7.2921151467E-5 # [rad/s] Earth rotation rate
-    OMGE_GLO = 7.292115E-5 # [rad/s] Earth rotation rate for GLONASS
-    OMGE_GAL = 7.2921151467E-5 # [rad/s] Earth rotation rate for Galileo
-    OMGE_BDS = 7.2921150E-5 # [rad/s] Earth rotation rate for BeiDou
+    MU_GLO = 3.9860044E14  # gravitational constant for GLONASS
+    MU_GAL = 3.986004418E14  # gravitational constant for Galileo
+    MU_BDS = 3.986004418E14  # gravitational constant for BeiDou
+    J2_GLO = 1.0826257E-3  # J2 harmonic for GLONASS
+    GME = 3.986004415E+14  # [m^3/s^2] Earth gravitational constant
+    GMS = 1.327124E+20  # [m^3/s^2] Sun gravitational constant
+    GMM = 4.902801E+12  # [m^3/s^2] Moon gravitational constant
+    OMGE = 7.2921151467E-5  # [rad/s] Earth rotation rate
+    OMGE_GLO = 7.292115E-5  # [rad/s] Earth rotation rate for GLONASS
+    OMGE_GAL = 7.2921151467E-5  # [rad/s] Earth rotation rate for Galileo
+    OMGE_BDS = 7.2921150E-5  # [rad/s] Earth rotation rate for BeiDou
     RE_WGS84 = 6378137.0   # Earth radius in WGS84
-    FE_WGS84 = (1.0/298.257223563) # Earth flattening in WGS84
+    FE_WGS84 = (1.0/298.257223563)  # Earth flattening in WGS84
     RE_GLO = 6378136.0  # Earth radius for GLONASS
-    AU = 149597870691.0 # astronomical unit (m)
-    D2R = 0.017453292519943295 # deg to rad
-    R2D = 57.29577951308232 # rad to deg
+    AU = 149597870691.0  # astronomical unit (m)
+    D2R = 0.017453292519943295  # deg to rad
+    R2D = 57.29577951308232  # rad to deg
     AS2R = D2R/3600.0   # arc sec to rad
     DAY_SEC = 86400.0  # seconds in one day
-    WEEK_SEC = 604800.0 # seconds in one week
-    HALFWEEK_SEC = 302400.0 # seconds in half week
-    CENTURY_SEC = DAY_SEC*36525.0 # seconds in one century
+    WEEK_SEC = 604800.0  # seconds in one week
+    HALFWEEK_SEC = 302400.0  # seconds in half week
+    CENTURY_SEC = DAY_SEC*36525.0  # seconds in one century
 
     PI = 3.1415926535898
     HALFPI = 1.5707963267949
@@ -129,7 +130,7 @@ class rCST():
     P2_60 = 8.673617379884035E-19
     P2_66 = 1.355252715606880E-20
     P2_68 = 3.388131789017201E-21
-    SC2RAD = 3.1415926535898 # semi-circle to radian
+    SC2RAD = 3.1415926535898  # semi-circle to radian
 
 
 class uGNSS(IntEnum):
@@ -305,6 +306,7 @@ class uTropoModel(IntEnum):
     NONE = -1
     SAAST = 0
     HOPF = 1
+    SBAS = 2
 
 
 class uIonoModel(IntEnum):
@@ -616,7 +618,7 @@ class gtime_t():
         self.time = time
         self.sec = sec
 
-    def __gt__(self, other): # greater than operator
+    def __gt__(self, other):  # greater than operator
         return self.time > other.time or \
             (self.time == other.time and self.sec > other.sec)
 
@@ -844,6 +846,8 @@ class Nav():
         self.ephopt = 2  # ephemeris option 0: BRDC, 1: SBAS, 2: SSR-APC,
         #                  3: SSR-CG, 4: PREC
         self.rmode = 0  # 0: IF not applied, 1: IF for L1/L2, 2: IF for L1/L5
+
+        self.cssrmode = 0
 
         # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
         self.armode = 0
@@ -1441,10 +1445,11 @@ def satazel(pos, e):
 def interpc(coef, lat):
     """ linear interpolation (lat step=15) """
     i = int(lat/15.0)
+    m = coef.shape[1]-1
     if i < 1:
         return coef[:, 0]
-    if i > 4:
-        return coef[:, 4]
+    if i > m:
+        return coef[:, m]
     d = lat/15.0-i
     return coef[:, i-1]*(1.0-d)+coef[:, i]*d
 
@@ -1454,10 +1459,12 @@ def tropmapf(t, pos, el, model=uTropoModel.SAAST):
     Tropo mapping function
     """
 
-    if model == uTropoModel.SAAST: # Saastamoinen model
+    if model == uTropoModel.SAAST:  # Saastamoinen model
         return tropmapfNiell(t, pos, el)
-    elif model == uTropoModel.HOPF: # Hopfield model
+    elif model == uTropoModel.HOPF:  # Hopfield model
         return tropmapfHpf(el)
+    elif model == uTropoModel.SBAS:  # SBAS model
+        return tropmapfSBAS(el)
     else:
         return 0
 
@@ -1467,10 +1474,12 @@ def tropmodel(t, pos, el=np.pi/2, humi=0.7, model=uTropoModel.SAAST):
     Tropospheric delay model
     """
 
-    if model == uTropoModel.SAAST: # Saastamoinen model
+    if model == uTropoModel.SAAST:  # Saastamoinen model
         return tropmodelSaast(t, pos, el, humi)
-    elif model == uTropoModel.HOPF: # Hopfield model
+    elif model == uTropoModel.HOPF:  # Hopfield model
         return tropmodelHpf()
+    elif model == uTropoModel.SBAS:  # SBAS model
+        return tropmodelSBAS(t, pos, el)
     else:
         return 0
 
@@ -1537,9 +1546,9 @@ def meteoHpf():
     """
     Hopfield atmosphere model
     """
-    pres = 1010.0
-    temp = 291.1
-    e = 10.4
+    pres = 1010.0  # pressure [hPa]
+    temp = 291.1  # temperature [K]
+    e = 10.4  # water vapor pressure [hPa]
     return pres, temp, e
 
 
@@ -1551,7 +1560,7 @@ def tropmapfHpf(el):
     mapfh = 1.0/(np.sin(np.sqrt(el**2+(np.pi/72.0)**2)))
     mapfw = 1.0/(np.sin(np.sqrt(el**2+(np.pi/120.0)**2)))
 
-    return mapfh, mapfw,
+    return mapfh, mapfw
 
 
 def tropmodelHpf():
@@ -1567,6 +1576,65 @@ def tropmodelHpf():
     return trop_dry, trop_wet, None
 
 
+def tropmapfSBAS(el):
+    """
+    Tropospheric mapping functions for Hopfield model
+    """
+
+    s_el = np.sin(el)
+    mf = 1.001/np.sqrt(0.002001+s_el**2)
+
+    return mf, mf
+
+
+def tropmodelSBAS(t, pos, el=np.pi/2):
+    """ SBAS tropospheric delay model """
+
+    # average of P[mbar], T[K], e[mbar], beta[K/m], lam
+    tbl_a = np.array([
+        [1013.25, 299.65, 26.31, 6.30e-3, 2.77],  # 15deg or less
+        [1017.25, 294.15, 21.79, 6.05e-3, 3.15],  # 30deg
+        [1015.75, 283.15, 11.66, 5.58e-3, 2.57],  # 45deg
+        [1011.75, 272.15,  6.78, 5.39e-3, 1.81],  # 60deg
+        [1013.00, 263.65,  4.11, 4.53e-3, 1.55],  # 75deg or greater
+    ])
+
+    # seasonal variation of P[mbar], T[K], e[mbar], beta[K/m], lam
+    tbl_v = np.array([
+        [0.00,  0.00, 0.00, 0.00e-3, 0.00],
+        [-3.75,  7.00, 8.85, 0.25e-3, 0.33],
+        [-2.25, 11.00, 7.24, 0.32e-3, 0.46],
+        [-1.75, 15.00, 5.36, 0.81e-3, 0.74],
+        [-0.50, 14.50, 3.39, 0.62e-3, 0.30],
+    ])
+
+    lat = pos[0]*rCST.R2D
+    hgt = pos[2]
+    dmin = 28 if lat >= 0 else 211
+    y = (time2doy(t)-dmin)/365.25
+    cosy = np.cos(2.0*np.pi*y)
+
+    c = interpc(np.c_[tbl_a, tbl_v].T, np.abs(lat))
+    pres, temp, e, beta, lam = c[0:5]-c[5:10]*cosy
+
+    Rd, gm = 287.054, 9.784
+    # zero-altitude zenith delay term
+    z_hyd = 77.604e-6*Rd*pres/gm
+    z_wet = 0.382*Rd*e/((gm*(lam+1.0)-beta*Rd)*temp)
+
+    g = 9.80665
+    d_hyd = np.pow(1-beta*hgt/temp, g/(Rd*beta))*z_hyd
+    d_wet = np.pow(1-beta*hgt/temp, (lam+1)*g/(Rd*beta)-1)*z_wet
+
+    # mapping function
+    s_el = np.sin(el)
+    mf = 1.001/np.sqrt(0.002001+s_el**2)
+
+    trop_hyd, trop_wet = d_hyd*mf, d_wet*mf
+
+    return trop_hyd, trop_wet, None
+
+
 def copy_buff(src, dst, ofst_s=0, ofst_d=0, blen=0):
     """ bit-wise buffer copy """
     b = blen//32
@@ -1578,3 +1646,9 @@ def copy_buff(src, dst, ofst_s=0, ofst_d=0, blen=0):
         fmt = 'u'+str(r)
         d = bs.unpack_from(fmt, src, b*32+ofst_s)[0]
         bs.pack_into(fmt, dst, b*32+ofst_d, d)
+
+
+def load_config(file_path):
+    with open(file_path, 'r') as file:
+        config = yaml.safe_load(file)
+    return config

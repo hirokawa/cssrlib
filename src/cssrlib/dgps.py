@@ -10,7 +10,7 @@ import numpy as np
 import bitstruct as bs
 from cssrlib.cssrlib import cssr, sCSSRTYPE, prn2sat, sCType
 from cssrlib.gnss import uGNSS, rCST, timediff, time2str, \
-    ecef2pos
+    ecef2pos, sat2prn, timediff
 
 from cssrlib.ewss import jmaDec, camfDec
 
@@ -18,13 +18,26 @@ from cssrlib.ewss import jmaDec, camfDec
 def vardgps(el, nav):
     """ measurement error varianvce for DGPS [1] """
     c_el = np.cos(el)
+    el_d = el*rCST.R2D
     pos = ecef2pos(nav.x[0:3])
+
+    # multipath error component for single frequency
+    s_mp_sf = 0.13+0.53*np.exp(-el_d/10.0)
+
+    # obliquity factor
     Fpp = 1/np.sqrt(1-(rCST.RE_WGS84*c_el/(rCST.RE_WGS84+pos[2]))**2)
+    # ionospheric error component
     s_iono = Fpp*0.004*(nav.baseline+2*100*0.07)
-    s_mp = 0.13+0.53*np.exp(-el/0.1745)
-    v_air = 0.11**2 + s_mp**2
-    v_pr = (0.16+0.107*np.exp(-el/0.271))**2/1+0.08**2
+
+    s_noise = 0.11  # receiver noise [m]
+    # receiver noise error and multipath error component [m^2]
+    v_air = s_noise**2 + s_mp_sf**2
+
+    # error component of pseudorange correction value [m^2]
+    v_pr = (0.16+1.07*np.exp(-el_d/15.5))**2/1+0.08**2
+
     v_sig = v_pr + v_air + s_iono**2
+
     return v_sig
 
 
@@ -79,6 +92,8 @@ class dgpsDec(cssr):
         self.posr[13, :] = [24.370, 124.130, 100]
         self.posr[14, :] = [27.090, 142.190, 100]
 
+        self.posr[:, 0:2] *= rCST.D2R
+
         self.mlen = {uGNSS.GPS: 64, uGNSS.QZS: 9, uGNSS.GLO: 36, uGNSS.GAL: 36,
                      uGNSS.BDS: 36}
         self.prn_ofst = {uGNSS.GPS: 0, uGNSS.QZS: 192, uGNSS.GLO: 0,
@@ -128,6 +143,8 @@ class dgpsDec(cssr):
             self.posr[code, 0] = lat*0.005
             self.posr[code, 1] = lon*0.005+115
             self.posr[code, 2] = alt*50.0-100
+
+            self.posr[code, 0:2] *= rCST.D2R
 
             i += 42
         return 0
@@ -275,7 +292,7 @@ class dgpsDec(cssr):
         idx = np.where(self.posr[:, 0]**2+self.posr[:, 1]**2 > 0)[0]
         if len(idx) == 0:
             return -1, -1
-        dpos = np.deg2rad(self.posr[idx, 0:2])-pos[0:2]
+        dpos = self.posr[idx, 0:2]-pos[0:2]
         rng = np.sqrt(dpos[:, 0]**2+(dpos[:, 1]*c_lat)**2)*rCST.RE_WGS84
         kmin = np.argmin(rng)
         refid = idx[kmin]

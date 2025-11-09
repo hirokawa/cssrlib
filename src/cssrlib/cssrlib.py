@@ -14,7 +14,7 @@ import numpy as np
 from enum import IntEnum
 from cssrlib.gnss import gpst2time, rCST, prn2sat, uGNSS, gtime_t, rSigRnx
 from cssrlib.gnss import uSIG, uTYP, sat2prn, time2str, sat2id, timediff
-from cssrlib.gnss import copy_buff
+from cssrlib.gnss import copy_buff, time2gpst
 
 
 class sCSSRTYPE(IntEnum):
@@ -446,6 +446,14 @@ class cssr:
 
         usig_tbl = usig_tbl_[sys]
         return rSigRnx(sys, utyp, usig_tbl[ssig])
+
+    def set_time(self, t):
+        """ set observation time (week, tow) """
+        self.time = t
+        week, tow = time2gpst(t)
+        self.week = week
+        self.tow0 = tow//86400*86400
+        return week, tow
 
     def sval(self, u, n, scl):
         """ calculate signed value based on n-bit int, lsb """

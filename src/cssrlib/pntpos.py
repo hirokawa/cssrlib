@@ -4,11 +4,11 @@ module for standalone positioning
 import numpy as np
 from cssrlib.gnss import rCST, ecef2pos, geodist, satazel, \
     tropmodel, tropmapf, sat2prn, uGNSS, uTropoModel, uIonoModel, \
-    timediff, time2gpst, dops, uTYP, Obs, time2str
+    timediff, time2gpst, dops, uTYP, Obs, time2str, pos2ecef
 from cssrlib.cssrlib import sCSSRTYPE
 from cssrlib.ephemeris import satposs
 from cssrlib.pppssr import pppos
-from cssrlib.sbas import ionoSBAS
+from cssrlib.sbas import ionoSBAS, varsbas
 from cssrlib.dgps import vardgps
 from math import sin, cos
 
@@ -73,9 +73,12 @@ class stdpos(pppos):
         self.Ps_ = {}
         self.cs_t0 = {}
 
+        self.nav.cssrmode = sCSSRTYPE.STDPOS
+
         # Select tropospheric model
         #
-        self.nav.trpModel = uTropoModel.SAAST
+        # self.nav.trpModel = uTropoModel.SAAST
+        self.nav.trpModel = uTropoModel.SBAS
 
         # Select iono model
         #
@@ -128,6 +131,8 @@ class stdpos(pppos):
         self.nav.sig_qcd = 0.01
 
         self.nav.elmin = np.deg2rad(10.0)
+
+        self.nav.obad = None
 
         self.nsat = 0
         self.dop = None
@@ -201,9 +206,12 @@ class stdpos(pppos):
         self.cs_t0[sat] = obs.t
         return self.Ps_[sat]
 
-    def varerr(self, nav, el, f):
+    def varerr(self, nav, el, f, e=None, sat=None):
         """ variation of measurement """
         if nav.smode == 2:  # DGPS
+            # if nav.cssrmode in [sCSSRTYPE.SBAS_L1, sCSSRTYPE.SBAS_L5]:
+            #    v_sig = varsbas(el, nav, e, sat)
+            # else:
             v_sig = vardgps(el, nav)
         else:
             s_el = max(np.sin(el), 0.1*rCST.D2R)
@@ -269,6 +277,15 @@ class stdpos(pppos):
             trop_hs, trop_wet, _ = tropmodel(obs.t, pos,
                                              model=self.nav.trpModel)
 
+        if cs.cssrmode == sCSSRTYPE.DGPS:
+            trop_hs, trop_wet, _ = tropmodel(obs.t, pos,
+                                             model=self.nav.trpModel)
+            posr = cs.posr[cs.inet-1, :]
+            rr_r = pos2ecef(posr)
+
+            trop_hs_r, trop_wet_r, _ = tropmodel(obs.t, posr,
+                                                 model=self.nav.trpModel)
+
         for i in range(n):
 
             sat = obs.sat[i]
@@ -297,7 +314,21 @@ class stdpos(pppos):
                 #
                 trop = mapfh*trop_hs + mapfw*trop_wet
             else:
-                trop = 0.0
+                # Differential Tropospheric Delay Correction (DTDC)
+                if cs.cssrmode == sCSSRTYPE.DGPS:
+                    _, e_ = geodist(rs[i, :], rr_r)
+                    _, el_r = satazel(posr, e_)
+
+                    mapfh, mapfw = tropmapf(obs.t, pos, el[i],
+                                            model=self.nav.trpModel)
+                    mapfh_r, mapfw_r = tropmapf(obs.t, posr, el_r,
+                                                model=self.nav.trpModel)
+
+                    trop_r = mapfh*trop_hs + mapfw*trop_wet
+                    trop_b = mapfh_r*trop_hs_r + mapfw_r*trop_wet_r
+                    trop = trop_r - trop_b
+                else:
+                    trop = 0.0
 
             if self.nav.iono_opt == 0:  # use model
                 # Ionospheric delay
@@ -409,7 +440,8 @@ class stdpos(pppos):
                     H[nv, 0:3] = -e[j, :]
                     H[nv, self.ICB()] = 1.0
 
-                    Rj[nv] = self.varerr(self.nav, el[j], f)
+                    Rj[nv] = self.varerr(self.nav, el[j], f, e=e[j, :],
+                                         sat=sat[j])
 
                     nb[b] += 1  # counter for single-differences per signal
                     nv += 1  # counter for single-difference observations
@@ -443,6 +475,12 @@ class stdpos(pppos):
         if cs is not None and cs.cssrmode == sCSSRTYPE.DGPS:
             self.nav.smode = 2  # DGPS
             self.nav.baseline = cs.set_dgps_corr(self.nav.x[0:3])
+
+        if cs is not None and cs.cssrmode in \
+                [sCSSRTYPE.SBAS_L1, sCSSRTYPE.SBAS_L5]:
+            self.nav.obad = cs.obad
+            self.nav.obad.t0 = cs.lc[0].t0
+            self.nav.cssrmode = cs.cssrmode
 
         # GNSS satellite positions, velocities and clock offsets
         # for all satellite in RINEX observations

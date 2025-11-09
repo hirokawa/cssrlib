@@ -1,6 +1,18 @@
 """
 SBAS correction data decoder
 
+ [1] DO-229F, Minimum Operational Performance Standards for Global 
+  Positioning System/Satellite-Based Augmentation System Airborne 
+  Equipment, Revision F, RTCA, 2020
+
+ [2] ED-259, Minimum Operational Performance Standards for Galileo –
+  Global Positioning System –Satellite-Based Augmentation System 
+  Airborne Equipment, EUROCAE, 2019
+ 
+ [3] DO-401, Minimum Operational Performance Standards (MOPS) 
+  for Dual-Frequency Multi-Constellation Satellite-Based Augmentation 
+  System Airborne Equipment, RTCA, 2023
+
 """
 
 import numpy as np
@@ -8,50 +20,62 @@ import bitstruct as bs
 from cssrlib.cssrlib import cssr, sCSSR, sCSSRTYPE, prn2sat, sCType
 from cssrlib.cssrlib import sat2id
 from cssrlib.gnss import uGNSS, rCST, timediff, time2str, \
-    time2gpst, Seph, Eph, Alm, tod2tow, gtime_t, ionppp
+    time2gpst, Seph, Eph, Alm, tod2tow, gtime_t, ionppp, sat2prn
 
 MAXBAND = 11
 
 
 class Salm():
     """ class to define SBAS almanac """
-    sat = 0
-    t0 = gtime_t()
-    svh = 0
-    pos = np.zeros(3)
-    vel = np.zeros(3)
-    mode = 0
 
     def __init__(self, sat=0):
         self.sat = sat
+        self.t0 = gtime_t()
+        self.svh = 0
+        self.pos = np.zeros(3)
+        self.vel = np.zeros(3)
+        self.mode = 0
 
 
 class SBASService():
     """ structure SBAS service information for MT27 """
-    iods = -1
-    nmsg = 0
-    snum = 0
-    nreg = 0
-    priority = 0
-    dUDRE_in = 0
-    dUDRE_out = 0
-    lat1 = np.zeros(5)
-    lon1 = np.zeros(5)
-    lat2 = np.zeros(5)
-    lon2 = np.zeros(5)
-    shape = 0
+
+    def __init__(self):
+        self.iods = -1
+        self.nmsg = 0
+        self.snum = 0
+        self.nreg = 0
+        self.priority = 0
+        self.dUDRE_in = 0
+        self.dUDRE_out = 0
+        self.lat1 = np.zeros(5)
+        self.lon1 = np.zeros(5)
+        self.lat2 = np.zeros(5)
+        self.lon2 = np.zeros(5)
+        self.shape = 0
 
 
 class paramOBAD():
-    tid = 0
-    dt_mt32 = 0
-    dt_mt39 = 0
-    Cer = 0
-    Ccov = 0
-    Icorr = np.zeros(6)
-    Ccorr = np.zeros(6)
-    Rcorr = np.zeros(6)
-    dfrei_tbl = np.zeros(16)
+    """ Old But Active Data (OBAD) parameters """
+
+    def __init__(self):
+        self.tid = 0
+        self.dt_mt32 = 0
+        self.dt_mt39 = 0
+        self.Cer = 0
+        self.Ccov = 0
+        self.Icorr = {}
+        self.Ccorr = {}
+        self.Rcorr = {}
+        self.dfrei_tbl = np.zeros(16)
+
+        # covarience parameters from MT32
+        self.t0 = {}
+        self.cov = {}
+        self.udrei = {}
+        self.dfrei = {}
+        self.dRcorr = {}
+        self.scl = {}
 
 
 def searchIGP(t, posp, cs):
@@ -172,11 +196,57 @@ def ionoSBAS(t, pos, az, el, cs):
     return diono, var
 
 
+def varsbas(el, nav, e, sat):
+    """ error variance of pseudorange measurement """
+
+    if nav.obad.dfrei[sat] == 15:  # do not use for SBAS
+        return -1.0
+
+    el_d = el*rCST.R2D
+
+    # multipath error component for single frequency
+    s_mp_sf = 0.13+0.53*np.exp(-el_d/10.0)
+
+    s_el = np.sin(el)
+    m_el = 1.001/np.sqrt(0.002001+s_el**2)  # mapping function
+    s_tve = 0.12  # tropospheric vertical error [m]
+    s_trop = s_tve*m_el
+    s_uire = 40.0/(261.4+el_d**2)+0.018
+    s_noise = 0.11
+    s_mp_df = 2.59*s_mp_sf
+    v_air = s_noise**2+s_mp_df**2
+
+    v_dfc = 0.0
+
+    sys, _ = sat2prn(sat)
+
+    I = np.r_[-e, 1]
+
+    if sys in nav.obad.Ccorr:
+
+        eps_c = nav.obad.Ccorr[sys]*nav.obad.scl[sat]
+        C = nav.obad.cov[sat]
+        d_dfre = np.sqrt(I.T@C@I)+eps_c
+        dt = timediff(nav.t, nav.obad.t0[sat][sCType.CLOCK])
+        if dt < nav.obad.Icorr[sys]:
+            Rcorr_sv = nav.obad.Rcorr[sys]*nav.obad.dRcorr[sat]
+        else:
+            Rcorr_sv = nav.obad.Rcorr[sys]
+        e_corr = dt*(nav.obad.Ccorr[sys]/nav.obad.Icorr[sys] + Rcorr_sv*1e-3)
+
+        sig_dfre = nav.obad.dfrei_tbl[nav.obad.dfrei[sat]]
+        v_dfc = (sig_dfre*d_dfre)**2+e_corr**2  # error in df correction
+
+    v_sig = v_dfc + s_uire**2 + s_trop**2 + v_air
+
+    return v_sig
+
+
 class sbasDec(cssr):
-    def __init__(self, foutname=None):
+    def __init__(self, foutname=None, nf=1):
         super().__init__(foutname)
         self.MAXNET = 1
-        self.cssrmode = sCSSRTYPE.SBAS_L1
+        self.cssrmode = sCSSRTYPE.SBAS_L1 if nf == 1 else sCSSRTYPE.SBAS_L5
         self.nsig_max = 0
         self.sat_n = []
         self.sat = []
@@ -206,10 +276,6 @@ class sbasDec(cssr):
         self.t0_igp = gtime_t()
 
         # intrgrity information
-        self.cov = {}
-        self.udrei = {}
-        self.dfrei = {}
-        self.dRcorr = {}
         self.ai = {}
         self.deg_prm = np.zeros(16)
 
@@ -390,7 +456,7 @@ class sbasDec(cssr):
             j = type_*13+k
             if j >= len(self.sat):
                 break
-            self.udrei[self.sat[j]] = udrei
+            self.obad.udrei[self.sat[j]] = udrei
             self.set_t0(sat=self.sat[j], ctype=sCType.HCLOCK, t=self.time)
 
         self.lc[0].cstat |= (1 << sCType.HCLOCK)
@@ -403,7 +469,7 @@ class sbasDec(cssr):
         for k in range(51):
             if k >= len(self.sat):
                 break
-            self.udrei[self.sat[k]] = bs.unpack_from('u4', msg, i)[0]
+            self.obad.udrei[self.sat[k]] = bs.unpack_from('u4', msg, i)[0]
             i += 4
         return i
 
@@ -668,12 +734,14 @@ class sbasDec(cssr):
         scale, E11, E22, E33, E44, E12, E13, E14, E23, E24, E34 = \
             bs.unpack_from('u3u9u9u9u9s10s10s10s10s10s10', msg, i)
         i += 99
+
+        scl = 2**(scale-5)
         R = np.array([[E11, E12, E13, E14],
                       [0, E22, E23, E23],
                       [0,   0, E33, E34],
-                      [0,   0,   0, E44]])*(2**(scale-5))
+                      [0,   0,   0, E44]])*scl
         C = R.T@R
-        return i, C
+        return i, C, scl
 
     def decode_sbas_cov(self, msg, i):
         """ Type 28 clock-ephemeris covariance matrix """
@@ -686,9 +754,10 @@ class sbasDec(cssr):
         for k in range(2):
             slot = bs.unpack_from('u6', msg, i)[0]
             i += 6
-            i, C = self.decode_cov(msg, i)
+            i, C, scl = self.decode_cov(msg, i)
             sat = self.sat[slot]
-            self.cov[sat] = C
+            self.obad.cov[sat] = C
+            self.obad.scl[sat] = scl
 
         return i
 
@@ -816,18 +885,27 @@ class sbasDec(cssr):
         self.obad.Cer = Cer*0.5
         self.obad.Ccov = Ccov*0.1
 
+        sys_t = [uGNSS.GPS, uGNSS.GLO, uGNSS.GAL, uGNSS.BDS, uGNSS.SBS,
+                 uGNSS.QZS]  # QZS is TBD
+
+        self.obad.Icorr = {}
+        self.obad.Ccorr = {}
+        self.obad.Rcorr = {}
+
         for k in range(6):
             Icorr, Ccorr, Rcorr = bs.unpack_from('u5u8u8', msg, i)
             i += 21
-            self.obad.Icorr[k] = Icorr*6.0
-            self.obad.Ccorr[k] = Ccorr*0.01
-            self.obad.Rcorr[k] = Rcorr*0.2
+            sys = sys_t[k]
+            self.obad.Icorr[sys] = Icorr*6.0
+            self.obad.Ccorr[sys] = Ccorr*0.01
+            self.obad.Rcorr[sys] = Rcorr*0.2
 
         for k in range(15):
             scl = self.scl_dfrei_t[k]
             self.obad.dfrei_tbl[k] = bs.unpack_from('u4', msg, i)[0]*scl
             i += 4
 
+        # time reference identifier
         self.obad.tid = bs.unpack_from('u3', msg, i)[0]
         i += 5
         return i
@@ -879,13 +957,14 @@ class sbasDec(cssr):
         eph.toe = tod2tow(te*16.0, self.time)
         eph.toc = eph.toe
 
-        i, C = self.decode_cov(msg, i)
+        i, C, scl = self.decode_cov(msg, i)
         dfrei, dRcorr = bs.unpack_from('u4u4', msg, i)
         i += 8
 
-        self.cov[eph.sat] = C
-        self.udrei[eph.sat] = dfrei
-        self.dRcorr[eph.sat] = dRcorr
+        self.obad.cov[eph.sat] = C
+        self.obad.dfrei[eph.sat] = dfrei
+        self.obad.dRcorr[eph.sat] = dRcorr/15.0
+        self.obad.scl[eph.sat] = scl
 
         return i
 
@@ -961,7 +1040,7 @@ class sbasDec(cssr):
 
         self.time0 = tod2tow(t0*16.0, self.time)
 
-        i, C = self.decode_cov(msg, i)
+        i, C, scl = self.decode_cov(msg, i)
 
         dfrei, dRcorr = bs.unpack_from('u4u4', msg, i)
         i += 8
@@ -975,9 +1054,10 @@ class sbasDec(cssr):
                               format(time2str(self.time), slot))
             return i
 
-        self.cov[sat] = C
-        self.dfrei[sat] = dfrei
-        self.dRcorr[sat] = dRcorr
+        self.obad.cov[sat] = C
+        self.obad.dfrei[sat] = dfrei
+        self.obad.dRcorr[sat] = dRcorr/15.0
+        self.obad.scl[sat] = scl
 
         # self.iodssr = 0
 
@@ -1077,5 +1157,5 @@ class sbasDec(cssr):
         elif mt == 63:  # Null
             pass
 
-        if self.monlevel > 3:
+        if self.monlevel > 1:
             self.fh.write("{:s} mt={:2d} \n".format(time2str(self.time), mt))
