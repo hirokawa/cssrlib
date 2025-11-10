@@ -277,7 +277,7 @@ class stdpos(pppos):
             trop_hs, trop_wet, _ = tropmodel(obs.t, pos,
                                              model=self.nav.trpModel)
 
-        if cs.cssrmode == sCSSRTYPE.DGPS:
+        if cs is not None and cs.cssrmode == sCSSRTYPE.DGPS:
             trop_hs, trop_wet, _ = tropmodel(obs.t, pos,
                                              model=self.nav.trpModel)
             posr = cs.posr[cs.inet-1, :]
@@ -315,7 +315,7 @@ class stdpos(pppos):
                 trop = mapfh*trop_hs + mapfw*trop_wet
             else:
                 # Differential Tropospheric Delay Correction (DTDC)
-                if cs.cssrmode == sCSSRTYPE.DGPS:
+                if cs is not None and cs.cssrmode == sCSSRTYPE.DGPS:
                     _, e_ = geodist(rs[i, :], rr_r)
                     _, el_r = satazel(posr, e_)
 
