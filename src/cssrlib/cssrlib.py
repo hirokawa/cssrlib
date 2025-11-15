@@ -1343,6 +1343,61 @@ class cssr:
         copy_buff(msg, self.buff, i, 1695*self.fcnt, 1695)
         self.fcnt = self.fcnt + 1
 
+    def merge_cssr(self, cs_):
+        """ merge additional correction """
+        if self.facility != cs_.facility:
+            return False
+
+        # merge sis corrections
+        sat_t = [x for x in cs_.sat_n if x not in self.sat_n]
+        for sat in sat_t:
+            sys, _ = sat2prn(sat)
+            self.sat_n.append(sat)
+            self.gnss_n.append(sys)
+            self.nsat_n += 1
+            self.nsat_g[sys] += 1
+            self.sig_n[sat] = cs_.sig_n[sat]
+
+            if sat in self.dclk:
+                self.dclk[sat] = cs_.dclk[sat]
+            if sat in self.dorb:
+                self.iode[sat] = cs_.iode[sat]
+                self.dorb[sat] = cs_.dorb[sat]
+            if sat in self.cbias:
+                self.cbias[sat] = cs_.cbias[sat]
+                self.nsig_n.append(len(self.cbias[sat]))
+            if sat in self.pbias:
+                self.pbias[sat] = cs_.pbias[sat]
+            if sat in self.ura:
+                self.ura[sat] = cs_.ura[sat]
+
+        # merge local corrections
+        for inet in range(0, self.MAXNET+1):
+            sat_t = [x for x in cs_.lc[inet].sat_n
+                     if x not in self.lc[inet].sat_n]
+            for sat in sat_t:
+                self.lc[inet].sat_n.append(sat)
+                self.lc[inet].nsat_n += 1
+                if sat in cs_.lc[inet].dclk:
+                    self.lc[inet].dclk[sat] = cs_.lc[inet].dclk[sat]
+                if sat in cs_.lc[inet].dorb:
+                    self.lc[inet].iode[sat] = cs_.lc[inet].iode[sat]
+                    self.lc[inet].dorb[sat] = cs_.lc[inet].dorb[sat]
+                if sat in cs_.lc[inet].ura:
+                    self.lc[inet].ura[sat] = cs_.lc[inet].ura[sat]
+                if sat in cs_.lc[inet].cbias:
+                    self.lc[inet].cbias[sat] = cs_.lc[inet].cbias[sat]
+                if sat in cs_.lc[inet].pbias:
+                    self.lc[inet].pbias[sat] = cs_.lc[inet].pbias[sat]
+
+                if sat in cs_.lc[inet].stec_quality:
+                    self.lc[inet].stec_quality[sat] = \
+                        cs_.lc[inet].stec_quality[sat]
+                    self.lc[inet].ci[sat] = cs_.lc[inet].ci[sat]
+                    self.lc[inet].dstec[sat] = cs_.lc[inet].dstec[sat]
+
+        return True
+
 
 class cssre():
     """ Class to encode the Compact SSR messages (experimental) """
