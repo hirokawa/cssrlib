@@ -411,6 +411,7 @@ class rtcmUtil:
         sCType.TROP: "TROP",
         sCType.STEC: "STEC",
         sCType.VTEC: "VTEC",
+        sCType.GRID: "GRID",
         }
     
     igsssrt_t = {
@@ -3078,12 +3079,15 @@ class rtcm(cssr, rtcmUtil):
             for k in range(ofst, ofst+npnt):
                 dlat, dlon, dalt = bs.unpack_from('s13s14s9', msg, i)
                 i += 36
-                lat += self.sval(dlat, 13, 1e-3)
-                lon += self.sval(dlon, 14, 1e-3)
-                alt += self.sval(dalt, 9, 12.5)
+                dlat_s = self.sval(dlat, 13, 1e-3)
+                dlon_s = self.sval(dlon, 14, 1e-3)
+                dalt_s = self.sval(dalt, 9, 12.5)
+                lat += dlat_s
+                lon += dlon_s
+                alt += dalt_s
                 d = np.array([(gid, k+1, lat, lon, alt)], dtype=dtype0)
                 self.grid = np.append(self.grid, d)
-                self.dpos[k-ofst, :] = (dlat*1e-3, dlon*1e-3, dalt*12.5)
+                self.dpos[k-ofst, :] = (dlat_s, dlon_s, dalt_s)
 
         elif gtype == 1:  # grid type 1
             lat0, lon0, ofst, npnt = bs.unpack_from('s18s19u12u8', msg, i)
@@ -3100,11 +3104,13 @@ class rtcm(cssr, rtcmUtil):
             for k in range(npnt):
                 dlat, dlon = bs.unpack_from('s13s14', msg, i)
                 i += 27
-                lat += self.sval(dlat, 13, 1e-3)
-                lon += self.sval(dlon, 14, 1e-3)
+                dlat_s = self.sval(dlat, 13, 1e-3)
+                dlon_s = self.sval(dlon, 14, 1e-3)
+                lat += dlat_s
+                lon += dlon_s
                 d = np.array([(gid, k, lat, lon, 0)], dtype=dtype0)
                 self.grid = np.append(self.grid, d)
-                self.dpos[k-ofst, :] = (dlat*1e-3, dlon*1e-3, 0)
+                self.dpos[k-ofst, :] = (dlat_s, dlon_s, 0)
 
         elif gtype == 2:  # grid type 2
             lat0_, lon0_, nrow, ncol, dlat_, dlon_, gma = bs.unpack_from(
@@ -4437,7 +4443,7 @@ class rtcme(cssre, rtcmUtil):
                          self.ofst, self.ng-1)
             i += 67
 
-            for k in range(self.ng-1):
+            for k in range(1, self.ng):
                 gid, ofst, lat_, lon_, alt_ = grid[k]
                 dlat = lat_-lat
                 dlon = lon_-lon
@@ -4460,10 +4466,10 @@ class rtcme(cssre, rtcmUtil):
             lon_i = int(lon/1e-3)
 
             bs.pack_into('s18s19u12u8', msg, i, lat_i, lon_i,
-                         self.ofst, self.ng)
+                         self.ofst, self.ng-1)
             i += 57
 
-            for k in range(self.ng-1):
+            for k in range(1, self.ng):
                 gid, ofst, lat_, lon_, _ = grid[k]
                 dlat = lat_-lat
                 dlon = lon_-lon
