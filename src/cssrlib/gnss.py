@@ -7,7 +7,9 @@ from enum import IntEnum
 from math import floor, sin, cos, sqrt, asin, atan2, fabs, tan
 import numpy as np
 from datetime import datetime, timezone
-import bitstruct.c as bs
+import bitstruct as bs
+import yaml
+from numba import njit
 
 gpst0 = [1980, 1, 6, 0, 0, 0]  # GPS system time reference
 gst0 = [1999, 8, 22, 0, 0, 0]  # Galileo system time reference
@@ -16,30 +18,30 @@ bdt0 = [2006, 1, 1, 0, 0, 0]  # BeiDou system time reference
 
 class rCST():
     """ class for constants """
-    CLIGHT = 299792458.0
-    MU_GPS = 3.9860050E14
-    MU_GLO = 3.9860044E14
-    MU_GAL = 3.986004418E14
-    MU_BDS = 3.986004418E14
-    J2_GLO = 1.0826257E-3
-    GME = 3.986004415E+14
-    GMS = 1.327124E+20
-    GMM = 4.902801E+12
-    OMGE = 7.2921151467E-5
-    OMGE_GLO = 7.292115E-5
-    OMGE_GAL = 7.2921151467E-5
-    OMGE_BDS = 7.2921150E-5
-    RE_WGS84 = 6378137.0
-    FE_WGS84 = (1.0/298.257223563)
-    RE_GLO = 6378136.0
-    AU = 149597870691.0
-    D2R = 0.017453292519943295
-    R2D = 57.29577951308232
-    AS2R = D2R/3600.0
-    DAY_SEC = 86400.0
-    WEEK_SEC = 604800.0
-    HALFWEEK_SEC = 302400.0
-    CENTURY_SEC = DAY_SEC*36525.0
+    CLIGHT = 299792458.0  # speed of light (m/s)
+    MU_GPS = 3.9860050E14  # gravitational constant for GPS
+    MU_GLO = 3.9860044E14  # gravitational constant for GLONASS
+    MU_GAL = 3.986004418E14  # gravitational constant for Galileo
+    MU_BDS = 3.986004418E14  # gravitational constant for BeiDou
+    J2_GLO = 1.0826257E-3  # J2 harmonic for GLONASS
+    GME = 3.986004415E+14  # [m^3/s^2] Earth gravitational constant
+    GMS = 1.327124E+20  # [m^3/s^2] Sun gravitational constant
+    GMM = 4.902801E+12  # [m^3/s^2] Moon gravitational constant
+    OMGE = 7.2921151467E-5  # [rad/s] Earth rotation rate
+    OMGE_GLO = 7.292115E-5  # [rad/s] Earth rotation rate for GLONASS
+    OMGE_GAL = 7.2921151467E-5  # [rad/s] Earth rotation rate for Galileo
+    OMGE_BDS = 7.2921150E-5  # [rad/s] Earth rotation rate for BeiDou
+    RE_WGS84 = 6378137.0   # Earth radius in WGS84
+    FE_WGS84 = (1.0/298.257223563)  # Earth flattening in WGS84
+    RE_GLO = 6378136.0  # Earth radius for GLONASS
+    AU = 149597870691.0  # astronomical unit (m)
+    D2R = 0.017453292519943295  # deg to rad
+    R2D = 57.29577951308232  # rad to deg
+    AS2R = D2R/3600.0   # arc sec to rad
+    DAY_SEC = 86400.0  # seconds in one day
+    WEEK_SEC = 604800.0  # seconds in one week
+    HALFWEEK_SEC = 302400.0  # seconds in half week
+    CENTURY_SEC = DAY_SEC*36525.0  # seconds in one century
 
     PI = 3.1415926535898
     HALFPI = 1.5707963267949
@@ -129,7 +131,7 @@ class rCST():
     P2_60 = 8.673617379884035E-19
     P2_66 = 1.355252715606880E-20
     P2_68 = 3.388131789017201E-21
-    SC2RAD = 3.1415926535898
+    SC2RAD = 3.1415926535898  # semi-circle to radian
 
 
 class uGNSS(IntEnum):
@@ -151,7 +153,7 @@ class uGNSS(IntEnum):
     GALMAX = 36
     QZSMAX = 17
     BDSMAX = 63
-    GLOMAX = 27
+    GLOMAX = 32
     SBSMAX = 39
     IRNMAX = 14
 
@@ -164,6 +166,23 @@ class uGNSS(IntEnum):
     IRNMIN = SBSMIN+SBSMAX
 
     MAXSAT = GPSMAX+GALMAX+QZSMAX+BDSMAX+GLOMAX+SBSMAX+IRNMAX
+
+    MINPRNGPS = 1
+    MAXPRNGPS = 36
+    MINPRNGLO = 1
+    MAXPRNGLO = 32
+    MINPRNGAL = 1
+    MAXPRNGAL = 36
+    MINPRNQZS = 193
+    MAXPRNQZS = 210
+    MINPRNBDS = 1
+    MAXPRNBDS = 18
+    MINPRNBDS3 = 19
+    MAXPRNBDS3 = 58
+    MINPRNIRN = 1
+    MAXPRNIRN = 14
+    MINPRNSBS = 120
+    MAXPRNSBS = 158
 
 
 class uTYP(IntEnum):
@@ -302,9 +321,10 @@ class uTropoModel(IntEnum):
     Enumeration for tropo model selection
     """
 
-    NONE = -1
-    SAAST = 0
-    HOPF = 1
+    NONE = 0
+    SAAST = 1
+    HOPF = 2
+    SBAS = 3
 
 
 class uIonoModel(IntEnum):
@@ -312,14 +332,25 @@ class uIonoModel(IntEnum):
     Enumeration for iono model selection
     """
 
-    NONE = -1
-    KLOBUCHAR = 0
-    NEQUICK_G = 1
-    GIM = 2
-    SBAS = 3
+    NONE = 0
+    KLOBUCHAR = 1
+    NEQUICK_G = 2
+    GIM = 3
+    SBAS = 4
+
+
+class uTideModel(IntEnum):
+    """
+    Enumeration for Earth tide model selection
+    """
+
+    NONE = 0
+    SIMPLE = 1
+    IERS2010 = 2
 
 
 class rSigRnx():
+    """ class for RINEX signal representation """
 
     def __init__(self, *args, **kwargs):
         """ Constructor """
@@ -615,34 +646,41 @@ class gtime_t():
         self.time = time
         self.sec = sec
 
-    def __gt__(self, other):
+    def __gt__(self, other):  # greater than operator
         return self.time > other.time or \
             (self.time == other.time and self.sec > other.sec)
 
 
 class STOParam():
     """ System Time and UTC Office """
-    sbas = 0  # SBAS ID
-    prm = [0, 0]  # System time offset parameter
-    t_ot = None  # reference epoch
-    t_t = 0.0  # transmission time of message (Time of week [sec])
-    a = np.zeros(3)  # a0, a1, a2
+
+    def __init__(self):
+        self.iod = 0
+        self.sbas = 0  # SBAS ID
+        self.prm = np.zeros(2)  # System time offset parameter
+        self.t_ot = None  # reference epoch
+        self.a = np.zeros(3)  # a0, a1, a2
 
 
 class EOPParam():
     """ Earth Orientation Parameter """
-    prm = np.zeros(9)
-    # EOP parameters (xp,dxp,ddxp,yp,dyp,ddyp,dut1,ddut1,dddut1)
-    t_ot = None  # reference epoch
-    t_t = 0.0  # transmission time of message (Time of week [sec])
+
+    def __init__(self):
+        self.iod = 0
+        # EOP parameters (xp,dxp,ddxp,yp,dyp,ddyp,dut1,ddut1,dddut1)
+        self.prm = np.zeros(9)
+        self.t_ot = None  # reference epoch
+        self.t_t = 0.0  # transmission time of message (Time of week [sec])
 
 
 class IONParam():
     """ Ionospheric delay model Parameter """
-    iod = 0
-    prm = np.zeros(9)  # ION parameters
-    t_tm = None  # transmission time
-    region = None
+
+    def __init__(self):
+        self.iod = 0
+        self.prm = np.zeros(9)  # ION parameters
+        self.t_tm = None  # transmission time
+        self.region = None
 
 
 class Obs():
@@ -658,156 +696,166 @@ class Obs():
         self.sat = []
         self.sig = {}
 
+    def sort(self):
+        """ sort using satellite index """
+        idx = np.argsort(self.sat)
+        self.sat = self.sat[idx]
+        self.P = self.P[idx, :]
+        self.L = self.L[idx, :]
+        self.D = self.D[idx, :]
+        self.S = self.S[idx, :]
+        self.lli = self.lli[idx, :]
+
 
 class Eph():
     """ class to define ephemeris """
-    sat = 0
-    iode = 0
-    iodc = 0
-    af0 = 0.0
-    af1 = 0.0
-    af2 = 0.0
-    week = 0
-    toc = 0
-    toe = 0
-    tot = 0
-    wn_op = 0
-    top = 0
-    crs = 0.0
-    crc = 0.0
-    cus = 0.0
-    cus = 0.0
-    cis = 0.0
-    cic = 0.0
-    e = 0.0
-    i0 = 0.0
-    A = 0.0
-    Adot = 0.0
-    deln = 0.0
-    delnd = 0.0
-    M0 = 0.0
-    OMG0 = 0.0
-    OMGd = 0.0
-    omg = 0.0
-    idot = 0.0
-    tgd = 0.0
-    tgd_b = 0.0
-    tgd_c = 0.0
-    sva = 0
-    svh = 0
-    fit = 0
-    toes = 0
-    tops = 0
-    l2p = 0
-    sattype = 0
-    sismai = 0
-    code = 0
-    urai = None
-    sisai = None
-    isc = None
-    integ = 0
-    # 0:LNAV,INAV,D1/D2, 1:CNAV/CNAV1/FNAV, 2: CNAV2, 3: CNAV3, 4:FDMA, 5:SBAS
-    mode = 0
 
     def __init__(self, sat=0):
         self.sat = sat
+        self.iode = 0
+        self.iodc = 0
+        self.af0 = 0.0
+        self.af1 = 0.0
+        self.af2 = 0.0
+        self.week = 0
+        self.toc = 0
+        self.toe = 0
+        self.tot = 0
+        self.wn_op = 0
+        self.top = 0
+        self.crs = 0.0
+        self.crc = 0.0
+        self.cus = 0.0
+        self.cus = 0.0
+        self.cis = 0.0
+        self.cic = 0.0
+        self.e = 0.0
+        self.i0 = 0.0
+        self.A = 0.0
+        self.Adot = 0.0
+        self.deln = 0.0
+        self.delnd = 0.0
+        self.M0 = 0.0
+        self.OMG0 = 0.0
+        self.OMGd = 0.0
+        self.omg = 0.0
+        self.idot = 0.0
+        self.tgd = 0.0
+        self.tgd_b = 0.0
+        self.tgd_c = 0.0
+        self.sva = 0
+        self.svh = 0
+        self.fit = 0
+        self.toes = 0
+        self.tops = 0
+        self.l2p = 0
+        self.sattype = 0
+        self.sismai = 0
+        self.code = 0
+        self.urai = np.zeros(4, dtype=int)
+        self.sisai = np.zeros(5, dtype=int)
+        self.isc = np.zeros(4)
+        self.integ = 0
+        # 0:LNAV,INAV,D1/D2, 1:CNAV/CNAV1/FNAV, 2: CNAV2,
+        # 3: CNAV3, 4:FDMA, 5:SBAS
+        self.mode = 0
 
 
 class Geph():
     """ class to define GLONASS ephemeris """
-    sat = 0
-    iode = 0  # IODE: 0-6bit of tb field
-    frq = 0
-    svh = 0
-    sva = 0
-    age = 0.0
-    toe = gtime_t()
-    toes = 0.0
-    tof = gtime_t()
-    pos = np.zeros(3)
-    vel = np.zeros(3)
-    acc = np.zeros(3)
-    taun = 0.0         # SV clock bias [s]
-    gamn = 0.0         # SV clock drift [s/s]
-    beta = 0.0         # SV clock drift rate [s/s^2]
-    dtaun = 0.0        # delta between L1 and L2 [s]
-    mode = 0
-    status = 0  # data validity
-    flag = 0
-
-    tau_c = 0.0  # GLONASS time scale correction to UTC(SU) time
-    dtau_c = 0.0
-    tau_gps = 0.0  # correction to GPS time relative to GLONASS time
-
-    # for CDMA
-    urai = np.zeros(2, dtype=int)
-    dpos = np.zeros(3)
-
-    psi = 0.0  # yaw angle [rad]
-    sn = 0  # sign flag
-    win = 0.0  # angular rate [rad/s]
-    dw = 0.0  # angular accel [rad/s^2]
-    wmax = 0.0  # max angular rate[rad/s]
-    aode = 0
-    aodc = 0  # age of data orbit/clock [days]
-    tin = 0.0
-    tau1 = 0.0
-    tau2 = 0.0
-
-    src = 0  # source flags (b0-1: Rt, b2-3: Re)
-    sattype = 0  # 0 - M(L3), 1 - K1(L3), 3 - K1(L2/L3), 2 - K2 (L1/L2/L3)
-    isc = np.zeros(3)  # 0: ISC_L1OC, 1: ISC_L2OC, 2: ISC_L3OC
 
     def __init__(self, sat=0):
         self.sat = sat
+        self.iode = 0  # IODE: 0-6bit of tb field
+        self.frq = 0
+        self.svh = 0
+        self.sva = 0
+        self.age = 0.0
+        self.toe = gtime_t()
+        self.toes = 0.0
+        self.tof = gtime_t()
+        self.pos = np.zeros(3)
+        self.vel = np.zeros(3)
+        self.acc = np.zeros(3)
+        self.taun = 0.0         # SV clock bias [s]
+        self.gamn = 0.0         # SV clock drift [s/s]
+        self.beta = 0.0         # SV clock drift rate [s/s^2]
+        self.dtaun = 0.0        # delta between L1 and L2 [s]
+        self.mode = 0
+        self.status = 0  # data validity
+        self.flag = 0
+
+        self.tau_c = 0.0  # GLONASS time scale correction to UTC(SU) time
+        self.dtau_c = 0.0
+        self.tau_gps = 0.0  # correction to GPS time relative to GLONASS time
+
+        # for CDMA
+        self.urai = np.zeros(2, dtype=int)
+        self.dpos = np.zeros(3)
+
+        self.psi = 0.0  # yaw angle [rad]
+        self.sn = 0  # sign flag
+        self.win = 0.0  # angular rate [rad/s]
+        self.dw = 0.0  # angular accel [rad/s^2]
+        self.wmax = 0.0  # max angular rate[rad/s]
+        self.aode = 0
+        self.aodc = 0  # age of data orbit/clock [days]
+        self.tin = 0.0
+        self.tau1 = 0.0
+        self.tau2 = 0.0
+
+        self.src = 0  # source flags (b0-1: Rt, b2-3: Re)
+        # 0 - M(L3), 1 - K1(L3), 3 - K1(L2/L3), 2 - K2 (L1/L2/L3)
+        self.sattype = 0
+        self.isc = np.zeros(3)  # 0: ISC_L1OC, 1: ISC_L2OC, 2: ISC_L3OC
 
 
 class Seph():
     """ class to define SBAS ephemeris """
-    sat = 0
-    iodn = 0
-    t0 = gtime_t()
-    tof = gtime_t()
-    svh = 0
-    sva = 0
-    pos = np.zeros(3)
-    vel = np.zeros(3)
-    acc = np.zeros(3)
-    af0 = 0.0
-    af1 = 0.0
-    mode = 0
 
     def __init__(self, sat=0):
         self.sat = sat
+        self.iodn = 0
+        self.t0 = gtime_t()
+        self.tof = gtime_t()
+        self.svh = 0
+        self.sva = 0
+        self.pos = np.zeros(3)
+        self.vel = np.zeros(3)
+        self.acc = np.zeros(3)
+        self.af0 = 0.0
+        self.af1 = 0.0
+        self.mode = 0
 
 
 class Alm():
     """ class to define almanac """
-    sat = 0
-    af0 = 0.0
-    af1 = 0.0
-    toa = gtime_t()
-    toas = 0.0
-    week = 0
-    e = 0.0
-    i0 = 0.0
-    A = 0.0
-    M0 = 0.0
-    OMG0 = 0.0
-    OMGd = 0.0
-    omg = 0.0
-    svh = 0
-    sattype = 0
-    mode = 0
 
     def __init__(self, sat=0):
         self.sat = sat
+        self.af0 = 0.0
+        self.af1 = 0.0
+        self.toa = gtime_t()
+        self.toas = 0.0
+        self.week = 0
+        self.e = 0.0
+        self.i0 = 0.0
+        self.A = 0.0
+        self.M0 = 0.0
+        self.OMG0 = 0.0
+        self.OMGd = 0.0
+        self.omg = 0.0
+        self.svh = 0
+        self.sattype = 0
+        self.mode = 0
 
 
 class Nav():
     """ class to define the navigation message """
 
     def __init__(self, nf=2):
+        self.x = None  # states
+
         self.eph = []
         self.geph = []
         self.seph = []
@@ -826,7 +874,7 @@ class Nav():
 
         self.eop = np.zeros(9)
         self.elmin = np.deg2rad(15.0)
-        self.tidecorr = False
+        self.tidecorr = uTideModel.NONE
         self.nf = nf
         self.ne = 0
         self.nc = 0
@@ -838,6 +886,8 @@ class Nav():
         self.ephopt = 2  # ephemeris option 0: BRDC, 1: SBAS, 2: SSR-APC,
         #                  3: SSR-CG, 4: PREC
         self.rmode = 0  # 0: IF not applied, 1: IF for L1/L2, 2: IF for L1/L5
+
+        self.cssrmode = 0
 
         # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
         self.armode = 0
@@ -901,6 +951,9 @@ class Nav():
 
         # number of satellite (observed, calculated, corrected)
         self.nsat = [0, 0, 0]
+        
+        self.t_rsun = None # reference time of rsun
+        self.rsun = None # placeholder of sun position
 
 
 def epoch2time(ep):
@@ -922,6 +975,7 @@ def epoch2time(ep):
     return time
 
 
+# leap seconds [y,m,d,h,m,s,utc-gpst]
 leaps_ = [[2017, 1, 1, 0, 0, 0, -18],
           [2015, 7, 1, 0, 0, 0, -17],
           [2012, 7, 1, 0, 0, 0, -16],
@@ -951,6 +1005,7 @@ def timeget():
 
 
 def glo2time(tref: gtime_t, tod):
+    """ convert to UTC time from GLONASS time """
     time = timeadd(gpst2utc(tref), 10800.0)
     week, tow = time2gpst(time)
     tod_p = tow % 86400.0
@@ -964,6 +1019,7 @@ def glo2time(tref: gtime_t, tod):
 
 
 def gpst2utc(t: gtime_t):
+    """ convert from gps-time to utc """
     for i in range(len(leaps_)):
         tu = timeadd(t, leaps_[i][6])
         if timediff(tu, epoch2time(leaps_[i])) >= 0.0:
@@ -972,6 +1028,7 @@ def gpst2utc(t: gtime_t):
 
 
 def utc2gpst(t: gtime_t):
+    """ convert from utc to gps-time """
     for i in range(len(leaps_)):
         if timediff(t, epoch2time(leaps_[i])) >= 0.0:
             return timeadd(t, -leaps_[i][6])
@@ -1154,7 +1211,7 @@ def prn2sat(sys, prn):
         sat = 0
     return sat
 
-
+@njit
 def sat2prn(sat):
     """ convert sat to sys+prn """
     if sat > uGNSS.MAXSAT:
@@ -1219,10 +1276,14 @@ def char2sys(c):
     gnss_tbl = {'G': uGNSS.GPS, 'R': uGNSS.GLO, 'E': uGNSS.GAL, 'C': uGNSS.BDS,
                 'J': uGNSS.QZS, 'S': uGNSS.SBS, 'I': uGNSS.IRN}
 
-    if c not in gnss_tbl:
-        return uGNSS.NONE
+    if len(c) == 1:
+        s = uGNSS.NONE if c not in gnss_tbl else gnss_tbl[c]
     else:
-        return gnss_tbl[c]
+        s = []
+        for k in range(len(c)):
+            u = uGNSS.NONE if c[k] not in gnss_tbl else gnss_tbl[c[k]]
+            s.append(u)
+    return s
 
 
 def sys2char(sys):
@@ -1230,10 +1291,14 @@ def sys2char(sys):
     gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GLO: 'R', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
                 uGNSS.QZS: 'J', uGNSS.SBS: 'S', uGNSS.IRN: 'I'}
 
-    if sys not in gnss_tbl:
-        return "?"
+    if type(sys) == uGNSS:
+        s = '?' if sys not in gnss_tbl else gnss_tbl[sys]
     else:
-        return gnss_tbl[sys]
+        s = []
+        for sys_ in sys:
+            u = '?' if sys_ not in gnss_tbl else gnss_tbl[sys_]
+            s.append(u)
+    return s
 
 
 def sys2str(sys):
@@ -1243,9 +1308,22 @@ def sys2str(sys):
                 uGNSS.QZS: 'QZSS', uGNSS.SBS: 'SBAS', uGNSS.IRN: 'IRNSS'}
 
     if sys not in gnss_tbl:
-        return "???"
+        return ""
     else:
         return gnss_tbl[sys]
+
+
+def sid2prn(sys, sid):
+    """ convert satellite id to prn """
+    if sys == uGNSS.QZS:
+        prn = sid+rCST.MINPRNQZS-1
+    elif sys == uGNSS.BDS3:
+        prn = sid+rCST.MINPRNBDS3-1
+    elif sys == uGNSS.SBS:
+        prn = sid+rCST.MINPRNSBS-1
+    else:
+        prn = sid
+    return prn
 
 
 def vnorm(r):
@@ -1431,10 +1509,11 @@ def satazel(pos, e):
 def interpc(coef, lat):
     """ linear interpolation (lat step=15) """
     i = int(lat/15.0)
+    m = coef.shape[1]-1
     if i < 1:
         return coef[:, 0]
-    if i > 4:
-        return coef[:, 4]
+    if i > m:
+        return coef[:, m]
     d = lat/15.0-i
     return coef[:, i-1]*(1.0-d)+coef[:, i]*d
 
@@ -1444,12 +1523,14 @@ def tropmapf(t, pos, el, model=uTropoModel.SAAST):
     Tropo mapping function
     """
 
-    if model == uTropoModel.SAAST:
+    if model == uTropoModel.SAAST:  # Saastamoinen model
         return tropmapfNiell(t, pos, el)
-    elif model == uTropoModel.HOPF:
+    elif model == uTropoModel.HOPF:  # Hopfield model
         return tropmapfHpf(el)
-    else:
-        return 0
+    elif model == uTropoModel.SBAS:  # SBAS model
+        return tropmapfSBAS(el)
+    else:  # model == uTropoModel.NONE
+        return 0, 0
 
 
 def tropmodel(t, pos, el=np.pi/2, humi=0.7, model=uTropoModel.SAAST):
@@ -1457,12 +1538,14 @@ def tropmodel(t, pos, el=np.pi/2, humi=0.7, model=uTropoModel.SAAST):
     Tropospheric delay model
     """
 
-    if model == uTropoModel.SAAST:
+    if model == uTropoModel.SAAST:  # Saastamoinen model
         return tropmodelSaast(t, pos, el, humi)
-    elif model == uTropoModel.HOPF:
+    elif model == uTropoModel.HOPF:  # Hopfield model
         return tropmodelHpf()
-    else:
-        return 0
+    elif model == uTropoModel.SBAS:  # SBAS model
+        return tropmodelSBAS(t, pos, el)
+    else:  # model == uTropoModel.NONE
+        return 0, 0, 0
 
 
 def meteo(hgt, humi):
@@ -1473,16 +1556,15 @@ def meteo(hgt, humi):
     return pres, temp, e
 
 
-def mapf(el, a, b, c):
+def mapf(sE, a, b, c):
     """ simple tropospheric mapping function """
-    sinel = np.sin(el)
-    return (1.0+a/(1.0+b/(1.0+c)))/(sinel+(a/(sinel+b/(sinel+c))))
+    return (1.0+a/(1.0+b/(1.0+c)))/(sE+(a/(sE+b/(sE+c))))
 
 
-def tropmapfNiell(t, pos, el):
-    """ tropospheric mapping function by Niell (NMF) """
-    if pos[2] < -1e3 or pos[2] > 20e3 or el <= 0.0:
-        return 0.0, 0.0
+def mapfParam(t, lat):
+    """ mapping function parameters based on lat ,time """
+    # lat = [15,30,45,60,75]
+    # hs(average) [a,b,c] hs(amplitude) [a,b,c] wet [a,b,c]
     coef = np.array([
         [1.2769934E-3, 1.2683230E-3, 1.2465397E-3, 1.2196049E-3, 1.2045996E-3],
         [2.9153695E-3, 2.9152299E-3, 2.9288445E-3, 2.9022565E-3, 2.9024912E-3],
@@ -1494,20 +1576,36 @@ def tropmapfNiell(t, pos, el):
         [1.4275268E-3, 1.5138625E-3, 1.4572752E-3, 1.5007428E-3, 1.7599082E-3],
         [4.3472961E-2, 4.6729510E-2, 4.3908931E-2, 4.4626982E-2, 5.4736038E-2],
     ])
-    aht = [2.53E-5, 5.49E-3, 1.14E-3]
-    lat = np.rad2deg(pos[0])
-    hgt = pos[2]
     y = (time2doy(t)-28.0)/365.25
     if lat < 0.0:
         y += 0.5
     cosy = np.cos(2.0*np.pi*y)
-    lat = np.abs(lat)
-    c = interpc(coef, lat)
+    c = interpc(coef, np.abs(np.rad2deg(lat)))
     ah = c[0:3]-c[3:6]*cosy
     aw = c[6:9]
-    dm = (1.0/np.sin(el)-mapf(el, aht[0], aht[1], aht[2]))*hgt*1e-3
-    mapfh = mapf(el, ah[0], ah[1], ah[2])+dm
-    mapfw = mapf(el, aw[0], aw[1], aw[2])
+
+    # return [ah,bh,ch], [aw,bw,cw]
+    return ah, aw
+
+
+def tropmapfNiell(t, pos, el, ah=None, aw=None):
+    """ tropospheric mapping function by Niell (NMF) """
+
+    hgt = pos[2]  # ellipsoidal height [m]
+
+    if hgt < -1e3 or hgt > 20e3 or el <= 0.0:
+        return 0.0, 0.0
+
+    if ah is None or aw is None:
+        ah, aw = mapfParam(t, pos[0])
+
+    aht = [2.53E-5, 5.49E-3, 1.14E-3]  # height correction
+
+    sE = np.sin(el)
+    dm = (1.0/sE-mapf(sE, aht[0], aht[1], aht[2]))*hgt*1e-3
+    mapfh = mapf(sE, ah[0], ah[1], ah[2])+dm
+    mapfw = mapf(sE, aw[0], aw[1], aw[2])
+
     return mapfh, mapfw
 
 
@@ -1527,9 +1625,9 @@ def meteoHpf():
     """
     Hopfield atmosphere model
     """
-    pres = 1010.0
-    temp = 291.1
-    e = 10.4
+    pres = 1010.0  # pressure [hPa]
+    temp = 291.1  # temperature [K]
+    e = 10.4  # water vapor pressure [hPa]
     return pres, temp, e
 
 
@@ -1541,7 +1639,7 @@ def tropmapfHpf(el):
     mapfh = 1.0/(np.sin(np.sqrt(el**2+(np.pi/72.0)**2)))
     mapfw = 1.0/(np.sin(np.sqrt(el**2+(np.pi/120.0)**2)))
 
-    return mapfh, mapfw,
+    return mapfh, mapfw
 
 
 def tropmodelHpf():
@@ -1557,8 +1655,88 @@ def tropmodelHpf():
     return trop_dry, trop_wet, None
 
 
+def tropmapfSBAS(el):
+    """
+    Tropospheric mapping functions for Hopfield model
+    """
+
+    s_el = np.sin(el)
+    mf = 1.001/np.sqrt(0.002001+s_el**2)
+
+    return mf, mf
+
+
+def atmosParam(t, lat, el=np.pi/2):
+    """ atmospheric model parameters (P[mbar], T[K], e[mbar], beta[K/m], lam) """
+
+    # average of P[mbar], T[K], e[mbar], beta[K/m], lam
+    tbl_a = np.array([
+        [1013.25, 299.65, 26.31, 6.30e-3, 2.77],  # 15deg or less
+        [1017.25, 294.15, 21.79, 6.05e-3, 3.15],  # 30deg
+        [1015.75, 283.15, 11.66, 5.58e-3, 2.57],  # 45deg
+        [1011.75, 272.15,  6.78, 5.39e-3, 1.81],  # 60deg
+        [1013.00, 263.65,  4.11, 4.53e-3, 1.55],  # 75deg or greater
+    ])
+
+    # seasonal variation of P[mbar], T[K], e[mbar], beta[K/m], lam
+    tbl_v = np.array([
+        [0.00,  0.00, 0.00, 0.00e-3, 0.00],
+        [-3.75,  7.00, 8.85, 0.25e-3, 0.33],
+        [-2.25, 11.00, 7.24, 0.32e-3, 0.46],
+        [-1.75, 15.00, 5.36, 0.81e-3, 0.74],
+        [-0.50, 14.50, 3.39, 0.62e-3, 0.30],
+    ])
+
+    dmin = 28 if lat >= 0 else 211
+    y = (time2doy(t)-dmin)/365.25
+    cosy = np.cos(2.0*np.pi*y)
+
+    c = interpc(np.c_[tbl_a, tbl_v].T, np.abs(lat))
+    pres, temp, e, beta, lam = c[0:5]-c[5:10]*cosy
+
+    return pres, temp, e, beta, lam
+
+
+def tropheightCorr(t, temp, beta, lam, hgt):
+    """ tropspheric delay height correction  """
+
+    Rd, g = 287.054, 9.80665
+
+    p1, p2 = 1-beta*hgt/temp, g/(Rd*beta)
+    sf_hs = np.pow(p1, p2)
+    sf_wet = np.pow(p1, (lam+1)*p2-1)
+
+    return sf_hs, sf_wet
+
+
+def tropmodelSBAS(t, pos, el=np.pi/2):
+    """ SBAS tropospheric delay model """
+
+    lat = pos[0]*rCST.R2D
+    hgt = pos[2]
+
+    pres, temp, e, beta, lam = atmosParam(t, lat, el)
+    sf_hs, sf_wet = tropheightCorr(t, temp, beta, lam, hgt)
+
+    Rd, gm = 287.054, 9.784
+    # zero-altitude zenith delay term
+    z_hyd = 77.604e-6*Rd*pres/gm
+    z_wet = 0.382*Rd*e/((gm*(lam+1.0)-beta*Rd)*temp)
+
+    d_hyd = sf_hs*z_hyd
+    d_wet = sf_wet*z_wet
+
+    # mapping function
+    sE = np.sin(el)
+    mf = 1.001/np.sqrt(0.002001+sE**2)
+
+    trop_hyd, trop_wet = d_hyd*mf, d_wet*mf
+
+    return trop_hyd, trop_wet, None
+
+
 def copy_buff(src, dst, ofst_s=0, ofst_d=0, blen=0):
-    """ copy bit-wise buffer copy """
+    """ bit-wise buffer copy """
     b = blen//32
     r = blen-b*32
     for k in range(b):
@@ -1568,3 +1746,63 @@ def copy_buff(src, dst, ofst_s=0, ofst_d=0, blen=0):
         fmt = 'u'+str(r)
         d = bs.unpack_from(fmt, src, b*32+ofst_s)[0]
         bs.pack_into(fmt, dst, b*32+ofst_d, d)
+
+
+def load_config(file_path):
+    with open(file_path, 'r') as file:
+        config = yaml.safe_load(file)
+    return config
+
+
+trop_model_tbl = {
+    "": uTropoModel.NONE,
+    "SAAST": uTropoModel.SAAST,
+    "HOPF": uTropoModel.HOPF,
+    "SBAS": uTropoModel.SBAS
+}
+
+iono_model_tbl = {
+    "": uIonoModel.NONE,
+    "KLOBUCHAR": uIonoModel.KLOBUCHAR,
+    "NEQUICK_G": uIonoModel.GIM,
+    "SBAS": uIonoModel.SBAS
+}
+
+
+default_config = {
+    "nav": {
+        "ephopt": 2,  # 2: SSR-APC
+        "trop_opt": 1,
+        "iono_opt": 1,
+        "phw_opt": 1,
+        "cmooth": False,
+        "trop_model": "SAAST",
+        "iono_model": "KLOBUCHAR",
+
+        "eratio": [50.0, 50.0],
+        "err": [0, 0.007, 0.0035],
+
+        # initial value of covariance
+        "sig_p0": 100.0,  # [m]
+        "sig_v0": 1.0,  # [m/s]
+        "sig_ztd0": 0.1,  # [m]
+        "sig_ion0": 10.0,  # [m]
+        "sig_n0": 30.0,  # [cyc]
+
+        # Process noise sigma
+        # "sig_qp": 100.0,
+        "sig_qp": 1e-2,  # [m/sqrt(s)]
+        "sig_qv": 1.0,  # [m]
+        "sig_qztd": 0.0008,  # [m]
+        "sig_qion": 10.0,  # [m]
+        "sig_qb": 1e-4,  # [m]
+
+        # AR parameters
+        "armode": 0,  # 0:float-ppp,1:continuous,2:instantaneous,3:fix-and-hold
+        "parmode": 2,  # Partial AR 1: normal, 2: PAR
+        "par_P0": 0.995,  # probability of sussefull AR
+        "thresar": 3.0,  # AR acceptance threshold
+        "elmaskar": 20.0,
+
+    }
+}

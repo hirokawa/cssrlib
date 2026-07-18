@@ -242,10 +242,11 @@ def estimILS(L, d, ahat, ncands=2):
     return afixed, sqnorm
 
 
-def parsearch(zhat, Qzhat, Z, L, d, Ps, P0=0.995, ncands=2):
+def parsearch(zhat, Qzhat, Z, L, d, Ps, P0=0.995, ncands=2, exclmax=1):
     """ Partial Ambiguity Resolution """
     n = len(Qzhat)
     k = 0
+    # idx = np.argsort(d)[::-1]
     while Ps < P0 and k < (n-1):
         k += 1
 
@@ -253,7 +254,7 @@ def parsearch(zhat, Qzhat, Z, L, d, Ps, P0=0.995, ncands=2):
         # would be fixed
         Ps = sr_boost(d[k:])
 
-    if Ps > P0:
+    if k <= exclmax and Ps > P0:
 
         # zpar, sqnorm = msearch(L[k:, k:], d[k:], zhat[k:], ncands)
         zpar, sqnorm = estimILS(L[k:, k:], d[k:], zhat[k:], ncands)
@@ -285,7 +286,7 @@ def parsearch(zhat, Qzhat, Z, L, d, Ps, P0=0.995, ncands=2):
     return zpar, sqnorm, Qzpar, Zpar, Ps, nfix, zfix
 
 
-def mlambda(ahat, Qahat, ncands=2, armode=1, P0=0.995):
+def mlambda(ahat, Qahat, ncands=2, parmode=1, P0=0.995):
     """ modified LAMBDA method for ambiguity resolution """
     # s = time.perf_counter_ns()
     L, d = ldldecom(Qahat)
@@ -299,14 +300,37 @@ def mlambda(ahat, Qahat, ncands=2, armode=1, P0=0.995):
 
     Ps = sr_boost(d)
 
-    if armode == 1:
+    if parmode == 1:
         # zfix, s = msearch(L, d, zhat, ncands)
         zfix, s = estimILS(L, d, zhat, ncands)
         nfix = len(zhat)
 
-    elif armode == 2:  # PAR
+    elif parmode == 2:  # PAR
         zpar, s, Qzpar, Zpar, Ps, nfix, zfix = parsearch(zhat, Qzhat, Z, L, d,
                                                          Ps, P0, ncands)
+    elif parmode == 3:
+
+        # zfix, s = estimILS(L, d, zhat, ncands)
+        zfix, s = msearch(L, d, zhat, ncands)
+        nfix = len(zhat)
+
+        thresar = 2.0
+        ratio = s[1]/s[0]
+
+        if ratio < thresar:
+
+            for k in range(len(zhat)):
+                d_ = np.delete(d, k)
+                L_ = np.delete(np.delete(L, k, 0), k, 1)
+                zhat_ = np.delete(d, k)
+
+                zfix_, s = msearch(L_, d_, zhat_, ncands)
+                # zfix, s = estimILS(L_, d_, zhat_, ncands)
+                ratio = s[1]/s[0]
+                if ratio >= thresar:
+                    break
+
+        nfix = len(zhat)-1
 
     afix_ = iZt@zfix
     return afix_, s, nfix, Ps

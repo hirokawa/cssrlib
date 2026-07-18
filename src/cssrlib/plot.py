@@ -114,7 +114,7 @@ def draw_circle(ax, ccrs, p, col, nc=10, alpha=0.5):
             transform=ccrs)
 
 
-def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, figtype=1):
+def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, ylim_v=None, figtype=1):
     """ plot ENU coordinates """
 
     lbl_t = ['East [m]', 'North [m]', 'Up [m]']
@@ -122,11 +122,16 @@ def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, figtype=1):
 
     fig = plt.figure(figsize=[7, 9])
     fig.set_rasterized(True)
+    idx2 = np.array([])
 
     if smode is not None:
+        idx2 = np.where(smode == 2)[0]  # dgps
         idx4 = np.where(smode == 4)[0]  # fix
         idx5 = np.where(smode == 5)[0]  # float
         idx0 = np.where(smode == 0)[0]  # none
+
+    if ylim_v is None:
+        ylim_v = ylim
 
     if figtype == 1:  # ENU versus t
 
@@ -136,6 +141,9 @@ def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, figtype=1):
             plt.subplot(nfig, 1, k+1)
             if smode is None:
                 plt.plot(t, enu[:, k])
+            elif len(idx2) > 0:  # DGPS
+                plt.plot(t[idx0], enu[idx0, k], 'r.', label='none')
+                plt.plot(t[idx2], enu[idx2, k], 'y.', label='dgps')
             else:
                 plt.plot(t[idx0], enu[idx0, k], 'r.', label='none')
                 plt.plot(t[idx5], enu[idx5, k], 'y.', label='float')
@@ -143,7 +151,9 @@ def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, figtype=1):
 
             plt.ylabel(lbl_t[k])
             plt.grid()
-            plt.ylim([-ylim, ylim])
+            lim = ylim_v if k == 2 else ylim
+            plt.ylim([-lim, lim])
+
             plt.gca().xaxis.set_major_formatter(md.DateFormatter(fmt))
 
         if ztd is not None:
@@ -159,11 +169,11 @@ def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, figtype=1):
                          markersize=8, label='fix')
 
             plt.ylabel('ZTD [cm]')
+            plt.ylim([0, 40])
             plt.grid()
             plt.gca().xaxis.set_major_formatter(md.DateFormatter(fmt))
 
-            plt.xlabel('Time [HH:MM]')
-
+        plt.xlabel('Time [HH:MM]')
         plt.legend()
 
     elif figtype == 2:  # horizontal coordinates
@@ -171,6 +181,9 @@ def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, figtype=1):
 
         if smode is None:
             plt.plot(enu[:, 0], enu[:, 1])
+        elif idx2 is not None:  # DGPS
+            plt.plot(enu[idx0, 0], enu[idx0, 1], 'r.', label='none')
+            plt.plot(enu[idx2, 0], enu[idx2, 1], 'y.', label='dgps')
         else:
             plt.plot(enu[idx0, 0], enu[idx0, 1], 'r.', label='none')
             plt.plot(enu[idx5, 0], enu[idx5, 1], 'y.', label='float')

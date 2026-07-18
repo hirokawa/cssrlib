@@ -61,9 +61,9 @@ class cssr_has(cssr):
         """ decode header part of HAS messages """
 
         if st == sCSSR.MASK:
-            ui = 0
+            udi = 0
         else:
-            ui = bs.unpack_from('u4', msg, i)[0]
+            udi = bs.unpack_from('u4', msg, i)[0]
             i += 4
 
         if self.tow0 >= 0:
@@ -71,7 +71,7 @@ class cssr_has(cssr):
             if self.week >= 0:
                 self.time = gpst2time(self.week, self.tow)
 
-        head = {'uint': ui, 'mi': 0, 'iodssr': self.iodssr}
+        head = {'udi': udi, 'mi': 0, 'iodssr': self.iodssr}
         return head, i
 
     def decode_cssr(self, msg, i=0):

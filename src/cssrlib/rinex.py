@@ -176,7 +176,6 @@ class rnxdec:
             nav.geph = []
             nav.seph = []
 
-
         for line in fnav:
             if line[60:73] == 'END OF HEADER':
                 break
@@ -447,36 +446,36 @@ class rnxdec:
                         # b7-8: M, b6: P4, b5: P3, b4: P2, b2-3: P1, b0-1: P
                         geph.status = int(self.flt(line, 0))
                         geph.dtaun = -self.flt(line, 1)
-                        geph.urai = int(self.flt(line, 2))
+                        geph.urai[0] = int(self.flt(line, 2))
                         if len(line) >= 80:
                             geph.svh = int(self.flt(line, 3))
                     else:  # L1OC,L3OC
                         sattype = int(self.flt(line, 0))
                         src = int(self.flt(line, 1))
-                        aode_ee = int(self.flt(line, 2))
-                        aode_et = int(self.flt(line, 3))
+                        geph.aode = int(self.flt(line, 2))
+                        geph.aodc = int(self.flt(line, 3))
 
                         line = fnav.readline()  # line #5
                         P2 = int(self.flt(line, 0))  # attitude flag
-                        t0 = self.flt(line, 1)  # sec of day, UTC(SU)
-                        tau1 = self.flt(line, 2)
-                        tau2 = self.flt(line, 3)
+                        geph.tin = self.flt(line, 1)  # sec of day, UTC(SU)
+                        geph.tau1 = self.flt(line, 2)
+                        geph.tau2 = self.flt(line, 3)
 
                         line = fnav.readline()  # line #6
-                        yaw = self.flt(line, 0)
-                        sgn = int(self.flt(line, 1))
-                        win = self.flt(line, 2)
-                        dw = self.flt(line, 3)
+                        geph.yaw = self.flt(line, 0)
+                        geph.sn = int(self.flt(line, 1))
+                        geph.win = self.flt(line, 2)
+                        geph.dw = self.flt(line, 3)
 
                         line = fnav.readline()  # line #7
-                        wmax = self.flt(line, 0)
-                        dxpc = self.flt(line, 1)
-                        dypc = self.flt(line, 2)
-                        dzpc = self.flt(line, 3)
+                        geph.wmax = self.flt(line, 0)
+                        geph.dpoc[0] = self.flt(line, 1)
+                        geph.dpoc[1] = self.flt(line, 2)
+                        geph.dpoc[2] = self.flt(line, 3)
 
                         line = fnav.readline()  # line #8
-                        urai_orb = int(self.flt(line, 0))
-                        urai_clk = int(self.flt(line, 1))
+                        geph.urai[0] = int(self.flt(line, 0))
+                        geph.urai[1] = int(self.flt(line, 1))
                         tot = self.flt(line, 2)
 
                 tod = t0 % 86400.0
@@ -532,7 +531,7 @@ class rnxdec:
                 continue
 
             elif sys not in (uGNSS.GPS, uGNSS.GAL, uGNSS.QZS, uGNSS.BDS,
-                                uGNSS.IRN):
+                             uGNSS.IRN):
                 continue
 
             prn = int(line[1:3])
@@ -803,7 +802,8 @@ class rnxdec:
         obsfile: Path = Path(obsfile)
         if obsfile.suffix.lower() in ['.gz', '.z']:
             import gzip
-            self.fobs = gzip.open(obsfile, 'rt', encoding='utf-8', errors='ignore')
+            self.fobs = gzip.open(
+                obsfile, 'rt', encoding='utf-8', errors='ignore')
         else:
             self.fobs = open(obsfile, 'rt')
         return self._decode_obsh()
@@ -1020,6 +1020,7 @@ class rnxenc:
         self.anttype = "Unknown"
         self.pos = np.zeros(3)
         self.dant = np.zeros(3)
+        self.glo_bias = None
 
         self.rec_eph = {}
 
@@ -1070,7 +1071,7 @@ class rnxenc:
         fh.write("{:20s}{:40s}{:20s}\n".format(
             self.observer, self.agency, "OBSERVER / AGENCY"))
         fh.write("{:20s}{:20s}{:20s}{:20s}\n".format(
-            self.rec, self.rectype, self.recver, "REC # / TYPE / VERS"))
+            self.rec, self.rectype, self.recver[:20], "REC # / TYPE / VERS"))
         fh.write("{:20s}{:20s}{:20s}{:20s}\n".format(
             self.ant, self.anttype, "", "ANT # / TYPE"))
         fh.write("{:14.4f}{:14.4f}{:14.4f}{:18s}{:20s}\n".format(
@@ -1091,6 +1092,9 @@ class rnxenc:
             if uTYP.S in self.sig_tab[sys]:
                 cn = self.sig_tab[sys][uTYP.S]
                 nsig += len(cn)
+
+            if nsig == 0:
+                continue
 
             fh.write("{:1s}  {:3d}".format(sys_t[sys], nsig))
 
@@ -1159,8 +1163,8 @@ class rnxenc:
         fh.write("  {:1d}{:3d}\n".format(0, nsat))
 
         for k in range(nsat):
-            fh.write("{:3s}".format(sat2id(obs.sat[k])))
             sys, prn = sat2prn(obs.sat[k])
+            fh.write("{:3s}".format(sat2id(obs.sat[k])))
             for i in range(nsig):
                 ssi = min(max(int(obs.S[k][i]/6), 1), 9)
                 lli = obs.lli[k][i]

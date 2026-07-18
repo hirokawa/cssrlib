@@ -1,9 +1,9 @@
 """
 module for PPP processing
 """
-import cssrlib.gnss as gn
-from cssrlib.peph import gpst2utc, time2epoch
-from enum import IntEnum
+from cssrlib.gnss import rCST, epoch2time, time2epoch, timeadd
+from cssrlib.gnss import timediff, vnorm, ecef2pos, xyz2enu, enu2xyz, gpst2utc
+from cssrlib.gnss import ecef2enu, Nav, prn2sat, pos2ecef, uGNSS
 from math import sin, cos, atan2, asin
 import numpy as np
 try:
@@ -129,8 +129,8 @@ def nut_iau1980(t_, f):
         dpsi += (nut[i, 6]+nut[i, 7]*t_)*sin(ang)
         deps += (nut[i, 8]+nut[i, 9]*t_)*cos(ang)
 
-    dpsi *= gn.rCST.AS2R*1e-4
-    deps *= gn.rCST.AS2R*1e-4
+    dpsi *= rCST.AS2R*1e-4
+    deps *= rCST.AS2R*1e-4
     return dpsi, deps
 
 
@@ -153,7 +153,7 @@ def ast_args(t_):
         tt[k_+1] = tt[k_]*t_
     for k_ in range(5):
         f[k_] = fc[k_, 0]*3600.0+fc[k_, 1:]@tt
-        f[k_] = np.fmod(f[k_]*gn.rCST.AS2R, 2.0*np.pi)
+        f[k_] = np.fmod(f[k_]*rCST.AS2R, 2.0*np.pi)
     return f
 
 
@@ -180,33 +180,33 @@ def Rz(t_):
 
 def utc2gmst(t_, ut1_utc=0):
     """ UTC to GMST """
-    ep0 = gn.epoch2time([2000, 1, 1, 12, 0, 0])
-    tut = gn.timeadd(t_, ut1_utc)
-    ep = gn.time2epoch(tut)
-    tut0 = gn.epoch2time([ep[0], ep[1], ep[2], 0, 0, 0])
+    ep0 = epoch2time([2000, 1, 1, 12, 0, 0])
+    tut = timeadd(t_, ut1_utc)
+    ep = time2epoch(tut)
+    tut0 = epoch2time([ep[0], ep[1], ep[2], 0, 0, 0])
     ut = ep[3]*3600+ep[4]*60+ep[5]
-    t1 = gn.timediff(tut0, ep0)/gn.rCST.CENTURY_SEC
+    t1 = timediff(tut0, ep0)/rCST.CENTURY_SEC
     t2 = t1**2
     t3 = t2*t1
     gmst0 = 24110.54841+8640184.812866*t1+0.093104*t2-6.2e-6*t3
     gmst = gmst0+1.002737909350795*ut
-    return np.fmod(gmst, gn.rCST.DAY_SEC)*(2.0*np.pi/gn.rCST.DAY_SEC)
+    return np.fmod(gmst, rCST.DAY_SEC)*(2.0*np.pi/rCST.DAY_SEC)
 
 
 def eci2ecef(tgps, erpv):
     """ ECI to ECEF conversion matrix """
-    tutc = gn.gpst2utc(tgps)
-    ep0 = gn.epoch2time([2000, 1, 1, 12, 0, 0])
-    dt = gn.timediff(tgps, ep0)
-    t_ = (dt+19+32.184)/gn.rCST.CENTURY_SEC
+    tutc = gpst2utc(tgps)
+    ep0 = epoch2time([2000, 1, 1, 12, 0, 0])
+    dt = timediff(tgps, ep0)
+    t_ = (dt+19+32.184)/rCST.CENTURY_SEC
     t2 = t_**2
     t3 = t2*t_
     f = ast_args(t_)
     # iau1976 precession
-    ze = (2306.2181*t_+0.30188*t2+0.017998*t3)*gn.rCST.AS2R
-    th = (2004.3109*t_-0.42665*t2-0.041833*t3)*gn.rCST.AS2R
-    z = (2306.2181*t_+1.09468*t2+0.018203*t3)*gn.rCST.AS2R
-    eps = (84381.448-46.8150*t_-0.00059*t2+0.001813*t3)*gn.rCST.AS2R
+    ze = (2306.2181*t_+0.30188*t2+0.017998*t3)*rCST.AS2R
+    th = (2004.3109*t_-0.42665*t2-0.041833*t3)*rCST.AS2R
+    z = (2306.2181*t_+1.09468*t2+0.018203*t3)*rCST.AS2R
+    eps = (84381.448-46.8150*t_-0.00059*t2+0.001813*t3)*rCST.AS2R
     P = Rz(-z)@Ry(th)@Rz(-ze)
 
     # iau1980 nutation
@@ -216,7 +216,7 @@ def eci2ecef(tgps, erpv):
     # Greenwich apparent sidereal time [rad]
     gmst = utc2gmst(tutc, erpv[2])
     gast = gmst+dpsi*cos(eps)
-    gast += (0.00264*sin(f[4])+0.000063*sin(2.0*f[4]))*gn.rCST.AS2R
+    gast += (0.00264*sin(f[4])+0.000063*sin(2.0*f[4]))*rCST.AS2R
 
     W = Ry(-erpv[0])@Rx(-erpv[1])
     U = W@Rz(gast)@N@P
@@ -226,9 +226,9 @@ def eci2ecef(tgps, erpv):
 
 def sunmoonpos(tutc, erpv=np.zeros(5)):
     """ calculate sun/moon position in ECEF """
-    tut = gn.timeadd(tutc, erpv[2])
-    ep0 = gn.epoch2time([2000, 1, 1, 12, 0, 0])
-    t_ = gn.timediff(tut, ep0)/gn.rCST.CENTURY_SEC
+    tut = timeadd(tutc, erpv[2])
+    ep0 = epoch2time([2000, 1, 1, 12, 0, 0])
+    t_ = timediff(tut, ep0)/rCST.CENTURY_SEC
     f = ast_args(t_)
     eps = np.deg2rad(23.439291-0.0130042*t_)  # Mean Obliquity of the ecliptic
     c_e = cos(eps)
@@ -239,7 +239,7 @@ def sunmoonpos(tutc, erpv=np.zeros(5)):
     ls = np.deg2rad(280.460+36000.770*t_+1.914666471*sin(Ms) +
                     0.019994643*sin(2.0*Ms))
     # Distance of the Sun from the Earth
-    rs = gn.rCST.AU*(1.000140612-0.016708617*cos(Ms)-0.000139589*cos(2.0*Ms))
+    rs = rCST.AU*(1.000140612-0.016708617*cos(Ms)-0.000139589*cos(2.0*Ms))
     c_l = cos(ls)
     s_l = sin(ls)
     rsun_eci = np.array([rs*c_l, rs*c_e*s_l, rs*s_e*s_l])
@@ -250,7 +250,7 @@ def sunmoonpos(tutc, erpv=np.zeros(5)):
         0.17*sin(f[2]-2.0*f[3])
     u = (0.9508+0.0518*cos(f[0])+0.0095*cos(f[0]-2.0*f[3]) +
          0.0078*cos(2.0*f[3])+0.0028*cos(2.0*f[0]))
-    rm = gn.rCST.RE_WGS84/sin(np.deg2rad(u))
+    rm = rCST.RE_WGS84/sin(np.deg2rad(u))
     c_l = cos(np.deg2rad(lm))
     s_l = sin(np.deg2rad(lm))
     c_p = cos(np.deg2rad(pm))
@@ -270,17 +270,16 @@ def shapiro(rsat, rrcv):
     rs = np.linalg.norm(rsat)
     rr = np.linalg.norm(rrcv)
     rrs = np.linalg.norm(rsat-rrcv)
-    corr = (2*gn.rCST.GME/gn.rCST.CLIGHT**2)*np.log((rs+rr+rrs)/(rs+rr-rrs))
+    corr = (2*rCST.GME/rCST.CLIGHT**2)*np.log((rs+rr+rrs)/(rs+rr-rrs))
     return corr
 
 
-def windupcorr(time, rs, vs, rr, phw, full=False):
+def windupcorr(time, rs, vs, rr, rsun, phw, full=False):
     """ calculate windup correction """
-    ek = gn.vnorm(rr-rs)
+    ek = vnorm(rr-rs)
     if full:
         # Satellite antenna frame unit vectors assuming standard yaw attitude law
         #
-        rsun, _, _ = sunmoonpos(gpst2utc(time))
         r = -rs
         ezs = r/np.linalg.norm(r)
         r = rsun-rs
@@ -289,14 +288,14 @@ def windupcorr(time, rs, vs, rr, phw, full=False):
         eys = r/np.linalg.norm(r)
         exs = np.cross(eys, ezs)
     else:
-        we = np.array([0, 0, gn.rCST.OMGE])
-        ek = gn.vnorm(rr-rs)
-        ezs = gn.vnorm(-rs)
-        ess = gn.vnorm(vs+np.cross(we, rs))
-        eys = gn.vnorm(np.cross(ezs, ess))
+        we = np.array([0, 0, rCST.OMGE])
+        ek = vnorm(rr-rs)
+        ezs = vnorm(-rs)
+        ess = vnorm(vs+np.cross(we, rs))
+        eys = vnorm(np.cross(ezs, ess))
         exs = np.cross(eys, ezs)
-    pos = gn.ecef2pos(rr)
-    E = gn.xyz2enu(pos)
+    pos = ecef2pos(rr)
+    E = xyz2enu(pos)
     exr = E[0, :]
     eyr = E[1, :]
     eks = np.cross(ek, eys)
@@ -313,24 +312,14 @@ def windupcorr(time, rs, vs, rr, phw, full=False):
     return phw
 
 
-class uTideModel(IntEnum):
-    """
-    Enumeration for Earth tide model selection
-    """
-
-    NONE = -1
-    SIMPLE = 0
-    IERS2010 = 1
-
-
 def tide_pl(eu, rp, GMp, pos):
     """ pole tide correction """
     H3 = 0.293
     L3 = 0.0156
     r = np.linalg.norm(rp)
     ep = rp/r
-    K2 = GMp/gn.rCST.GME*gn.rCST.RE_WGS84**4/r**3
-    K3 = K2*gn.rCST.RE_WGS84/r
+    K2 = GMp/rCST.GME*rCST.RE_WGS84**4/r**3
+    K3 = K2*rCST.RE_WGS84/r
     latp = asin(ep[2])
     lonp = atan2(ep[1], ep[0])
     c_p = cos(latp)
@@ -359,8 +348,8 @@ def solid_tide(rsun, rmoon, pos, E, gmst, flag=True):
     """ solid earth tide correction """
     # time domain
     eu = E[2, :]
-    dr1 = tide_pl(eu, rsun, gn.rCST.GMS, pos)
-    dr2 = tide_pl(eu, rmoon, gn.rCST.GMM, pos)
+    dr1 = tide_pl(eu, rsun, rCST.GMS, pos)
+    dr2 = tide_pl(eu, rmoon, rCST.GMM, pos)
     # frequency domain
     s_2l = sin(2.0*pos[0])
     du = -0.012*s_2l*sin(gmst+pos[1])
@@ -382,7 +371,7 @@ def tidedisp(tutc, pos, erpv=None):
     if erpv is None:
         erpv = np.zeros(5)
     rs, rm, gmst = sunmoonpos(tutc, erpv)
-    E = gn.xyz2enu(pos)
+    E = xyz2enu(pos)
     dr = solid_tide(rs, rm, pos, E, gmst)
     return dr
 
@@ -400,7 +389,7 @@ def tidedispIERS2010(tutc, pos, erpv=None):
                                         int(e[5]),
                                         np.rad2deg(pos[0]), 0, 1,
                                         np.rad2deg(pos[1]), 0, 1)
-    E = gn.enu2xyz(pos)
+    E = enu2xyz(pos)
     return E@np.array([disp_e[0, 0], disp_n[0, 0], disp_u[0, 0]])
 
 
@@ -409,7 +398,7 @@ if __name__ == '__main__':
     from cssrlib.ephemeris import findeph, eph2pos
     from cssrlib.rinex import rnxdec
 
-    tgps_ = gn.epoch2time([2021, 3, 19, 0, 0, 0])
+    tgps_ = epoch2time([2021, 3, 19, 0, 0, 0])
     pos_ = np.array([0.61678759,  2.43512138, 64.94054687])
     erpv_ = np.array([2.1079217879069683e-06, 4.8733853217911866e-07,
                      -0.044509672541668682, -0.0007141, 0])
@@ -422,10 +411,10 @@ if __name__ == '__main__':
         t = np.zeros(n)
         dr_ = np.zeros((n, 3))
         for k in range(n):
-            tn = gn.timeadd(tgps_, k*300)
-            t[k] = gn.timediff(tn, tgps_)
-            dn_ = tidedisp(gn.gpst2utc(tn), pos_, erpv_)
-            dr_[k, :] = gn.ecef2enu(pos_, dn_)
+            tn = timeadd(tgps_, k*300)
+            t[k] = timediff(tn, tgps_)
+            dn_ = tidedisp(gpst2utc(tn), pos_, erpv_)
+            dr_[k, :] = ecef2enu(pos_, dn_)
 
         plt.figure()
         plt.plot(t/3600, dr_)
@@ -438,11 +427,11 @@ if __name__ == '__main__':
     if flg_pwup:
         bdir = '../data/'
         navfile = bdir+'30340780.21q'
-        nav = gn.Nav()
+        nav = Nav()
         dec = rnxdec()
         nav = dec.decode_nav(navfile, nav)
-        rr_ = gn.pos2ecef(pos_)
-        sat = gn.prn2sat(gn.uGNSS.QZS, 194)
+        rr_ = pos2ecef(pos_)
+        sat = prn2sat(uGNSS.QZS, 194)
 
         n = 86400//300
         t = np.zeros(n)
@@ -450,11 +439,12 @@ if __name__ == '__main__':
         d = np.zeros(n)
         phw_ = 0
         for k in range(n):
-            tn = gn.timeadd(tgps_, k*300)
+            tn = timeadd(tgps_, k*300)
             eph = findeph(nav.eph, tn, sat)
             rs_, vs_, dts = eph2pos(tn, eph, True)
-            phw_ = windupcorr(tn, rs_, vs_, rr_, phw_)
-            t[k] = gn.timediff(tn, tgps_)
+            rsun_, _, _ = sunmoonpos(gpst2utc(tn))
+            phw_ = windupcorr(tn, rs_, vs_, rr_, rsun_, phw_)
+            t[k] = timediff(tn, tgps_)
             ph_[k] = phw_
             d[k] = shapiro(rs_, rr_)
 

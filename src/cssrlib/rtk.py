@@ -12,13 +12,13 @@ from cssrlib.ephemeris import satposs
 class rtkpos(pppos):
     """ class for RTK processing """
 
-    def __init__(self, nav, pos0=np.zeros(3), logfile=None):
+    def __init__(self, nav, pos0=np.zeros(3), logfile=None, config=None):
         """ initialize variables for PPP-RTK """
 
         # trop, iono from cssr
         # phase windup model is local/regional
         super().__init__(nav=nav, pos0=pos0, logfile=logfile,
-                         trop_opt=0, iono_opt=0, phw_opt=0)
+                         trop_opt=0, iono_opt=0, phw_opt=0, config=config)
 
         self.nav.eratio = np.ones(self.nav.nf)*50  # [-] factor
         self.nav.err = [0, 0.01, 0.005]/np.sqrt(2)  # [m] sigma

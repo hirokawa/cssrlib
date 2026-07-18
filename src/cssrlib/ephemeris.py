@@ -500,8 +500,8 @@ def satposs(obs, nav, cs=None, orb=None):
         contains GNSS measurements
     nav : Nav()
         contains coarse satellite orbit and clock offset information
-    cs  : cssr_has()
-        contains precise SSR corrections for satellite orbit and clock offset
+    cs  : cssr() or derivatives
+        contains SSR corrections for satellite orbit and clock offset
     obs : peph()
         contains precise satellite orbit and clock offset information
 
@@ -707,6 +707,10 @@ def satposs(obs, nav, cs=None, orb=None):
                 if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5,
                                    sc.DGPS) and sys == uGNSS.GPS:
                     dts[i] -= eph.tgd
+                    # eph_c = findeph(nav.eph, t, sat, mode=1)  # L5 CNAV
+                    # if eph_c is not None:
+                    #    gam15 = (154/115)**2
+                    #    dts[i] += (eph_c.isc[3]-gam15*eph_c.isc[0])/(1-gam15)
 
                 ers = vnorm(rs[i, :]-nav.x[0: 3])
                 dorb_ = -ers@dorb_e

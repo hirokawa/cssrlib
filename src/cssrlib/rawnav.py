@@ -11,7 +11,7 @@ Raw Navigation Message decoder
     Satellite Positioning, Navigation and Timing Service (IS-QZSS-PNT-006),
     2024
 [3] Galileo Open Service Signal-in-Space Interface Control Document
-    (OS SIS ICD) Issue 2.1, 2023
+    (OS SIS ICD) Issue 2.2, 2025
 [4] BeiDou Navigation Satellite System Signal In Space Interface Control
     Document: Open Service Signal B1C (Version 1.0), 2017
 [5] GLONASS Interface Control Document (Edition 5.1), 2008
@@ -26,9 +26,9 @@ import numpy as np
 import bitstruct.c as bs
 import struct as st
 from cssrlib.gnss import gpst2time, gst2time, bdt2time, rCST
-from cssrlib.gnss import prn2sat, uGNSS, sat2prn, bdt2gpst, utc2gpst, time2gpst
+from cssrlib.gnss import uGNSS, sat2prn, bdt2gpst, utc2gpst, time2gpst
 from cssrlib.gnss import Eph, Geph, uTYP, copy_buff, gtime_t, timeadd, Seph
-from cssrlib.gnss import tod2tow
+from cssrlib.gnss import tod2tow, char2sys
 from cssrlib.rinex import rnxenc, rSigRnx
 
 
@@ -59,6 +59,7 @@ def gep2time(N4, Nt, sod):
 
 class RawNav():
     """ Raw Navigation Message decoder """
+
     def __init__(self, opt=None, prefix=''):
         self.gps_lnav = {}
         for k in range(uGNSS.GPSMAX):
@@ -488,6 +489,7 @@ class RawNav():
         alp = np.array([a0*rCST.P2_30, a1*rCST.P2_27,
                         a2*rCST.P2_24, a3*rCST.P2_24])
         bet = np.array([b0*(2**11), b1*(2**14), b2*(2**16), b3*(2**16)])
+
         return i
 
     def decode_gps_cnav_utc(self, msg, i):
@@ -1467,6 +1469,9 @@ class RawNav():
         i += 103+3
         prn = bs.unpack_from('u6', msg, i)[0]
 
+        if prn != prn_:
+            return None
+
         tow = itow*7200+toi*18
 
         # subframe 3 (274)
@@ -1487,7 +1492,7 @@ class RawNav():
         elif msgid == 17:  # NavIC Time offsets
             i = self.decode_irn_l1nav_utc(msg, i)
         elif msgid == 0:  # null message
-            None
+            pass
 
         i += 243
 
@@ -1837,7 +1842,7 @@ class RawNav():
         geph.tau1 = tau1*rCST.P2_5
         geph.tau2 = tau2*rCST.P2_5
 
-        # KP: expected UTC(SU) correection
+        # KP: expected UTC(SU) correction
         # A: L1OCd time correction in next string  0: no plan
 
         geph.sattype = M  # 0:M(L3),1:K1(L3),3:K1(L2/L3),2:K2(L1/L2/L3)
@@ -1851,7 +1856,8 @@ class RawNav():
 
         geph.toe = gep2time(N4, Nt, tb*90.0)
         _, geph.toes = time2gpst(geph.toe)
-        geph.tof = gep2time(N4, Nt, ts*3.0)
+        scl = 2.0 if stype == 1 else 3.0
+        geph.tof = gep2time(N4, Nt, ts*scl)
         geph.iode = tb
 
         geph.mode = stype  # FDMA:0,L1OC:1,L2OC:2,L3OC:3
@@ -1926,6 +1932,7 @@ class rcvOpt():
     flg_sbas = False
     flg_rnxnav = False
     flg_rnxobs = False
+    useL1CB = False
 
 
 class rcvDec():
@@ -1970,14 +1977,20 @@ class rcvDec():
     fh_rnxnav = None
     fh_rnxobs = None
 
+    obs = None
+
+    useL1CB = False
+
     mode_galinav = 0  # 0: RawNav, 1: Decoded
 
     rn = None  # placeholder for Raw Navigation message decoder
     re = None  # placeholder for RINEX encoder
 
     sig_tab = {}
+    sys_t = [] # list of enabled GNSS
 
     def __init__(self, opt=None, prefix='', gnss_t='GECJ'):
+        self.sys_t = char2sys(gnss_t)
         self.sig_tab = self.init_sig_tab(gnss_t)
         if opt is not None:
             self.init_param(opt, prefix)
@@ -2075,64 +2088,53 @@ class rcvDec():
 
         if opt.flg_qzslnav:
             self.flg_qzslnav = True
-            self.file_qzslnav = "qzslnav.txt"
-            self.fh_qzslnav = open(prefix+self.file_qzslnav, mode='w')
+            if self.fh_gpslnav is None:
+                self.fh_gpslnav = open(prefix+'.lnv', mode='w')
         if opt.flg_gpslnav:
             self.flg_gpslnav = True
-            self.file_gpslnav = "gpslnav.txt"
-            self.fh_gpslnav = open(prefix+self.file_gpslnav, mode='w')
+            self.fh_gpslnav = open(prefix+'.lnv', mode='w')
         if opt.flg_qzscnav:
             self.flg_qzscnav = True
-            self.file_qzscnav = "qzscnav.txt"
-            self.fh_qzscnav = open(prefix+self.file_qzscnav, mode='w')
+            if self.fh_gpscnav is None:
+                self.fh_gpscnav = open(prefix+'.cnv', mode='w')
         if opt.flg_gpscnav:
             self.flg_gpscnav = True
-            self.file_gpscnav = "gpscnav.txt"
-            self.fh_gpscnav = open(prefix+self.file_gpscnav, mode='w')
+            self.fh_gpscnav = open(prefix+'.cnv', mode='w')
         if opt.flg_qzscnav2:
             self.flg_qzscnav2 = True
-            self.file_qzscnav2 = "qzscnav2.txt"
-            self.fh_qzscnav2 = open(prefix+self.file_qzscnav2, mode='w')
+            if self.fh_gpscnav2 is None:
+                self.fh_gpscnav2 = open(prefix+'.cn2', mode='w')
         if opt.flg_gpscnav2:
             self.flg_gpscnav2 = True
-            self.file_gpscnav2 = "gpscnav2.txt"
-            self.fh_gpscnav2 = open(prefix+self.file_gpscnav2, mode='w')
+            self.fh_gpscnav2 = open(prefix+'.cn2', mode='w')
         if opt.flg_qzsl6:
             self.flg_qzsl6 = True
-            self.file_qzsl6 = "qzsl6.txt"
-            self.fh_qzsl6 = open(prefix+self.file_qzsl6, mode='w')
+            self.fh_qzsl6 = open(prefix+'.l6', mode='w')
         if opt.flg_qzsl1s:
             self.flg_qzsl1s = True
             if self.fh_sbas is None:
-                self.file_sbas = "sbas.txt"
-                self.fh_sbas = open(prefix+self.file_sbas, mode='w')
+                self.fh_sbas = open(prefix+'.sbs', mode='w')
         if opt.flg_qzsl5s:
             self.flg_qzsl5s = True
             if self.fh_sbas is None:
-                self.file_sbas = "sbas.txt"
-                self.fh_sbas = open(prefix+self.file_sbas, mode='w')
+                self.fh_sbas = open(prefix+'.sbs', mode='w')
         if opt.flg_gale6:
             self.flg_gale6 = True
-            self.file_gale6 = "gale6.txt"
-            self.fh_gale6 = open(prefix+self.file_gale6, mode='w')
+            self.fh_gale6 = open(prefix+'.e6', mode='w')
         if opt.flg_galinav:
             self.flg_galinav = True
-            self.file_galinav = "galinav.txt"
-            self.fh_galinav = open(prefix+self.file_galinav, mode='w')
+            self.fh_galinav = open(prefix+'.inv', mode='w')
         if opt.flg_galfnav:
             self.flg_galfnav = True
-            self.file_galfnav = "galfnav.txt"
-            self.fh_galfnav = open(prefix+self.file_galfnav, mode='w')
+            self.fh_galfnav = open(prefix+'.fnv', mode='w')
         if opt.flg_bdsb1c:
             self.flg_bdsb1c = True
-            self.file_bdsb1c = "bdsb1c.txt"
-            self.fh_bdsb1c = open(prefix+self.file_bdsb1c, mode='w')
+            #self.fh_bdsb1c = open(prefix+'.b1c', mode='w')
         if opt.flg_bdsb2a:
             self.flg_bdsb2a = True
         if opt.flg_bdsb2b:
             self.flg_bdsb2b = True
-            self.file_bdsb2b = "bdsb2b.txt"
-            self.fh_bdsb2b = open(prefix+self.file_bdsb2b, mode='w')
+            self.fh_bdsb2b = open(prefix+'.b2b', mode='w')
         if opt.flg_bdsd12:
             self.flg_bdsd12 = True
         if opt.flg_gloca:
@@ -2142,18 +2144,17 @@ class rcvDec():
         if opt.flg_sbas:
             self.flg_sbas = True
             if self.fh_sbas is None:
-                self.file_sbas = "sbas.txt"
-                self.fh_sbas = open(prefix+self.file_sbas, mode='w')
+                self.fh_sbas = open(prefix+'.sbs', mode='w')
         if opt.flg_rnxnav:
             self.flg_rnxnav = True
-            self.file_rnxnav = "rnx.nav"
-            self.fh_rnxnav = open(prefix+self.file_rnxnav, mode='w')
+            self.fh_rnxnav = open(prefix+'.nav', mode='w')
             self.re.rnx_nav_header(self.fh_rnxnav)
         if opt.flg_rnxobs:
             self.flg_rnxobs = True
-            self.file_rnxobs = "rnx.obs"
-            self.fh_rnxobs = open(prefix+self.file_rnxobs, mode='w')
+            self.fh_rnxobs = open(prefix+'.obs', mode='w')
             # self.re.rnx_obs_header(self.fh_rnxobs)
+        if opt.useL1CB:  # use QZSS L1CB in place of L1CA
+            self.useL1CB = True
 
     def file_close(self):
         """ close file handlers """

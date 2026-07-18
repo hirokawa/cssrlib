@@ -107,7 +107,7 @@ class cssr_bds(cssr):
             if self.week >= 0:
                 self.time = bdt2gpst(bdt2time(self.week, self.tow))
 
-        head = {'uint': 0, 'mi': 0, 'iodssr': iodssr}
+        head = {'udi': 0, 'mi': 0, 'iodssr': iodssr}
         return head, i
 
     def add_gnss(self, mask, blen, gnss):
