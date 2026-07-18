@@ -181,7 +181,7 @@ def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, ylim_v=None, figtype=1):
 
         if smode is None:
             plt.plot(enu[:, 0], enu[:, 1])
-        elif idx2 is not None:  # DGPS
+        elif len(idx2) > 0:  # DGPS
             plt.plot(enu[idx0, 0], enu[idx0, 1], 'r.', label='none')
             plt.plot(enu[idx2, 0], enu[idx2, 1], 'y.', label='dgps')
         else:
