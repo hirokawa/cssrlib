@@ -6,7 +6,7 @@ import numpy as np
 
 from cssrlib.ephemeris import satposs
 from cssrlib.gnss import sat2id, sat2prn, rSigRnx, uTYP, uGNSS, rCST
-from cssrlib.gnss import ecef2pos, tropmodel, geodist, satazel, uTideModel
+from cssrlib.gnss import ecef2pos, xyz2enu, tropmodel, geodist, satazel, uTideModel
 from cssrlib.gnss import time2str, timediff, gpst2utc, tropmapf, id2sat
 from cssrlib.gnss import trop_model_tbl, iono_model_tbl, default_config
 from cssrlib.ppp import tidedisp, tidedispIERS2010, shapiro, windupcorr, sunmoonpos
@@ -29,6 +29,10 @@ class pppos():
 
     nav = None
     VAR_HOLDAMB = 0.001
+    IONO_REJ_STD = 1.0
+    IONO_COV_RATIO = 1.0
+    IONO_THRE_H = 2.0
+    IONO_THRE_V = 3.0
 
     def __init__(self, nav, pos0=np.zeros(3),
                  logfile=None, trop_opt=-1, iono_opt=-1, phw_opt=-1,
@@ -66,7 +70,7 @@ class pppos():
         if 'trop_opt' in config['nav']:
             self.nav.trop_opt = config['nav']['trop_opt']
 
-        # 0: use iono-model, 1: estimate, 2: use cssr correction
+        # 0: use iono-model, 1: estimate, 2: use cssr correction, 3: fast-ppp
         if 'iono_opt' in config['nav']:
             self.nav.iono_opt = config['nav']['iono_opt']
 
@@ -82,7 +86,7 @@ class pppos():
         # slant ionospheric delay states
         #
         self.nav.ntrop = (1 if self.nav.trop_opt == 1 else 0)
-        self.nav.niono = (uGNSS.MAXSAT if self.nav.iono_opt == 1 else 0)
+        self.nav.niono = (uGNSS.MAXSAT if self.nav.iono_opt in (1, 3) else 0)
 
         self.nav.na = (3 if self.nav.pmode == 0 else 6)
         self.nav.nq = (3 if self.nav.pmode == 0 else 6)
@@ -202,7 +206,7 @@ class pppos():
             else:
                 self.nav.q[3] = self.nav.sig_qztd**2
 
-        if self.nav.iono_opt == 1:  # iono is estimated
+        if self.nav.niono > 0:  # iono is estimated
             # Iono delay
             if self.nav.pmode >= 1:  # kinematic
                 self.nav.q[7:7+uGNSS.MAXSAT] = self.nav.sig_qion**2
@@ -259,7 +263,7 @@ class pppos():
 
     def IT(self, na):
         """ return index of zenith tropospheric delay estimate """
-        return na-uGNSS.MAXSAT-1
+        return na-self.nav.niono-1
 
     def varerr(self, nav, el, f):
         """ variation of measurement """
@@ -532,7 +536,7 @@ class pppos():
         trop_hs, trop_wet, _ = tropmodel(obs.t, pos,
                                          model=self.nav.trpModel)
 
-        if self.nav.trop_opt == 2 or self.nav.iono_opt == 2:  # from cssr
+        if self.nav.trop_opt == 2 or self.nav.iono_opt in (2, 3):  # from cssr
             inet = cs.find_grid_index(pos)
             dlat, dlon = cs.get_dpos(pos)
             cs.inet = inet
@@ -562,7 +566,8 @@ class pppos():
             if np.any(self.nav.edt[sat-1, :] > 0):
                 continue
 
-            if inet > 0 and sat not in cs.lc[inet].sat_n:
+            if self.nav.iono_opt == 2 and inet > 0 and \
+                    sat not in cs.lc[inet].sat_n:
                 continue
 
             # Pseudorange, carrier-phase and C/N0 signals
@@ -1005,6 +1010,94 @@ class pppos():
         R = self.ddcov(nb, b, Ri, Rj, nv)
 
         return v, H, R
+
+    def const_iono_corr(self, obs, cs, x, sat):
+        """ constraint to ionospheric correction for fast PPP """
+        if cs is None or self.nav.iono_opt != 3:
+            return np.zeros(0), np.zeros((0, self.nav.nx)), np.zeros(0)
+
+        pos = ecef2pos(x[0:3])
+        inet = cs.find_grid_index(pos)
+        if inet <= 0 or (cs.lc[inet].cstat & (1 << sCType.STEC)) == 0:
+            return np.zeros(0), np.zeros((0, self.nav.nx)), np.zeros(0)
+
+        E = xyz2enu(pos)
+        Q = E @ self.nav.P[0:3, 0:3] @ E.T
+        sd_h = np.sqrt(max(0.0, Q[0, 0] + Q[1, 1]))
+        sd_v = np.sqrt(max(0.0, Q[2, 2]))
+
+        if sd_h > 0.0 and sd_v > 0.0 and \
+                sd_h < self.IONO_THRE_H and sd_v < self.IONO_THRE_V:
+            return np.zeros(0), np.zeros((0, self.nav.nx)), np.zeros(0)
+
+        dlat, dlon = cs.get_dpos(pos)
+        stec = cs.get_stec(dlat, dlon)
+        lc = cs.lc[inet]
+        tmax = cs.tmax.get(sCType.STEC, 300.0)
+
+        # Estimate system bias for each constellation
+        bsys = {}
+        dly_s = {}
+        std_s = {}
+        for sys in obs.sig.keys():
+            idx = self.sysidx(sat, sys)
+            if len(idx) == 0:
+                continue
+            if sys == uGNSS.GLO:
+                freq0 = obs.sig[sys][uTYP.L][0].frequency(0)
+            else:
+                freq0 = obs.sig[sys][uTYP.L][0].frequency()
+            fact = 40.31e16 / (freq0 * freq0)
+
+            ave = 0.0
+            ns_s = 0
+            for k in idx:
+                sat_k = sat[k]
+                if sat_k not in lc.sat_n:
+                    continue
+                if sat_k in lc.t0 and sCType.STEC in lc.t0[sat_k]:
+                    t0 = lc.t0[sat_k][sCType.STEC]
+                elif 0 in lc.t0 and sCType.STEC in lc.t0[0]:
+                    t0 = lc.t0[0][sCType.STEC]
+                else:
+                    continue
+                if t0.time == 0 or abs(timediff(obs.t, t0)) > tmax:
+                    continue
+                std = lc.stec_quality.get(sat_k, np.nan)
+                if np.isnan(std) or std <= 0.0 or std > self.IONO_REJ_STD:
+                    continue
+                j = self.II(sat_k, self.nav.na)
+                if x[j] == 0.0:
+                    continue
+                idx_l = lc.sat_n.index(sat_k)
+                dly = fact * stec[idx_l]
+                dly_s[sat_k] = dly
+                std_s[sat_k] = std
+                ave += (dly - x[j])
+                ns_s += 1
+            if ns_s > 0:
+                bsys[sys] = ave / ns_s
+
+        v_ion = []
+        H_ion = []
+        var_ion = []
+        for k, sat_k in enumerate(sat):
+            if sat_k not in dly_s:
+                continue
+            sys, _ = sat2prn(sat_k)
+            if sys not in bsys:
+                continue
+            j = self.II(sat_k, self.nav.na)
+            v_ion.append(dly_s[sat_k] - x[j] - bsys[sys])
+            h = np.zeros(self.nav.nx)
+            h[j] = 1.0
+            H_ion.append(h)
+            var_ion.append((std_s[sat_k]**2) * self.IONO_COV_RATIO)
+
+        if len(v_ion) == 0:
+            return np.zeros(0), np.zeros((0, self.nav.nx)), np.zeros(0)
+
+        return np.array(v_ion), np.array(H_ion), np.array(var_ion)
 
     def ddcov(self, nb, n, Ri, Rj, nv):
         """ DD measurement error covariance """
@@ -1477,6 +1570,17 @@ class pppos():
         # SD residuals
         #
         v, H, R = self.sdres(obs, xp, y, e, sat, el)
+        if self.nav.iono_opt == 3:
+            v_i, H_i, var_i = self.const_iono_corr(obs, cs, xp, sat)
+            if len(v_i) > 0:
+                nv_ = len(v)
+                ni_ = len(v_i)
+                v = np.concatenate([v, v_i])
+                H = np.vstack([H, H_i])
+                R_new = np.zeros((nv_ + ni_, nv_ + ni_))
+                R_new[:nv_, :nv_] = R
+                R_new[nv_:, nv_:] = np.diag(var_i)
+                R = R_new
         Pp = self.nav.P.copy()
 
         # Kalman filter measurement update

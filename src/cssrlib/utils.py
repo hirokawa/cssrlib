@@ -132,7 +132,7 @@ class process:
         self.enu[ne, :] = ecef2enu(self.pos_ref, sol-self.xyz_ref)
         self.smode[ne] = self.nav.smode
 
-        if ppp is None:
+        if ppp is None or self.nav.ntrop == 0:
             self.ztd = None
         else:
             self.ztd[ne] = self.nav.xa[ppp.IT(self.nav.na)] \
