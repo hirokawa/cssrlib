@@ -8,13 +8,20 @@ module for Compact SSR processing
 
 """
 
+import os
+from binascii import hexlify
 import bitstruct as bs
 import copy
 import numpy as np
 from enum import IntEnum
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, hmac, cmac
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.ciphers import algorithms
 from cssrlib.gnss import gpst2time, rCST, prn2sat, uGNSS, gtime_t, rSigRnx
 from cssrlib.gnss import uSIG, uTYP, sat2prn, time2str, sat2id, timediff
 from cssrlib.gnss import copy_buff, time2gpst, mapfParam
+from cssrlib.osnma import raw2der, load_pubkey
 
 
 class sCSSRTYPE(IntEnum):
@@ -355,6 +362,26 @@ class cssr:
         self.nav_mode = {uGNSS.GPS: 0, uGNSS.QZS: 0,
                          uGNSS.GAL: 0, uGNSS.BDS: 1, uGNSS.GLO: 0}
 
+        self.nma = None
+        self.sf_tow = 0
+        self.klen_t = {0: 96, 1: 104, 2: 112, 3: 120, 4: 128,
+                       5: 160, 6: 192, 7: 224, 8: 256, 15: 0}
+        self.mlen_t = {5: 20, 6: 24, 7: 28, 8: 32, 9: 40}
+        self.blen_t = [10, 20, 40, 60]
+        self.dslen_t = {1: 512, 3: 1056}
+        self.pklen_t = {1: 264, 3: 536}
+        self.aux_frm = {}
+        self.st13_1 = None
+        self.st13_1_buf = {}
+        self.st13_2 = None
+        self.st13_3 = {}
+        self.st13_4 = None
+        self.pk_clas = {}
+        self.veri_tkey = {}
+        self.clas_msg = {}
+        self.clas_vstatus = {}
+        self.prn_a = 0
+        self.pubk_bdir = '../data/pubkey/qznma'
         self.fh = None
         if foutname is not None:
             self.fh = open(foutname, "w")
@@ -1147,10 +1174,493 @@ class cssr:
 
         return i
 
+    def decode_cssr_auth_head(self, msg, i, st2=False):
+        """decode MT4073,13 Authentication header """
+        dtow = bs.unpack_from('u12', msg, i)[0]
+        i += 12
+        if self.tow0 >= 0:
+            self.tow = self.tow0 + dtow
+            if self.sf_tow > 0:
+                if self.tow - self.sf_tow > 1800:
+                    self.tow -= 3600
+                elif self.sf_tow - self.tow > 1800:
+                    self.tow += 3600
+        else:
+            for r in self.st13_3.values():
+                self.tow = r['kroothow'] * 3600 + dtow
+                break
+            else:
+                self.tow = dtow
+        if self.week >= 0:
+            self.time = gpst2time(self.week, self.tow)
+        if st2:
+            fmt = 'u4u1u4u2u3'
+            names = ['delayid', 'mi', 'iodssr', 'cmas', 'cpks']
+            nb = 14
+        else:
+            fmt = 'u4u1u2u3'
+            names = ['delayid', 'mi', 'cmas', 'cpks']
+            nb = 10
+        dfm = bs.unpack_from_dict(fmt, names, msg, i)
+        dfm['toh'] = dtow
+        i += nb
+        return dfm, i
+
+    def decode_cssr_auth_info(self, msg, i):
+        """decode MT4073,13,1 Authentication Information Message """
+        head, i = self.decode_cssr_auth_head(msg, i)
+        chainid, ks_idx, ms_idx, nmac = bs.unpack_from('u2u4u4u4', msg, i)
+        i += 14
+
+        keysize = self.klen_t.get(ks_idx, -1)
+        macsize = self.mlen_t.get(ms_idx, -1)
+        if keysize < 0 or macsize < 0:
+            return -1
+
+        mac = []
+        for _ in range(nmac):
+            m = bytearray((macsize + 7) // 8)
+            copy_buff(msg, m, i, 0, macsize)
+            i += macsize
+            mac.append(m)
+
+        teslakey = bytearray((keysize + 7) // 8)
+        if keysize > 0:
+            copy_buff(msg, teslakey, i, 0, keysize)
+            i += keysize
+
+        ccf = bs.unpack_from('u1', msg, i)[0]
+        i += 1
+        if ccf == 1:
+            ct_bin = bs.unpack_from('u6', msg, i)[0]
+            i += 6
+            ct = ((3**((ct_bin >> 3) & 0x07) *
+                   (1.0 + (ct_bin & 0x07) / 4.0)) - 1.0) / 25.0
+        else:
+            ct_bin = 0
+            ct = 0.0
+
+        tow = int(self.tow)
+        is_new = (tow not in self.st13_1_buf)
+        self.st13_1 = {
+            'hdr': head, 'tow': tow, 'chainid': chainid, 'keysize': keysize,
+            'macsize': macsize, 'nmac': nmac, 'mac': mac,
+            'teslakey': teslakey, 'ccf': ccf, 'ct': ct, 'ct_bin': ct_bin,
+            'prn_a': self.prn_a
+        }
+        self.st13_1_buf[tow] = self.st13_1
+
+        if self.monlevel >= 2 and is_new:
+            print(f"ST13,1 toh={head['toh']:4d} cid={chainid} " +
+                  f"ksz={keysize:3d} msz={macsize:2d} nmac={nmac} " +
+                  f"tkey={hexlify(teslakey).decode()} ccf={ccf} ct={ct:.2f}")
+
+        if is_new and (tow - 10) in self.st13_1_buf:
+            st13_1_mac = self.st13_1_buf[tow - 10]
+            if self.verify_clas_tesla_key(st13_1_mac, self.st13_1):
+                if (tow - 20) in self.clas_msg:
+                    self.verify_clas_mac(st13_1_mac, self.st13_1)
+
+        return i
+
+    def decode_cssr_auth_nma(self, msg, i):
+        """decode MT4073,13,2 Authentication NMA Message """
+        head, i = self.decode_cssr_auth_head(msg, i, st2=True)
+        chainid, ms_idx = bs.unpack_from('u2u4', msg, i)
+        i += 6
+
+        macsize = self.mlen_t.get(ms_idx, -1)
+        if macsize < 0:
+            return -1
+
+        nma_svmask = bs.unpack_from('u' + str(self.nsat_n), msg, i)[0] \
+            if self.nsat_n > 0 else 0
+        i += self.nsat_n
+        sat_n = self.decode_local_sat(nma_svmask)
+        nsn = len(sat_n)
+
+        cop_f = bs.unpack_from('u1', msg, i)[0]
+        i += 1
+
+        mac = {}
+        cop = {}
+        for sat in sat_n:
+            m = bytearray((macsize + 7) // 8)
+            copy_buff(msg, m, i, 0, macsize)
+            i += macsize
+            mac[sat] = m
+            if cop_f == 1:
+                cop[sat] = bs.unpack_from('u4', msg, i)[0]
+                i += 4
+
+        ccf = bs.unpack_from('u1', msg, i)[0]
+        i += 1
+        if ccf == 1:
+            ct_bin = bs.unpack_from('u6', msg, i)[0]
+            i += 6
+            ct = ((3**((ct_bin >> 3) & 0x07) *
+                   (1.0 + (ct_bin & 0x07) / 4.0)) - 1.0) / 25.0
+        else:
+            ct_bin = 0
+            ct = 0.0
+
+        self.st13_2 = {
+            'hdr': head, 'tow': int(self.tow), 'chainid': chainid,
+            'macsize': macsize, 'nma_svmask': nma_svmask, 'sat_n': sat_n,
+            'nsn': nsn, 'cop_f': cop_f, 'mac': mac, 'cop': cop,
+            'ccf': ccf, 'ct': ct, 'ct_bin': ct_bin
+        }
+        return i
+
+    def decode_cssr_auth_rki(self, msg, i, i0=0):
+        """decode MT4073,13,3 Authentication Root Key Information """
+        if len(msg) * 8 < i + 64:
+            return -1
+        head, i = self.decode_cssr_auth_head(msg, i)
+        chainid, pkeytype, pkeyid, hfunc, mfunc, ks_idx, krootwn, kroothow = \
+            bs.unpack_from('u2u4u8u2u2u4u12u8', msg, i)
+        i += 42
+
+        keysize = self.klen_t.get(ks_idx, -1)
+        dssize = self.dslen_t.get(pkeytype, -1)
+        if keysize < 0 or dssize < 0 or len(msg) * 8 < i + 48 + keysize + dssize:
+            return -1
+
+        salt = bytearray(6)
+        copy_buff(msg, salt, i, 0, 48)
+        i += 48
+
+        kroot = bytearray(keysize // 8)
+        copy_buff(msg, kroot, i, 0, keysize)
+        i += keysize
+
+        ds = bytearray(dssize // 8)
+        copy_buff(msg, ds, i, 0, dssize)
+        i += dssize
+
+        msg_m = bytearray((83 + keysize + 7) // 8)
+        copy_buff(msg, msg_m, i0 + 37, 0, 7)
+        copy_buff(msg, msg_m, i0 + 56, 7, 76 + keysize)
+
+        prev = self.st13_3.get(chainid)
+        if prev is None or prev['kroot'] != kroot or prev['ds'] != ds:
+            self.st13_3[chainid] = {
+                'hdr': head, 'chainid': chainid, 'pkeytype': pkeytype,
+                'pkeyid': pkeyid, 'hfunc': hfunc, 'mfunc': mfunc,
+                'keysize': keysize, 'krootwn': krootwn, 'kroothow': kroothow,
+                'salt': salt, 'kroot': kroot, 'ds': ds, 'msg_m': msg_m,
+                'verified': False
+            }
+            if self.monlevel >= 2:
+                print(f"ST13,3 toh={head['toh']:4d} cid={chainid} " +
+                      f"pkt={pkeytype} pkid={pkeyid} wn={krootwn} " +
+                      f"how={kroothow} kroot={hexlify(kroot).decode()}")
+            self.verify_clas_root_key(chainid)
+
+        return i
+
+    def decode_cssr_auth_pkr(self, msg, i):
+        """decode MT4073,13,4 Authentication Public Key Renewal """
+        if len(msg) * 8 < i + 1062:
+            return -1
+        head, i = self.decode_cssr_auth_head(msg, i)
+        leaf_id = bs.unpack_from('u4', msg, i)[0]
+        i += 4
+
+        itn = []
+        for _ in range(4):
+            node = bytearray(32)
+            copy_buff(msg, node, i, 0, 256)
+            i += 256
+            itn.append(node)
+
+        npkt, npkid = bs.unpack_from('u4u8', msg, i)
+        i += 12
+
+        pklen = self.pklen_t.get(npkt, -1)
+        if pklen < 0 or len(msg) * 8 < i + pklen:
+            return -1
+
+        npk = bytearray((pklen + 7) // 8)
+        copy_buff(msg, npk, i, 0, pklen)
+        i += pklen
+
+        self.st13_4 = {
+            'hdr': head, 'leaf_id': leaf_id, 'itn': itn,
+            'npkt': npkt, 'npkid': npkid, 'npk': npk
+        }
+        return i
+
+    def decode_cssr_auth_seg(self, msg, i):
+        """decode MT4073,13,11 Authentication Segmented Information """
+        mi, msgcnt, auxfrm_iod, strmind, blk_idx, datasize = \
+            bs.unpack_from('u1u8u2u4u2u3', msg, i)
+        i += 20
+
+        blksize = self.blen_t[blk_idx]
+        nbits = blksize * (datasize + 1)
+        frmdata = bytearray((nbits + 7) // 8)
+        copy_buff(msg, frmdata, i, 0, nbits)
+        i += nbits
+
+        key = (strmind, auxfrm_iod)
+        if key not in self.aux_frm:
+            self.aux_frm[key] = {'segs': {}, 'frmnum': 0}
+
+        entry = self.aux_frm[key]
+        if msgcnt in entry['segs'] and \
+                entry['segs'][msgcnt] != (nbits, frmdata):
+            entry['segs'] = {}
+            entry['frmnum'] = 0
+
+        entry['segs'][msgcnt] = (nbits, frmdata)
+        if mi == 0:
+            entry['frmnum'] = msgcnt + 1
+
+        if entry['frmnum'] > 0 and len(entry['segs']) == entry['frmnum']:
+            if all(k in entry['segs'] for k in range(entry['frmnum'])):
+                total_bits = sum(entry['segs'][k][0]
+                                 for k in range(entry['frmnum']))
+                buff = bytearray((total_bits + 7) // 8)
+                pos = 0
+                for k in range(entry['frmnum']):
+                    nb, d = entry['segs'][k]
+                    copy_buff(d, buff, 0, pos, nb)
+                    pos += nb
+                self.decode_cssr(buff, 0)
+
+        return i
+
+    def decode_cssr_auth(self, msg, i):
+        """decode MT4073,13 Network and Navigation Message Authentication """
+        i0 = i - 16
+        subsubtype = bs.unpack_from('u4', msg, i)[0]
+        i += 4
+        if subsubtype == 1:
+            i = self.decode_cssr_auth_info(msg, i)
+        elif subsubtype == 2:
+            i = self.decode_cssr_auth_nma(msg, i)
+        elif subsubtype == 3:
+            i = self.decode_cssr_auth_rki(msg, i, i0=i0)
+        elif subsubtype == 4:
+            i = self.decode_cssr_auth_pkr(msg, i)
+        elif subsubtype == 11:
+            i = self.decode_cssr_auth_seg(msg, i)
+        else:
+            return -1
+        return i
+
+    def verify_clas_root_key(self, chainid):
+        """ verify ST13,3 Root Key using ECDSA """
+        if chainid not in self.st13_3:
+            return False
+        r = self.st13_3[chainid]
+        if r.get('verified', False):
+            return True
+
+        pkeyid = r['pkeyid']
+        if pkeyid not in self.pk_clas:
+            for fname in (f"CMA_{pkeyid:03d}.der", f"{pkeyid:03d}.der"):
+                p = os.path.join(self.pubk_bdir, fname)
+                if os.path.exists(p):
+                    self.pk_clas[pkeyid] = load_pubkey(p)
+                    break
+
+        pk = self.pk_clas.get(pkeyid)
+        if pk is None:
+            if self.monlevel > 0:
+                print(f"loading CLAS public key {pkeyid} failed.")
+            return False
+
+        hash_alg = hashes.SHA256() if r['pkeytype'] == 1 else hashes.SHA512()
+        ds_der = raw2der(r['ds'])
+        status = False
+        try:
+            pk.verify(ds_der, bytes(r['msg_m']), ec.ECDSA(hash_alg))
+            status = True
+        except InvalidSignature:
+            status = False
+
+        r['verified'] = status
+        if self.monlevel > 0:
+            s = f"ST13,3 cid={chainid} pkid={pkeyid}"
+            if status:
+                print(f"#{s} signature OK.")
+            else:
+                print(f"{s} signature NG.")
+        return status
+
+    def verify_clas_tesla_key(self, st13_1_mac, st13_1_key, wn=None):
+        """ verify ST13,1 TESLA key against KROOT or previous key """
+        if st13_1_key.get('verified', False):
+            return True
+        cid = st13_1_key['chainid']
+        if cid not in self.st13_3:
+            return False
+        r = self.st13_3[cid]
+        if not r.get('verified', False):
+            if not self.verify_clas_root_key(cid):
+                return False
+
+        keysize = r['keysize']
+        if st13_1_key['keysize'] != keysize or keysize <= 0:
+            return False
+
+        if wn is None:
+            wn = self.week if self.week >= 0 else r['krootwn']
+
+        mac_tow = st13_1_mac['tow']
+        key_tow = st13_1_key['tow']
+        if (key_tow - mac_tow) % 604800 != 10:
+            return False
+
+        if cid in self.veri_tkey and self.veri_tkey[cid]['kroot'] == r['kroot']:
+            target_key = self.veri_tkey[cid]['key']
+            prev_tow = self.veri_tkey[cid]['tow']
+            prev_wn = self.veri_tkey[cid]['wn']
+            n_iter = ((wn - prev_wn) * 604800 + key_tow - prev_tow) // 10
+        else:
+            target_key = r['kroot']
+            kroot_tow = r['kroothow'] * 3600 + 5
+            n_iter = ((wn - r['krootwn']) * 604800 +
+                      key_tow - kroot_tow) // 10 + 1
+
+        if n_iter < 0:
+            return False
+
+        work = bytearray(st13_1_key['teslakey'])
+        sfi_tow = mac_tow
+        sfi_wn = wn
+        nb_total = (keysize + 32 + 48 + 7) // 8
+        hash_alg = hashes.SHA256() if r['hfunc'] == 0 else hashes.SHA3_256()
+
+        for _ in range(n_iter):
+            buf = bytearray(nb_total)
+            copy_buff(work, buf, 0, 0, keysize)
+            bs.pack_into('u12u20', buf, keysize, sfi_wn, sfi_tow)
+            copy_buff(r['salt'], buf, 0, keysize + 32, 48)
+            digest = hashes.Hash(hash_alg)
+            digest.update(bytes(buf))
+            h = digest.finalize()
+            copy_buff(h, work, 0, 0, keysize)
+            sfi_tow -= 10
+            if sfi_tow < 0:
+                sfi_tow += 604800
+                sfi_wn -= 1
+
+        status = (work == target_key)
+        st13_1_key['verified'] = status
+        if status:
+            self.veri_tkey[cid] = {
+                'key': bytearray(st13_1_key['teslakey']),
+                'tow': key_tow, 'wn': wn, 'kroot': r['kroot']
+            }
+        if self.monlevel > 0:
+            s = f"TESLA tow={key_tow:6d} cid={cid}"
+            if status:
+                print(f"#{s} key OK.")
+            else:
+                print(f"{s} key NG.")
+        return status
+
+    def add_clas_msg(self, subtype, tow, msg, i0, nbit):
+        """ record L6D CSSR subtype message bits for CLAS MAC verification """
+        if subtype < 1 or subtype > 12 or nbit <= 0:
+            return
+        curclk_sf = (int(tow) % 30) // 5 + 1
+        starttow = int(tow) if (curclk_sf % 2 == 0) else int(tow) - 5
+
+        if subtype == 3:
+            midx = 0 if (curclk_sf % 2 == 0) else 1
+        elif subtype in (1, 2, 4, 5, 7, 10):
+            midx = 2
+        elif subtype in (6, 8, 9, 12):
+            midx = 3 if (curclk_sf % 2 == 0) else 4
+        elif subtype == 11:
+            midx = 5 if (curclk_sf % 2 == 0) else 6
+        else:
+            return
+
+        if starttow not in self.clas_msg:
+            self.clas_msg[starttow] = {
+                m: {'buf': bytearray(2048), 'nbits': 0, 'st': []}
+                for m in range(7)
+            }
+        entry = self.clas_msg[starttow][midx]
+        copy_buff(msg, entry['buf'], i0, entry['nbits'], nbit)
+        entry['nbits'] += nbit
+        entry['st'].append(subtype)
+
+    def verify_clas_mac(self, st13_1_mac, st13_1_key, wn=None, prn_a=None):
+        """ verify L6D CSSR messages using MACs in ST13,1 """
+        cid = st13_1_mac['chainid']
+        if cid not in self.st13_3:
+            return {}
+        r = self.st13_3[cid]
+        if not self.verify_clas_tesla_key(st13_1_mac, st13_1_key, wn=wn):
+            return {}
+
+        mac_tow = st13_1_mac['tow']
+        starttow = mac_tow - 10
+        if starttow not in self.clas_msg:
+            return {}
+
+        if wn is None:
+            wn = self.week if self.week >= 0 else r['krootwn']
+        if prn_a is None:
+            prn_a = st13_1_mac.get('prn_a', self.prn_a)
+
+        qzsst = (wn << 20) | mac_tow
+        cmas = st13_1_mac['hdr']['cmas']
+        ccf = st13_1_mac['ccf']
+        ct_bin = st13_1_mac['ct_bin']
+        macsize = st13_1_mac['macsize']
+        tkey = bytes(st13_1_key['teslakey'])
+        results = {}
+
+        for midx in range(min(st13_1_mac['nmac'], 7)):
+            entry = self.clas_msg[starttow][midx]
+            nb = entry['nbits']
+            if nb == 0:
+                continue
+            if midx == 2 and not {1, 2, 4, 7}.issubset(entry['st']):
+                continue
+
+            hdr_bits = 51 + (6 if ccf == 1 else 0)
+            tot_bits = hdr_bits + nb
+            m_buf = bytearray((tot_bits + 7) // 8)
+            bs.pack_into('u8u32u8u2u1', m_buf, 0,
+                         prn_a, qzsst, midx + 1, cmas, ccf)
+            if ccf == 1:
+                bs.pack_into('u6', m_buf, 51, ct_bin)
+            copy_buff(entry['buf'], m_buf, 0, hdr_bits, nb)
+
+            if r['mfunc'] == 0:
+                h = hmac.HMAC(tkey, hashes.SHA256())
+            else:
+                h = cmac.CMAC(algorithms.AES(tkey))
+            h.update(bytes(m_buf))
+            calc_mac = h.finalize()[:macsize // 8]
+            status = (calc_mac == bytes(st13_1_mac['mac'][midx]))
+            results[midx + 1] = status
+
+            if self.monlevel > 0:
+                s = f"CLAS MAC tow={mac_tow:6d} CTR={midx+1}"
+                if status:
+                    print(f"#{s} OK.")
+                else:
+                    print(f"{s} NG.")
+
+        self.clas_vstatus[mac_tow] = results
+        return results
+
     def decode_cssr(self, msg, i=0):
         """decode Compact SSR message """
         df = {'msgtype': 4073}
         while df['msgtype'] == 4073:
+            if len(msg) * 8 < i + 16:
+                return 0
+            i0 = i
             df = bs.unpack_from_dict('u12u4', ['msgtype', 'subtype'], msg, i)
             i += 16
             if df['msgtype'] != 4073:
@@ -1180,8 +1690,14 @@ class cssr:
                 i = self.decode_cssr_comb(msg, i)
             elif self.subtype == sCSSR.ATMOS:  # atmos
                 i = self.decode_cssr_atmos(msg, i)
+            elif self.subtype == sCSSR.AUTH:  # authentication
+                i = self.decode_cssr_auth(msg, i)
             if i <= 0:
                 return 0
+            if self.subtype in (sCSSR.MASK, sCSSR.CLOCK):
+                self.sf_tow = self.tow
+            if self.subtype != sCSSR.AUTH:
+                self.add_clas_msg(self.subtype, self.sf_tow, msg, i0, i - i0)
             if self.monlevel >= 2:
                 if self.flg_net:
                     print("tow={:6.1f} subtype={:2d} inet={:2d}".
@@ -1421,6 +1937,20 @@ class cssr:
 
         copy_buff(msg, self.buff, i, 1695*self.fcnt, 1695)
         self.fcnt = self.fcnt + 1
+
+    def decode_l6emsg(self, msg, ofst=0):
+        """decode QZS L6E message for QZNMA-CLAS """
+        i = ofst * 8
+        preamble, prn_a, mid = bs.unpack_from('u32u8u8', msg, i)
+        if preamble != 0x1acffc1d:
+            return -1
+        vid = (mid >> 5) & 0x7
+        if vid != 3:
+            return -1
+        self.prn_a = prn_a
+        buf = bytearray(61)
+        copy_buff(msg, buf, i + 49 + 605 * 2, 0, 485)
+        return self.decode_cssr(buf, 0)
 
     def merge_cssr(self, cs_):
         """ merge additional correction """

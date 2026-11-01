@@ -2,8 +2,8 @@
 QZSS Navigation Message Authentication (QZNMA)
 
 [1] Quasi-Zenith Satellite System Interface Specification
-    Signal Authentication Service (IS-QZSS-SAS-001),
-    March, 2024
+    Signal Authentication Service (IS-QZSS-SAS-002 Draft),
+    October, 2026
 
 Note:
     to use the package for QZSNMA, the user needs to
@@ -13,7 +13,7 @@ Note:
 """
 
 import copy
-from binascii import unhexlify, hexlify
+from binascii import unhexlify
 import numpy as np
 import bitstruct.c as bs
 from cssrlib.gnss import uGNSS, prn2sat, sat2prn, copy_buff
@@ -111,6 +111,8 @@ class qznma():
 
         self.cnav_mt_t = {10: 1, 11: 2, 30: 3, 31: 3, 32: 3, 33: 3,
                           35: 3, 36: 3, 37: 3, 61: 3}
+        self.cs = None
+        self.prn_a = 0
         self.pubk_bdir = '../data/pubkey/qznma'
 
     def load_navmsg_lnav(self, navfile):
@@ -500,6 +502,16 @@ class qznma():
 
         return npr, mnav
 
+    def decode_clas_rds(self, tow, msg, i):
+        """ decode QZNMA-CLAS (485 bits) """
+        if self.cs is None:
+            return i
+        self.cs.prn_a = self.prn_a
+        buf = bytearray(61)
+        copy_buff(msg, buf, i, 0, 485)
+        self.cs.decode_cssr(buf, 0)
+        return i + 485
+
     def verify_gnss_nav(self, npr, mnav):
         """ verifify the navigation message in MNAV using DS """
         if npr.mt == uNavId.GPS_LNAV:
@@ -871,12 +883,14 @@ class qznma():
                             print(f"CNAV2 {tow_},{prn:3d} signature NG.")
 
         if msg_n is not None:  # L6
-            mid, alrt = bs.unpack_from('u8u1', msg_n, 40)
+            self.prn_a, mid, alrt = bs.unpack_from('u8u8u1', msg_n, 32)
             vid = (mid >> 5) & 0x7  # vendor ID
 
             if vid == 3:  # QZNMA
                 npr1, mnav1 = self.decode_gnss_rds(tow, msg_n, 49)
                 npr2, mnav2 = self.decode_gnss_rds(tow, msg_n, 49+605)
+                self.decode_clas_rds(tow, msg_n, 49+605*2)
+
                 if npr1 is not None:
                     status = self.verify_gnss_nav(npr1, mnav1)
                 if npr2 is not None:
