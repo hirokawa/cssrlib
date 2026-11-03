@@ -1831,6 +1831,8 @@ class cssr:
 
     def find_grid_index(self, pos):
         """Find index/weight of surounding grid."""
+        if not hasattr(self, 'grid') or self.grid is None:
+            return -1
         self.rngmin = 5e3
         clat = np.cos(pos[0])
         dlat = np.deg2rad(self.grid['lat'])-pos[0]
@@ -1876,6 +1878,8 @@ class cssr:
 
     def get_dpos(self, pos):
         """Calculate position offset from reference."""
+        if not hasattr(self, 'grid') or self.grid is None:
+            return 0.0, 0.0
         inet = self.inet_ref
         posd = np.rad2deg(pos[0:2])
         grid = self.grid[self.grid['nid'] == inet]

@@ -1,5 +1,6 @@
 """Module for standard PPP positioning."""
 
+import copy
 import numpy as np
 
 from cssrlib.ephemeris import satposs
@@ -74,7 +75,9 @@ class pppos():
                  config=None):
         """Initialize variables for PPP."""
         if config is None:
-            config = default_config
+            config = copy.deepcopy(default_config)
+        else:
+            config = copy.deepcopy(config)
 
         if trop_opt > 0:
             config['nav']['trop_opt'] = trop_opt
@@ -564,9 +567,12 @@ class pppos():
                                          model=self.nav.trpModel)
 
         if self.nav.trop_opt == 2 or self.nav.iono_opt in (2, 3):  # from cssr
-            inet = cs.find_grid_index(pos)
-            dlat, dlon = cs.get_dpos(pos)
-            cs.inet = inet
+            if cs is not None and hasattr(cs, 'find_grid_index') and getattr(cs, 'grid', None) is not None:
+                inet = cs.find_grid_index(pos)
+                dlat, dlon = cs.get_dpos(pos)
+                cs.inet = inet
+            else:
+                inet = -1
         else:
             inet = -1
 
@@ -991,6 +997,9 @@ class pppos():
     def const_iono_corr(self, obs, cs, x, sat):
         """Apply ionospheric slant delay constraints for fast PPP."""
         if cs is None or self.nav.iono_opt != 3:
+            return np.zeros(0), np.zeros((0, self.nav.nx)), np.zeros(0)
+
+        if not hasattr(cs, 'find_grid_index') or getattr(cs, 'grid', None) is None:
             return np.zeros(0), np.zeros((0, self.nav.nx)), np.zeros(0)
 
         pos = ecef2pos(x[0:3])

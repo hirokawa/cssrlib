@@ -12,6 +12,12 @@ from cssrlib.gnss import gtime_t, rSigRnx
 from cssrlib.peph import atxdec, searchpcv
 from cssrlib.plot import plot_enu
 
+try:
+    from IPython.display import display, clear_output
+    _has_ipython = True
+except ImportError:
+    _has_ipython = False
+
 
 class process:
     """Class to process the positioning."""
@@ -170,11 +176,14 @@ class process:
             self.nav.fout.close()
 
     def plot(self, ttl='test', fig_type=1, ylim=1, ylim_v=2, gfmt='png',
-             dpi=300):
+             dpi=300, xlim=None):
         """Plot utility."""
+        if xlim is None and fig_type == 1 and self.nep > 1:
+            xlim = [self.t[0], self.t[-1]]
+
         if fig_type == 1:
             plot_enu(self.t, self.enu, self.smode,
-                     self.ztd, ylim=ylim, ylim_v=ylim_v)
+                     self.ztd, ylim=ylim, ylim_v=ylim_v, xlim=xlim)
         elif fig_type == 2:
             plot_enu(self.t, self.enu, self.smode, figtype=fig_type, ylim=ylim)
 
@@ -184,3 +193,66 @@ class process:
         plt.savefig(plotFileName, format=plotFileFormat,
                     bbox_inches='tight', dpi=dpi)
         # plt.show()
+
+    def plot_live(self, ne, interval=15, ylim=1.0, ylim_v=2.0, fig_type=1,
+                  show_status=True, force=False, xlim=None):
+        """Plot live positioning results sequentially during processing.
+
+        Parameters
+        ----------
+        ne : int
+            Current epoch index.
+        interval : int, optional
+            Plot update interval in epochs (default: 15).
+        ylim : float, optional
+            Y-axis limit for East/North in meters (default: 1.0).
+        ylim_v : float, optional
+            Y-axis limit for Up in meters (default: 2.0).
+        fig_type : int, optional
+            Figure type: 1 for ENU vs time, 2 for 2D horizontal (default: 1).
+        show_status : bool, optional
+            Whether to display text status above the plot (default: True).
+        force : bool, optional
+            Force plot update regardless of interval (default: False).
+        xlim : tuple or list, optional
+            X-axis limits [t_min, t_max] (default: fixed from start time to final epoch).
+        """
+        if not _has_ipython or interval <= 0:
+            return
+
+        if not force and (ne % interval != 0) and (ne != self.nep - 1):
+            return
+
+        # Slice results up to current epoch
+        t_sub = self.t[:ne + 1]
+        enu_sub = self.enu[:ne + 1, :]
+        smode_sub = self.smode[:ne + 1] if self.smode is not None else None
+        ztd_sub = self.ztd[:ne + 1] if (self.ztd is not None and getattr(self.nav, 'ntrop', 0) > 0) else None
+
+        # Fix horizontal axis maximum to final time
+        if xlim is None and fig_type == 1 and self.nep > 1:
+            if ne > 0:
+                dt = (self.t[ne] - self.t[0]) / ne
+            else:
+                dt = 1.0 / 86400.0
+            t_final = self.t[0] + dt * (self.nep - 1)
+            xlim = [self.t[0], t_final]
+
+        # Clear previous plot from notebook cell output
+        clear_output(wait=True)
+
+        if show_status and ne < len(self.enu):
+            enu_cur = self.enu[ne, :]
+            smode_cur = self.smode[ne]
+            pos_h = np.sqrt(enu_cur[0]**2 + enu_cur[1]**2)
+            mode_names = {0: 'NONE', 1: 'FIX', 2: 'DGPS', 4: 'FIX', 5: 'FLOAT'}
+            mode_str = mode_names.get(smode_cur, f'MODE {smode_cur}')
+            print(f"Epoch {ne + 1}/{self.nep} | Mode: {mode_str} | "
+                  f"E: {enu_cur[0]:+6.3f} m, N: {enu_cur[1]:+6.3f} m, U: {enu_cur[2]:+6.3f} m | "
+                  f"2D: {pos_h:6.3f} m")
+
+        fig = plot_enu(t_sub, enu_sub, smode=smode_sub, ztd=ztd_sub,
+                       ylim=ylim, ylim_v=ylim_v, figtype=fig_type, xlim=xlim)
+        display(fig)
+        plt.close(fig)
+
