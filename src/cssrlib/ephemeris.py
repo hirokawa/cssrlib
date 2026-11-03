@@ -7,7 +7,17 @@ from cssrlib.gnss import uGNSS, rCST, sat2prn, timediff, timeadd, vnorm, cross3
 from cssrlib.gnss import gtime_t, Geph, Eph, Alm, prn2sat, gpst2time, \
     time2gpst, timeget, time2gst, time2bdt, gst2time, bdt2time, epoch2time
 from datetime import datetime
+import math
 import xml.etree.ElementTree as et
+
+try:
+    from numba import njit
+except ImportError:
+    def njit(*args, **kwargs):
+        """Fallback decorator when Numba is not available."""
+        def decorator(func):
+            return func
+        return decorator
 
 MAX_ITER_KEPLER = 30
 RTOL_KEPLER = 1e-13
@@ -52,40 +62,43 @@ def dtadjust(t1, t2, tw=604800):
 
 _GLO_OMG2 = rCST.OMGE_GLO**2
 _GLO_J2_C = 1.5*rCST.J2_GLO*rCST.MU_GLO*rCST.RE_GLO**2
+_MU_GLO = rCST.MU_GLO
+_OMGE_GLO = rCST.OMGE_GLO
 
 
+@njit(fastmath=True)
 def deq(x, acc):
     """Compute differential equations of motion for GLONASS orbit."""
     r2 = x[0]*x[0] + x[1]*x[1] + x[2]*x[2]
     if r2 <= 0.0:
-        return np.zeros(6)
+        return np.zeros(6, dtype=np.float64)
 
     r3 = r2*np.sqrt(r2)
     a = _GLO_J2_C/(r2*r3)
     b = 5.0*x[2]*x[2]/r2
-    c = -rCST.MU_GLO/r3 - a*(1.0-b)
+    c = -_MU_GLO/r3 - a*(1.0-b)
 
-    return np.array([
-        x[3],
-        x[4],
-        x[5],
-        (c+_GLO_OMG2)*x[0] + 2.0*rCST.OMGE_GLO*x[4] + acc[0],
-        (c+_GLO_OMG2)*x[1] - 2.0*rCST.OMGE_GLO*x[3] + acc[1],
-        (c-2.0*a)*x[2] + acc[2],
-    ])
+    res = np.empty(6, dtype=np.float64)
+    res[0] = x[3]
+    res[1] = x[4]
+    res[2] = x[5]
+    res[3] = (c+_GLO_OMG2)*x[0] + 2.0*_OMGE_GLO*x[4] + acc[0]
+    res[4] = (c+_GLO_OMG2)*x[1] - 2.0*_OMGE_GLO*x[3] + acc[1]
+    res[5] = (c-2.0*a)*x[2] + acc[2]
+    return res
 
 
+@njit(fastmath=True)
 def glorbit(t, x, acc):
     """Integrate GLONASS satellite orbit using 4th-order Runge-Kutta."""
     k1 = deq(x, acc)
-    w = x + k1*t/2.0
+    w = x + k1*(t*0.5)
     k2 = deq(w, acc)
-    w = x + k2*t/2.0
+    w = x + k2*(t*0.5)
     k3 = deq(w, acc)
     w = x + k3*t
     k4 = deq(w, acc)
-    x += (k1+2.0*k2+2.0*k3+k4)*t/6.0
-    return x
+    return x + (k1+2.0*k2+2.0*k3+k4)*(t/6.0)
 
 
 def geph2pos(time: gtime_t, geph: Geph, flg_v=False, TSTEP=1.0):
@@ -145,12 +158,14 @@ def geph2rel(rs, vs):
     return - 2.0*(rs@vs)/(rCST.CLIGHT**2)
 
 
+@njit(fastmath=True)
 def eccentricAnomaly(M, e):
     """Compute eccentric anomaly based on mean anomaly and eccentricity."""
     E = M
+    sE = 0.0
     for _ in range(10):
         Eold = E
-        sE = np.sin(E)
+        sE = math.sin(E)
         E = M+e*sE
         if abs(Eold-E) < 1e-12:
             break
@@ -730,8 +745,9 @@ def satposs(obs, nav, cs=None, orb=None):
                 ers = vnorm(rs[i, :]-nav.x[0: 3])
                 dorb_ = -ers@dorb_e
                 sis = dclk-dorb_
+                dt_orb = timediff(cs.lc[0].t0[sat][sCType.ORBIT], nav.time_p)
                 if cs.lc[0].t0[sat][sCType.ORBIT].time % 30 == 0 and \
-                        timediff(cs.lc[0].t0[sat][sCType.ORBIT], nav.time_p) > 0:
+                        dt_orb > 0:
                     if abs(nav.sis[sat]) > 0:
                         nav.dsis[sat] = sis - nav.sis[sat]
                     nav.sis[sat] = sis
