@@ -1,5 +1,4 @@
-"""
-module for RINEX 3.0x/4.0x processing
+"""Module for RINEX 3.0x/4.0x processing.
 
 [1] RINEX: The Receiver Independent Exchange Format Version 4.02, 2024
 
@@ -17,9 +16,10 @@ from cssrlib.gnss import IONParam
 
 
 class pclk_t:
-    """ class for precise clock data """
+    """Class for precise clock data."""
 
     def __init__(self, time=None):
+        """Initialize precise clock record."""
         if time is not None:
             self.time = time
         else:
@@ -29,10 +29,10 @@ class pclk_t:
 
 
 class rnxdec:
-    """ class for RINEX decoder """
+    """Class for RINEX decoder."""
 
     def __init__(self):
-
+        """Initialize RINEX observation and navigation decoder."""
         self.ver = -1.0
         self.fobs = None
 
@@ -61,8 +61,7 @@ class rnxdec:
                         'SBAS': 4, 'CNVX': 5, 'L1NV': 6, 'LXOC': 7}
 
     def setSignals(self, sigList):
-        """ define the signal list for each constellation """
-
+        """Define the signal list for each constellation."""
         for sig in sigList:
             if sig.sys not in self.sig_tab:
                 self.sig_tab.update({sig.sys: {}})
@@ -78,17 +77,14 @@ class rnxdec:
                 self.nsig[typ] = max((self.nsig[typ], len(sig)))
 
     def getSignals(self, sys, typ):
-        """ retrieve signal list for constellation and obs type """
+        """Retrieve signal list for constellation and obs type."""
         if sys in self.sig_tab.keys() and typ in self.sig_tab[sys].keys():
             return self.sig_tab[sys][typ]
         else:
             return []
 
     def autoSubstituteSignals(self):
-        """
-        Automatically substitute signal tracking attribute based on
-        available signals
-        """
+        """Substitute signal tracking attribute based on available signals."""
         for sys, tmp in self.sig_tab.items():
             for typ, sigs in tmp.items():
                 for i, sig in enumerate(sigs):
@@ -124,7 +120,7 @@ class rnxdec:
                             self.sig_tab[sys][typ][i] = sig.toAtt(a)
 
     def flt(self, u, c=-1):
-        """ convert string to float """
+        """Convert string to float."""
         if c >= 0:
             u = u[19*c+4:19*(c+1)+4]
         if u.isspace():
@@ -132,7 +128,7 @@ class rnxdec:
         return float(u.replace("D", "E"))
 
     def adjday(self, t: gtime_t, t0: gtime_t):
-        """ adjust time to within 1 day of t0 """
+        """Adjust time to within 1 day of t0."""
         tt = timediff(t, t0)
         if tt < -43200.0:
             return timeadd(t, 86400.0)
@@ -141,7 +137,7 @@ class rnxdec:
         return t
 
     def decode_time(self, s, ofst=0, slen=2):
-        """ decode time from string """
+        """Decode time from string."""
         year = int(s[ofst+0:ofst+4])
         month = int(s[ofst+5:ofst+7])
         day = int(s[ofst+8:ofst+10])
@@ -152,8 +148,7 @@ class rnxdec:
         return t
 
     def decode_nav(self, navfile: str, nav: Nav, append: bool = False) -> Nav:
-        """Wrapper for decode_nav with Path support"""
-
+        """Decode RINEX navigation file with Path and gzip support."""
         navfile: Path = Path(navfile)
         if navfile.suffix.lower() in ['.gz', '.z']:
             import gzip
@@ -164,13 +159,10 @@ class rnxdec:
                 return self._decode_nav(fnav, nav, append)
 
     def _decode_nav(self, fnav, nav, append=False):
-        """
-        Decode RINEX Navigation message from file
+        """Decode RINEX Navigation message from file.
 
         NOTE: system time epochs are converted into GPST on reading!
-
         """
-
         if not append:
             nav.eph = []
             nav.geph = []
@@ -746,8 +738,7 @@ class rnxdec:
         return nav
 
     def decode_clk(self, clkfile, nav):
-        """decode Clock-RINEX data from file """
-
+        """Decode Clock-RINEX data from file."""
         # Offset for Clock-RINEX v3.x data section
         #
         offs = None
@@ -797,8 +788,7 @@ class rnxdec:
         return nav
 
     def decode_obsh(self, obsfile: str) -> int:
-        """Wrapper of decode RINEX Observation header from file"""
-
+        """Decode RINEX observation header from file with Path support."""
         obsfile: Path = Path(obsfile)
         if obsfile.suffix.lower() in ['.gz', '.z']:
             import gzip
@@ -810,7 +800,7 @@ class rnxdec:
 
     # TODO: decode GLONASS FCN lines
     def _decode_obsh(self):
-        """ decode RINEX Observation header from file """
+        """Decode RINEX Observation header from file."""
         for line in self.fobs:
             if line[60:73] == 'END OF HEADER':
                 break
@@ -866,8 +856,7 @@ class rnxdec:
         return 0
 
     def decode_obs(self):
-        """ decode RINEX Observation message from file """
-
+        """Decode RINEX Observation message from file."""
         obs = Obs()
 
         for line in self.fobs:
@@ -985,7 +974,7 @@ class rnxdec:
 
 
 def sync_obs(dec, decb, dt_th=0.1):
-    """ sync observation between rover and base """
+    """Sync observation between rover and base."""
     obs = dec.decode_obs()
     obsb = decb.decode_obs()
     while True:
@@ -1000,9 +989,10 @@ def sync_obs(dec, decb, dt_th=0.1):
 
 
 class rnxenc:
-    """ class for RINEX encoder """
+    """Class for RINEX encoder."""
 
     def __init__(self, sig_tab=None):
+        """Initialize RINEX observation and navigation encoder."""
         self.ver = -1.0
         self.fobs = None
         self.fnav = None
@@ -1025,7 +1015,7 @@ class rnxenc:
         self.rec_eph = {}
 
     def rnx_nav_header(self, fh=None, ver=4.02):
-        """ write RINEX navigation header to file """
+        """Write RINEX navigation header to file."""
         tutc = timeget()
         tgps = utc2gpst(tutc)
         leaps = timediff(tgps, tutc)
@@ -1044,8 +1034,7 @@ class rnxenc:
                  format("", "END OF HEADER"))
 
     def rnx_obs_header(self, ts: gtime_t, fh=None, ver=4.02):
-        """ write RINEX observation header to file """
-
+        """Write RINEX observation header to file."""
         if self.rnx_obs_header_sent:
             return
         self.rnx_obs_header_sent = True
@@ -1145,6 +1134,7 @@ class rnxenc:
         fh.flush()
 
     def sval(self, v: float):
+        """Format observation value for RINEX output."""
         if v == 0.0:
             s = "{:14s}".format("")
         else:
@@ -1152,8 +1142,7 @@ class rnxenc:
         return s
 
     def rnx_obs_body(self, obs=None, fh=None):
-        """ write RINEX observation message to file """
-
+        """Write RINEX observation message to file."""
         ep = time2epoch(obs.time)
         nsat = len(obs.sat)
         nsig = obs.P.shape[1]
@@ -1186,7 +1175,7 @@ class rnxenc:
             fh.write("\n")
 
     def rnx_nav_body(self, eph=None, fh=None):
-        """ write RINEX navigation message to file """
+        """Write RINEX navigation message to file."""
         if eph.sat in self.rec_eph.keys():
             if eph.mode in self.rec_eph[eph.sat].keys() and \
                     self.rec_eph[eph.sat][eph.mode][0] == eph.iode:
@@ -1367,7 +1356,7 @@ class rnxenc:
                          format(tot_, "", "", ""))
 
     def rnx_gnav_body(self, geph=None, fh=None):
-        """ write RINEX navigation message for GLONASS to file """
+        """Write RINEX navigation message for GLONASS to file."""
         if geph.sat in self.rec_eph.keys():
             if geph.mode in self.rec_eph[geph.sat].keys() and \
                     self.rec_eph[geph.sat][geph.mode][0] == geph.iode:
@@ -1439,7 +1428,7 @@ class rnxenc:
                             tot_))
 
     def rnx_snav_body(self, seph=None, fh=None):
-        """ write RINEX navigation message for SBAS to file """
+        """Write RINEX navigation message for SBAS to file."""
         if seph.sat in self.rec_eph.keys():
             if seph.mode in self.rec_eph[seph.sat].keys() and \
                     self.rec_eph[seph.sat][seph.mode][0] == seph.iodn:

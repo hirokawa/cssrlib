@@ -1,6 +1,4 @@
-"""
-module for standard PPP positioning
-"""
+"""Module for standard PPP positioning."""
 
 import numpy as np
 
@@ -25,7 +23,7 @@ fmt_amb = "{} {}-{} amb {} ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} " + \
 
 
 class pppos():
-    """ class for PPP processing """
+    """Class for PPP processing."""
 
     nav = None
     VAR_HOLDAMB = 0.001
@@ -37,8 +35,7 @@ class pppos():
     def __init__(self, nav, pos0=np.zeros(3),
                  logfile=None, trop_opt=-1, iono_opt=-1, phw_opt=-1,
                  config=None):
-        """ initialize variables for PPP """
-
+        """Initialize variables for PPP."""
         if config is None:
             config = default_config
 
@@ -231,7 +228,7 @@ class pppos():
             self.nav.fout = open(logfile, 'w')
 
     def valpos(self, v, R, thres=4.0):
-        """ post-fit residual test """
+        """Perform post-fit residual validation test."""
         nv = len(v)
         fact = thres**2
         for i in range(nv):
@@ -247,26 +244,26 @@ class pppos():
         return True
 
     def initx(self, x0, v0, i):
-        """ initialize x and P for index i """
+        """Initialize x and P for index i."""
         self.nav.x[i] = x0
         for j in range(self.nav.nx):
             self.nav.P[j, i] = self.nav.P[i, j] = v0 if i == j else 0
 
     def IB(self, s, f, na=3):
-        """ return index of phase ambiguity """
+        """Return index of phase ambiguity."""
         idx = na+uGNSS.MAXSAT*f+s-1
         return idx
 
     def II(self, s, na):
-        """ return index of slant ionospheric delay estimate """
+        """Return index of slant ionospheric delay estimate."""
         return na-uGNSS.MAXSAT+s-1
 
     def IT(self, na):
-        """ return index of zenith tropospheric delay estimate """
+        """Return index of zenith tropospheric delay estimate."""
         return na-self.nav.niono-1
 
     def varerr(self, nav, el, f):
-        """ variation of measurement """
+        """Compute measurement error variance."""
         s_el = max(np.sin(el), 0.1*rCST.D2R)
         fact = nav.eratio[f-nav.nf] if f >= nav.nf else 1
         a = fact*nav.err[1]
@@ -274,7 +271,7 @@ class pppos():
         return (a**2+(b/s_el)**2)
 
     def sysidx(self, satlist, sys_ref):
-        """ return index of satellites with sys=sys_ref """
+        """Return index of satellites with sys=sys_ref."""
         idx = []
         for k, sat in enumerate(satlist):
             sys, _ = sat2prn(sat)
@@ -283,8 +280,7 @@ class pppos():
         return idx
 
     def udstate(self, obs):
-        """ time propagation of states and initialize """
-
+        """Propagate filter states in time and initialize states."""
         tt = timediff(obs.t, self.nav.t)
 
         ns = len(obs.sat)
@@ -469,7 +465,7 @@ class pppos():
         return 0
 
     def find_bias(self, cs, sigref, sat, inet=0):
-        """ find satellite signal bias from correction """
+        """Find satellite signal bias from correction."""
         nf = len(sigref)
         v = np.zeros(nf)
 
@@ -503,8 +499,7 @@ class pppos():
         return v
 
     def zdres(self, obs, cs, bsx, rs, vs, dts, rr, rtype=1):
-        """ non-differential residual """
-
+        """Compute undifferenced phase and code residuals."""
         _c = rCST.CLIGHT
         ns2m = _c*1e-9
 
@@ -664,7 +659,7 @@ class pppos():
             if self.nav.phw_opt > 0:
                 phw_mode = (False if self.nav.phw_opt == 2 else True)
                 self.nav.phw[sat-1] = windupcorr(obs.t, rs[i, :], vs[i, :],
-                                                 rr_, self.nav.rsun, 
+                                                 rr_, self.nav.rsun,
                                                  self.nav.phw[sat-1],
                                                  full=phw_mode)
 
@@ -747,9 +742,9 @@ class pppos():
                                                     sc.RTCM3_SSR,
                                                     sc.BDS_PPP,
                                                     sc.PVS_PPP):
-                
+
                 ants = antModelTx(self.nav, e[i, :], (sigsPR + sigsCP),
-                                  sat, obs.t, rs[i, :], sig0)                
+                                  sat, obs.t, rs[i, :], sig0)
                 antsPR = ants[0:len(sigsPR)]
                 antsCP = ants[len(sigsPR):]
 
@@ -778,12 +773,10 @@ class pppos():
         return y, e, el
 
     def sdres(self, obs, x, y, e, sat, el):
-        """
-        SD phase/code residuals
+        """Compute single-differenced phase and code residuals.
 
         Parameters
         ----------
-
         obs : Obs()
             Data structure with observations
         x   :
@@ -806,7 +799,6 @@ class pppos():
         R   : np.array of float values
             Covariance matrix of single-difference measurements
         """
-
         nf = self.nav.nf  # number of frequencies (or signals)
         ns = len(el)  # number of satellites
         nc = len(obs.sig.keys())  # number of constellations
@@ -1012,7 +1004,7 @@ class pppos():
         return v, H, R
 
     def const_iono_corr(self, obs, cs, x, sat):
-        """ constraint to ionospheric correction for fast PPP """
+        """Apply ionospheric slant delay constraints for fast PPP."""
         if cs is None or self.nav.iono_opt != 3:
             return np.zeros(0), np.zeros((0, self.nav.nx)), np.zeros(0)
 
@@ -1100,7 +1092,7 @@ class pppos():
         return np.array(v_ion), np.array(H_ion), np.array(var_ion)
 
     def ddcov(self, nb, n, Ri, Rj, nv):
-        """ DD measurement error covariance """
+        """Compute double-differenced measurement error covariance matrix."""
         R = np.zeros((nv, nv))
         k = 0
         for b in range(n):
@@ -1113,8 +1105,7 @@ class pppos():
         return R
 
     def kfupdate(self, x, P, H, v, R):
-        """
-        Kalman filter measurement update.
+        """Perform Kalman filter measurement update.
 
         Parameters:
         x (ndarray): State estimate vector
@@ -1129,7 +1120,6 @@ class pppos():
         P (ndarray): Updated state covariance matrix
         S (ndarray): Innovation covariance matrix
         """
-
         PHt = P@H.T
         S = H@PHt+R
         K = PHt@np.linalg.inv(S)
@@ -1141,7 +1131,7 @@ class pppos():
         return x, P, S
 
     def restamb(self, bias, nb):
-        """ restore SD ambiguity """
+        """Restore SD ambiguity."""
         nv = 0
         xa = self.nav.x.copy()
         xa[0:self.nav.na] = self.nav.xa[0:self.nav.na]
@@ -1165,7 +1155,7 @@ class pppos():
         return xa
 
     def ddidx(self, nav, sat):
-        """ index for SD to DD transformation matrix D """
+        """Construct index table for SD to DD transformation matrix D."""
         nb = 0
         n = uGNSS.MAXSAT
         na = nav.na
@@ -1204,7 +1194,7 @@ class pppos():
         return ix
 
     def resamb_lambda(self, sat, parmode=1, P0=0.995):
-        """ resolve integer ambiguity using LAMBDA method """
+        """Resolve integer ambiguity using LAMBDA method."""
         nx = self.nav.nx
         na = self.nav.na
         xa = np.zeros(na)
@@ -1247,7 +1237,7 @@ class pppos():
         return nb, xa
 
     def holdamb(self, xa):
-        """ hold integer ambiguity """
+        """Hold integer ambiguity."""
         nb = self.nav.nx-self.nav.na
         v = np.zeros(nb)
         H = np.zeros((nb, self.nav.nx))
@@ -1278,8 +1268,7 @@ class pppos():
         return 0
 
     def qcedit(self, obs, rs, dts, svh, rr=None):
-        """ Coarse quality control and editing of observations """
-
+        """Perform coarse quality control and editing of observations."""
         # Predicted position at next epoch
         #
         tt = timediff(obs.t, self.nav.t)
@@ -1471,15 +1460,11 @@ class pppos():
         return np.array(sat, dtype=int)
 
     def base_process(self, obs, obsb, rs, dts, svh):
-        """ processing for base station in RTK
-            (implemented in rtkpos) """
+        """Process base station observations in RTK."""
         return None, None, None, None
 
     def process(self, obs, cs=None, orb=None, bsx=None, obsb=None):
-        """
-        PPP/PPP-RTK/RTK positioning
-        """
-
+        """Perform PPP, PPP-RTK, or RTK positioning for one epoch."""
         # Skip empty epochs
         #
         if len(obs.sat) == 0:
@@ -1492,7 +1477,7 @@ class pppos():
             (np.abs(timediff(self.nav.t_rsun,obs.t))>=1.0):
             self.nav.rsun, _, _ = sunmoonpos(gpst2utc(obs.t))
             self.nav.t_rsun = obs.t
-                
+
 
         # GNSS satellite positions, velocities and clock offsets
         # for all satellite in RINEX observations

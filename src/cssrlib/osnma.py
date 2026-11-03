@@ -1,5 +1,4 @@
-"""
-Galileo OSNMA
+"""Galileo OSNMA.
 
 [1] Galileo Open Service Navigation Message Authentication (OSNMA)
     Signal-in-Space Interface Control Document (SIS ICD), October, 2023.
@@ -32,7 +31,8 @@ from cssrlib.gnss import gpst2time, time2gst, copy_buff, prn2sat, uGNSS
 
 
 class uOSNMA(IntEnum):
-    """ class for OSNMA constants """
+    """Class for OSNMA constants."""
+
     ROOTKEY_LOADED = 1
     ROOTKEY_VERIFIED = 2
     KEYCHAIN_VERIFIED = 4
@@ -42,14 +42,15 @@ class uOSNMA(IntEnum):
 
 
 class uCert(IntEnum):
-    """ class for type and format of Certification """
+    """Class for type and format of Certification."""
+
     X509_CRT = 1
     PEM = 2
     DER = 3
 
 
 def load_pubkey(pubk_path):
-    """ load public key information in crt/pem/der format  """
+    """Load public key information in crt/pem/der format."""
     ext = pubk_path.split('.')[-1]
     if ext == 'crt':
         pk_fmt = uCert.X509_CRT
@@ -76,7 +77,7 @@ def load_pubkey(pubk_path):
 
 
 def raw2der(ds):
-    """ convert digital signature in raw-format to der-format """
+    """Convert digital signature in raw-format to der-format."""
     lds = len(ds)
     ln = lds//2
 
@@ -87,7 +88,8 @@ def raw2der(ds):
 
 
 class taginfo():
-    """ class to store tag """
+    """Class to store tag."""
+
     gst_sf = bytearray(4)
     prn_d = -1
     prn_a = -1
@@ -98,6 +100,7 @@ class taginfo():
     iodnav = -1
 
     def __init__(self, gst_sf, prn_d, prn_a, adkd, cop, tag, cnt, navmsg=None):
+        """Initialize OSNMA tag information container."""
         if navmsg is False:
             return None
         self.gst_sf = gst_sf
@@ -114,7 +117,8 @@ class taginfo():
 
 
 class osnma():
-    """ class for OSNMA """
+    """Class for OSNMA."""
+
     GALMAX = 36
     klen_t = [96, 104, 112, 120, 128, 160, 192, 224, 256]
     npk_len_t = [0, 264, 0, 536, 0]
@@ -197,7 +201,7 @@ class osnma():
     nsat = 0
 
     def difftime(self, t1, t2):
-        """ difference of time between t1 and t2 """
+        """Compute time difference between t1 and t2."""
         wn1, tow1 = bs.unpack_from('u12u20', t1, 0)
         wn2, tow2 = bs.unpack_from('u12u20', t2, 0)
 
@@ -205,7 +209,7 @@ class osnma():
         return dt
 
     def pubkey_decompress(self, pkt, pnt):
-        """ decompress public-key """
+        """Decompress public-key."""
         if pkt == 1:
             curve = ec.SECP256R1()
         elif pkt == 3:
@@ -219,7 +223,7 @@ class osnma():
         return pk
 
     def load_mt(self, file):
-        """ load markov tree and public keys from xml file """
+        """Load markov tree and public keys from xml file."""
         mt = et.parse(file)
         root = mt.getroot()
         h = root.find('body').find('MerkleTree')
@@ -249,6 +253,7 @@ class osnma():
         return True
 
     def __init__(self, mt_file=None, logfile='log_osnma.txt'):
+        """Initialize Galileo OSNMA authentication engine."""
         self.monlevel = 1       # debug monitor level
         self.vcnt_min = 1
 
@@ -288,19 +293,19 @@ class osnma():
             self.load_mt(self.pubk_bdir + mt_file)
 
     def process_hash(self, msg):
-        """ calculate hash """
+        """Calculate hash."""
         digest = hashes.Hash(self.hash_table[self.hf]())
         digest.update(msg)
         h = digest.finalize()
         return h
 
     def set_gst_sf(self, gst_wn, gst_tow):
-        """ set Galileo sub-frame time """
+        """Set Galileo sub-frame time."""
         gst_sf = bs.pack('u12u20', gst_wn, gst_tow//30*30)
         return gst_sf
 
     def load_pubkey_pkid(self, pubk_path, pkid):
-        """ load public key from file in dem/crt/pem format """
+        """Load public key from file in dem/crt/pem format."""
         pk = load_pubkey(self.pubk_bdir+pubk_path)
         if pk is None:
             return False
@@ -308,7 +313,7 @@ class osnma():
         return True
 
     def verify_root_key(self):
-        """ verify root key """
+        """Verify root key."""
         did = self.did0
         if not self.status & uOSNMA.ROOTKEY_LOADED:  # root key loaded
             return False
@@ -332,7 +337,7 @@ class osnma():
         return result
 
     def verify_pdk(self, p_dk, did):
-        """ verify P_DK """
+        """Verify P_DK."""
         lk_b = self.klen_t[self.ks]//8
         msg = bytearray([self.nma_header]) + self.dsm[did][1:13+lk_b] + self.ds
         h = self.process_hash(msg)
@@ -340,14 +345,14 @@ class osnma():
         return h[0:l_pdk] == p_dk
 
     def verify_pdp(self, mi, p_dp):
-        """ verify P_DP """
+        """Verify P_DP."""
         msg = self.root_mt + mi
         h = self.process_hash(msg)
         l_pdp = len(p_dp)
         return h[0:l_pdp] == p_dp
 
     def update_key_chain(self, key, gst_wn, gst_tow0, ki=1):
-        """ return next key from key chanin """
+        """Return next key from key chanin."""
         # k_l=trunc(lk,hash(k_l+1||GST_SF_l||alp))
         klen_b = self.klen_t[self.ks]//8
         for k in range(ki):
@@ -361,7 +366,7 @@ class osnma():
         return key
 
     def verify_key_chain(self, key, gst_wn, gst_tow0):
-        """ verify key chaning """
+        """Verify key chaning."""
         if not self.status & uOSNMA.ROOTKEY_VERIFIED:  # root-key verified
             return False
         if self.status & uOSNMA.KEYCHAIN_VERIFIED:
@@ -381,7 +386,7 @@ class osnma():
         return result
 
     def decode_dsm_kroot(self, did):
-        """ decode DSM-KROOT """
+        """Decode DSM-KROOT."""
         v = bs.unpack_from('u4u4u2u2u2u2u4u4u8u4u12u8', self.dsm[did], 0)
         nb = v[0]+6   # number of blocks
         self.pkid = v[1]  # Public Key ID
@@ -416,7 +421,7 @@ class osnma():
         return True
 
     def decode_dsm_pkr(self, did):
-        """ decode and verify DSM-PKR """
+        """Decode and verify DSM-PKR."""
         nb, mid = bs.unpack_from('u4u4', self.dsm[did], 0)
         if nb < 7 or nb > 10:
             return False
@@ -466,7 +471,7 @@ class osnma():
         return result
 
     def decode_hk(self, hk, prn):
-        """ decode HKROOT message """
+        """Decode HKROOT message."""
         self.nma_header = hk[0]
 
         # NMA Status (nmas): 1: Test, 2: Operational, 3: Don'use
@@ -527,7 +532,7 @@ class osnma():
         return result
 
     def decode_tags_info(self, k):
-        """ decode Tags&Info message """
+        """Decode Tags&Info message."""
         if not self.status & uOSNMA.ROOTKEY_LOADED:
             return False
         lt = self.tag_len_t[self.ts]
@@ -556,7 +561,7 @@ class osnma():
         return False
 
     def verify_maclt(self):
-        """ check consistency of Tag sequence """
+        """Check consistency of Tag sequence."""
         if self.maclt not in self.mode_t:
             return False
         mode_t = self.mode_t[self.maclt]
@@ -575,7 +580,7 @@ class osnma():
         return True
 
     def process_mac(self, msg):
-        """ calculate crypt-MAC for message using key """
+        """Calculate crypt-MAC for message using key."""
         if self.mf == 0:  # HMAC-SHA-256
             hm = hmac.HMAC(self.key, hashes.SHA256())
         elif self.mf == 1:  # CMAC-AES
@@ -586,7 +591,7 @@ class osnma():
         return hm.finalize()
 
     def verify_macseq(self):
-        """ verify MACSEQ """
+        """Verify MACSEQ."""
         msg = bytearray([self.prn_a])+self.gst_sf_p  # Eq.22
 
         if self.maclt not in self.mode_t:
@@ -609,14 +614,14 @@ class osnma():
         return macseq == macseq_c
 
     def save_mack(self, mack, prn):
-        """ store MACK section (480bits=60bytes) """
+        """Store MACK section (480bits=60bytes)."""
         lm_b = 60
         i0 = (prn-1)*lm_b
         self.mack_p[i0:i0+lm_b] = self.mack_c[i0:i0+lm_b]
         self.mack_c[i0:i0+lm_b] = mack
 
     def decode_mack(self, prn):
-        """ decode MACK message """
+        """Decode MACK message."""
         if not self.status & uOSNMA.ROOTKEY_LOADED:
             return False
         lt = self.tag_len_t[self.ts]
@@ -634,8 +639,7 @@ class osnma():
         return True
 
     def load_gal_inav(self, msg):
-        """ load Galileo I/NAV navigation message """
-
+        """Load Galileo I/NAV navigation message."""
         # even page (120bit) + odd page (120bit)
         # even page even/odd(1b)+page type(1b)+data1(112b)+tail(6)
         # odd  page even/odd(1b)+page type(1b)+data2(16b)+osnma(40b)
@@ -656,7 +660,7 @@ class osnma():
         return nav, nma_b
 
     def save_gal_inav(self, nav, prn, tow):
-        """ store I/NAV navigation message into subframe buffer """
+        """Store I/NAV navigation message into subframe buffer."""
         mt = bs.unpack_from('u6', nav, 0)[0]
         sat = prn2sat(uGNSS.GAL, prn)
 
@@ -676,7 +680,7 @@ class osnma():
         return True
 
     def gen_gal_inavmsg(self, prn):
-        """ generate Galileo I/NAV message for nma """
+        """Generate Galileo I/NAV message for nma."""
         if prn < 1 or prn > self.GALMAX:
             return None
         sat = prn2sat(uGNSS.GAL, prn)
@@ -706,7 +710,7 @@ class osnma():
         return msg
 
     def gen_gal_utcmsg(self):
-        """ generate Galileo utc message for nma """
+        """Generate Galileo utc message for nma."""
         sat = prn2sat(uGNSS.GAL, self.prn_a)
         if sat not in self.subfrm.keys():
             return None
@@ -733,7 +737,7 @@ class osnma():
         return msg
 
     def gen_msg(self, adkd, prn_d, gst_sf, ctr, msg):
-        """ generate message for verification of NMA """
+        """Generate message for verification of NMA."""
         mlen = 141 if adkd == 4 else 549
         rem_ = mlen-mlen//8*8  # number of remaining bit
         j = 0
@@ -764,7 +768,7 @@ class osnma():
         return m
 
     def verify_navmsg(self, tag_):
-        """ verify nav/utc message """
+        """Verify nav/utc message."""
         msg = tag_.navmsg
 
         if tag_.prn_d == -1 or not msg:
@@ -778,8 +782,7 @@ class osnma():
         return result
 
     def save_auth_nav(self, result, tag_):
-        """ record authentication status of message """
-
+        """Record authentication status of message."""
         if not result:
             return False
 
@@ -797,7 +800,7 @@ class osnma():
         return self.vstatus[prn][iodn] >= self.vcnt_min
 
     def chk_nav(self, prn, iodnav):
-        """ check if navigation message with iodnav is authenticated """
+        """Check if navigation message with iodnav is authenticated."""
         if prn not in self.vstatus.keys():
             return False
         if iodnav not in self.vstatus[prn].keys():
@@ -805,6 +808,7 @@ class osnma():
         return self.vstatus[prn][iodnav] >= self.vcnt_min
 
     def count_valid_sat(self):
+        """Count authenticated satellites and update auth status."""
         nsat = 0
         for prn in self.vstatus.keys():
             if prn == self.GALMAX+1:  # skip UTC
@@ -819,7 +823,8 @@ class osnma():
         return nsat
 
     def decode(self, nma_b, wn, tow, prn):
-        """ decode OSNMA message
+        """Decode OSNMA message.
+
         Parameters
         ----------
         nma_b: bytearray(5)

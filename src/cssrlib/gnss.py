@@ -1,6 +1,4 @@
-"""
-module for GNSS processing
-"""
+"""Module for GNSS processing."""
 
 from copy import deepcopy
 from enum import IntEnum
@@ -17,7 +15,8 @@ bdt0 = [2006, 1, 1, 0, 0, 0]  # BeiDou system time reference
 
 
 class rCST():
-    """ class for constants """
+    """Class for constants."""
+
     CLIGHT = 299792458.0  # speed of light (m/s)
     MU_GPS = 3.9860050E14  # gravitational constant for GPS
     MU_GLO = 3.9860044E14  # gravitational constant for GLONASS
@@ -135,7 +134,7 @@ class rCST():
 
 
 class uGNSS(IntEnum):
-    """ class for GNS systems """
+    """Class for GNS systems."""
 
     NONE = -1
 
@@ -186,7 +185,7 @@ class uGNSS(IntEnum):
 
 
 class uTYP(IntEnum):
-    """ class for observation types"""
+    """Class for observation types."""
 
     NONE = -1
 
@@ -197,7 +196,7 @@ class uTYP(IntEnum):
 
 
 class uSIG(IntEnum):
-    """ class for signal band and attribute """
+    """Class for signal band and attribute."""
 
     NONE = -1
 
@@ -317,9 +316,7 @@ class uSIG(IntEnum):
 
 
 class uTropoModel(IntEnum):
-    """
-    Enumeration for tropo model selection
-    """
+    """Enumeration for tropo model selection."""
 
     NONE = 0
     SAAST = 1
@@ -328,9 +325,7 @@ class uTropoModel(IntEnum):
 
 
 class uIonoModel(IntEnum):
-    """
-    Enumeration for iono model selection
-    """
+    """Enumeration for iono model selection."""
 
     NONE = 0
     KLOBUCHAR = 1
@@ -340,9 +335,7 @@ class uIonoModel(IntEnum):
 
 
 class uTideModel(IntEnum):
-    """
-    Enumeration for Earth tide model selection
-    """
+    """Enumeration for Earth tide model selection."""
 
     NONE = 0
     SIMPLE = 1
@@ -350,11 +343,10 @@ class uTideModel(IntEnum):
 
 
 class rSigRnx():
-    """ class for RINEX signal representation """
+    """Class for RINEX signal representation."""
 
     def __init__(self, *args, **kwargs):
-        """ Constructor """
-
+        """Initialize RINEX signal representation."""
         self.sys = uGNSS.NONE
         self.typ = uTYP.NONE
         self.sig = uSIG.NONE
@@ -411,43 +403,40 @@ class rSigRnx():
             raise ValueError
 
     def __repr__(self) -> str:
-        """ string representation """
+        """Return string representation."""
         return sys2char(self.sys)+self.str()
 
     def __eq__(self, other):
-        """ equality operator """
+        """Compare signal equality."""
         return self.sys == other.sys and \
             self.typ == other.typ and \
             self.sig == other.sig
 
     def __hash__(self):
-        """ hash operator """
+        """Return signal hash value."""
         return hash((self.sys, self.typ, self.sig))
 
     def toTyp(self, typ):
-        """ Replace signal type """
+        """Replace signal type."""
         if isinstance(typ, uTYP):
             return rSigRnx(self.sys, typ, self.sig)
         else:
             raise ValueError
 
     def toAtt(self, att=""):
-        """ Replace signal attribute """
+        """Replace signal attribute."""
         if isinstance(att, str):
             return rSigRnx(self.sys, self.str()[0:2]+att)
         else:
             raise ValueError
 
     def isGPS_PY(self):
-        """
-        Check if signal is GPS P(Y) tracking
-        """
+        """Check if signal is GPS P(Y) tracking."""
         return self.sys == uGNSS.GPS and \
             (self.sig == uSIG.L1W or self.sig == uSIG.L2W)
 
     def str2sig(self, sys, s):
-        """ string to signal code conversion """
-
+        """Convert string to signal code."""
         if isinstance(sys, uGNSS) and isinstance(s, str):
             self.sys = sys
         else:
@@ -523,8 +512,7 @@ class rSigRnx():
         self.sig = uSIG(sig)
 
     def str(self):
-        """ signal code to string conversion """
-
+        """Convert signal code to string."""
         s = ''
 
         if self.typ == uTYP.C:
@@ -548,14 +536,11 @@ class rSigRnx():
         return s
 
     def band(self):
-        """
-        Retrieve signal band
-        """
+        """Retrieve signal band."""
         return uSIG((self.sig//100)*100)
 
     def frequency(self, k=None):
-        """ frequency in Hz """
-
+        """Return carrier frequency in Hz."""
         if self.sys == uGNSS.GPS:
             if int(self.sig / 100) == 1:
                 return rCST.FREQ_G1
@@ -633,28 +618,30 @@ class rSigRnx():
             return None
 
     def wavelength(self, k=None):
-        """ wavelength in [m] """
-
+        """Return carrier wavelength in meters."""
         frq = self.frequency(k)
         return rCST.CLIGHT/frq if frq is not None else None
 
 
 class gtime_t():
-    """ class to define the time """
+    """Class to define the time."""
 
     def __init__(self, time=0, sec=0.0):
+        """Initialize GNSS time structure."""
         self.time = time
         self.sec = sec
 
     def __gt__(self, other):  # greater than operator
+        """Compare whether this time is greater than another time."""
         return self.time > other.time or \
             (self.time == other.time and self.sec > other.sec)
 
 
 class STOParam():
-    """ System Time and UTC Office """
+    """System Time and UTC Office."""
 
     def __init__(self):
+        """Initialize System Time Offset (STO) parameter structure."""
         self.iod = 0
         self.sbas = 0  # SBAS ID
         self.prm = np.zeros(2)  # System time offset parameter
@@ -663,9 +650,10 @@ class STOParam():
 
 
 class EOPParam():
-    """ Earth Orientation Parameter """
+    """Earth Orientation Parameter."""
 
     def __init__(self):
+        """Initialize Earth Orientation Parameter (EOP) structure."""
         self.iod = 0
         # EOP parameters (xp,dxp,ddxp,yp,dyp,ddyp,dut1,ddut1,dddut1)
         self.prm = np.zeros(9)
@@ -674,9 +662,10 @@ class EOPParam():
 
 
 class IONParam():
-    """ Ionospheric delay model Parameter """
+    """Ionospheric delay model Parameter."""
 
     def __init__(self):
+        """Initialize ionospheric delay model parameter structure."""
         self.iod = 0
         self.prm = np.zeros(9)  # ION parameters
         self.t_tm = None  # transmission time
@@ -684,9 +673,10 @@ class IONParam():
 
 
 class Obs():
-    """ class to define the observation """
+    """Class to define the observation."""
 
     def __init__(self):
+        """Initialize GNSS observation data structure."""
         self.t = gtime_t()
         self.P = []
         self.L = []
@@ -697,7 +687,7 @@ class Obs():
         self.sig = {}
 
     def sort(self):
-        """ sort using satellite index """
+        """Sort using satellite index."""
         idx = np.argsort(self.sat)
         self.sat = self.sat[idx]
         self.P = self.P[idx, :]
@@ -708,9 +698,10 @@ class Obs():
 
 
 class Eph():
-    """ class to define ephemeris """
+    """Class to define ephemeris."""
 
     def __init__(self, sat=0):
+        """Initialize broadcast ephemeris data structure."""
         self.sat = sat
         self.iode = 0
         self.iodc = 0
@@ -762,9 +753,10 @@ class Eph():
 
 
 class Geph():
-    """ class to define GLONASS ephemeris """
+    """Class to define GLONASS ephemeris."""
 
     def __init__(self, sat=0):
+        """Initialize GLONASS broadcast ephemeris data structure."""
         self.sat = sat
         self.iode = 0  # IODE: 0-6bit of tb field
         self.frq = 0
@@ -811,9 +803,10 @@ class Geph():
 
 
 class Seph():
-    """ class to define SBAS ephemeris """
+    """Class to define SBAS ephemeris."""
 
     def __init__(self, sat=0):
+        """Initialize SBAS broadcast ephemeris data structure."""
         self.sat = sat
         self.iodn = 0
         self.t0 = gtime_t()
@@ -829,9 +822,10 @@ class Seph():
 
 
 class Alm():
-    """ class to define almanac """
+    """Class to define almanac."""
 
     def __init__(self, sat=0):
+        """Initialize satellite almanac data structure."""
         self.sat = sat
         self.af0 = 0.0
         self.af1 = 0.0
@@ -851,9 +845,10 @@ class Alm():
 
 
 class Nav():
-    """ class to define the navigation message """
+    """Class to define the navigation message."""
 
     def __init__(self, nf=2):
+        """Initialize navigation data and filter state structure."""
         self.x = None  # states
 
         self.eph = []
@@ -951,13 +946,13 @@ class Nav():
 
         # number of satellite (observed, calculated, corrected)
         self.nsat = [0, 0, 0]
-        
-        self.t_rsun = None # reference time of rsun
-        self.rsun = None # placeholder of sun position
+
+        self.t_rsun = None  # reference time of rsun
+        self.rsun = None  # placeholder of sun position
 
 
 def epoch2time(ep):
-    """ calculate time from epoch """
+    """Calculate time from epoch."""
     doy = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]
     time = gtime_t()
     year = int(ep[0])
@@ -997,7 +992,7 @@ leaps_ = [[2017, 1, 1, 0, 0, 0, -18],
 
 
 def timeget():
-    """ return current time in UTC """
+    """Return current time in UTC."""
     now = datetime.now(timezone.utc)
     ep = np.array([now.year, now.month, now.day, now.hour, now.minute,
                    now.second])
@@ -1005,7 +1000,7 @@ def timeget():
 
 
 def glo2time(tref: gtime_t, tod):
-    """ convert to UTC time from GLONASS time """
+    """Convert to UTC time from GLONASS time."""
     time = timeadd(gpst2utc(tref), 10800.0)
     week, tow = time2gpst(time)
     tod_p = tow % 86400.0
@@ -1019,7 +1014,7 @@ def glo2time(tref: gtime_t, tod):
 
 
 def gpst2utc(t: gtime_t):
-    """ convert from gps-time to utc """
+    """Convert from gps-time to utc."""
     for i in range(len(leaps_)):
         tu = timeadd(t, leaps_[i][6])
         if timediff(tu, epoch2time(leaps_[i])) >= 0.0:
@@ -1028,7 +1023,7 @@ def gpst2utc(t: gtime_t):
 
 
 def utc2gpst(t: gtime_t):
-    """ convert from utc to gps-time """
+    """Convert from utc to gps-time."""
     for i in range(len(leaps_)):
         if timediff(t, epoch2time(leaps_[i])) >= 0.0:
             return timeadd(t, -leaps_[i][6])
@@ -1036,7 +1031,7 @@ def utc2gpst(t: gtime_t):
 
 
 def timeadd(t: gtime_t, sec: float):
-    """ return time added with sec """
+    """Return time added with sec."""
     tr = deepcopy(t)
     tr.sec += sec
     tt = floor(tr.sec)
@@ -1046,14 +1041,14 @@ def timeadd(t: gtime_t, sec: float):
 
 
 def timediff(t1: gtime_t, t2: gtime_t):
-    """ return time difference """
+    """Return time difference."""
     dt = t1.time-t2.time
     dt += t1.sec-t2.sec
     return dt
 
 
 def gpst2time(week, tow):
-    """ convert to time from gps-time """
+    """Convert to time from gps-time."""
     t = epoch2time(gpst0)
     if tow < -1e9 or tow > 1e9:
         tow = 0.0
@@ -1063,7 +1058,7 @@ def gpst2time(week, tow):
 
 
 def time2gpst(t: gtime_t):
-    """ convert to gps-time from time """
+    """Convert to gps-time from time."""
     t0 = epoch2time(gpst0)
     sec = t.time-t0.time
     week = int(sec/(86400*7))
@@ -1072,7 +1067,7 @@ def time2gpst(t: gtime_t):
 
 
 def gst2time(week, tow):
-    """ convert to time from galileo system time """
+    """Convert to time from galileo system time."""
     t = epoch2time(gst0)
     if tow < -1e9 or tow > 1e9:
         tow = 0.0
@@ -1082,7 +1077,7 @@ def gst2time(week, tow):
 
 
 def time2gst(t: gtime_t):
-    """ convert to galileo system time from time """
+    """Convert to galileo system time from time."""
     t0 = epoch2time(gst0)
     sec = t.time-t0.time
     week = int(sec/(86400*7))
@@ -1091,7 +1086,7 @@ def time2gst(t: gtime_t):
 
 
 def bdt2time(week, tow):
-    """ convert to time from BeiDou system time """
+    """Convert to time from BeiDou system time."""
     t = epoch2time(bdt0)
     if tow < -1e9 or tow > 1e9:
         tow = 0.0
@@ -1101,17 +1096,17 @@ def bdt2time(week, tow):
 
 
 def bdt2gpst(t: gtime_t):
-    """ convert from BeiDou system time to GPS time  """
+    """Convert from BeiDou system time to GPS time."""
     return timeadd(t, 14.0)
 
 
 def gpst2bdt(t: gtime_t):
-    """ convert to GPS time from BeiDou system time """
+    """Convert to GPS time from BeiDou system time."""
     return timeadd(t, -14.0)
 
 
 def time2bdt(t: gtime_t):
-    """ convert to BeiDou system time from time """
+    """Convert to BeiDou system time from time."""
     t0 = epoch2time(bdt0)
     sec = t.time-t0.time
     week = int(sec/(86400*7))
@@ -1120,7 +1115,7 @@ def time2bdt(t: gtime_t):
 
 
 def time2epoch(t):
-    """ convert time to epoch """
+    """Convert time to epoch."""
     mday = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 31, 28, 31, 30, 31,
             30, 31, 31, 30, 31, 30, 31, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31,
             30, 31, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
@@ -1144,7 +1139,7 @@ def time2epoch(t):
 
 
 def time2doy(t):
-    """ convert time to day of year (as float value!) """
+    """Convert time to day of year (as float value!)."""
     ep = time2epoch(t)
     ep[1] = ep[2] = 1.0
     ep[3] = ep[4] = ep[5] = 0.0
@@ -1152,7 +1147,7 @@ def time2doy(t):
 
 
 def str2time(s, i, n):
-    """ string to time conversion """
+    """Convert substring to time."""
     if i < 0 or len(s) < i:
         return -1
     ep = np.array([float(x) for x in s[i:i+n].split()])
@@ -1164,14 +1159,14 @@ def str2time(s, i, n):
 
 
 def time2str(t):
-    """ time to string conversion """
+    """Convert time to formatted string."""
     e = time2epoch(t)
     return "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}"\
         .format(e[0], e[1], e[2], e[3], e[4], int(e[5]))
 
 
 def adjtime(t: gtime_t, tref: gtime_t, dt=rCST.WEEK_SEC):
-    """ adjust time for week (day) rollover """
+    """Adjust time for week (day) rollover."""
     tt = timediff(t, tref)
     if tt < -dt/2.0:
         return timeadd(t, dt)
@@ -1181,7 +1176,7 @@ def adjtime(t: gtime_t, tref: gtime_t, dt=rCST.WEEK_SEC):
 
 
 def tod2tow(tod: float, time0: gtime_t):
-    """ translate from time-of-day to time-of-week """
+    """Translate from time-of-day to time-of-week."""
     week, tow0 = time2gpst(time0)
     tow_ref = tow0//rCST.DAY_SEC*rCST.DAY_SEC
 
@@ -1192,7 +1187,7 @@ def tod2tow(tod: float, time0: gtime_t):
 
 
 def prn2sat(sys, prn):
-    """ convert sys+prn to sat """
+    """Convert sys+prn to sat."""
     if sys == uGNSS.GPS:
         sat = prn
     elif sys == uGNSS.GAL:
@@ -1213,7 +1208,7 @@ def prn2sat(sys, prn):
 
 @njit
 def sat2prn(sat):
-    """ convert sat to sys+prn """
+    """Convert sat to sys+prn."""
     if sat > uGNSS.MAXSAT:
         prn = 0
         sys = uGNSS.NONE
@@ -1242,7 +1237,7 @@ def sat2prn(sat):
 
 
 def sat2id(sat):
-    """ convert satellite number to id """
+    """Convert satellite number to id."""
     sys, prn = sat2prn(sat)
     gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GLO: 'R', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
                 uGNSS.QZS: 'J', uGNSS.SBS: 'S', uGNSS.IRN: 'I'}
@@ -1257,7 +1252,7 @@ def sat2id(sat):
 
 
 def id2sat(id_):
-    """ convert id to satellite number """
+    """Convert id to satellite number."""
     sys = char2sys(id_[0])
     if sys == uGNSS.NONE:
         return -1
@@ -1272,7 +1267,7 @@ def id2sat(id_):
 
 
 def char2sys(c):
-    """ convert character to GNSS """
+    """Convert character to GNSS."""
     gnss_tbl = {'G': uGNSS.GPS, 'R': uGNSS.GLO, 'E': uGNSS.GAL, 'C': uGNSS.BDS,
                 'J': uGNSS.QZS, 'S': uGNSS.SBS, 'I': uGNSS.IRN}
 
@@ -1287,7 +1282,7 @@ def char2sys(c):
 
 
 def sys2char(sys):
-    """ convert gnss to character """
+    """Convert gnss to character."""
     gnss_tbl = {uGNSS.GPS: 'G', uGNSS.GLO: 'R', uGNSS.GAL: 'E', uGNSS.BDS: 'C',
                 uGNSS.QZS: 'J', uGNSS.SBS: 'S', uGNSS.IRN: 'I'}
 
@@ -1302,7 +1297,7 @@ def sys2char(sys):
 
 
 def sys2str(sys):
-    """ convert gnss to string """
+    """Convert gnss to string."""
     gnss_tbl = {uGNSS.GPS: 'GPS', uGNSS.GLO: 'GLONASS',
                 uGNSS.GAL: 'GALILEO', uGNSS.BDS: 'BEIDOU',
                 uGNSS.QZS: 'QZSS', uGNSS.SBS: 'SBAS', uGNSS.IRN: 'IRNSS'}
@@ -1314,7 +1309,7 @@ def sys2str(sys):
 
 
 def sid2prn(sys, sid):
-    """ convert satellite id to prn """
+    """Convert satellite id to prn."""
     if sys == uGNSS.QZS:
         prn = sid+rCST.MINPRNQZS-1
     elif sys == uGNSS.BDS3:
@@ -1327,12 +1322,12 @@ def sid2prn(sys, sid):
 
 
 def vnorm(r):
-    """ calculate norm of a vector """
+    """Calculate norm of a vector."""
     return r/np.linalg.norm(r)
 
 
 def geodist(rs, rr):
-    """ calculate geometric distance """
+    """Calculate geometric distance."""
     e = rs-rr
     r = np.linalg.norm(e)
     e = e/r
@@ -1341,7 +1336,7 @@ def geodist(rs, rr):
 
 
 def kfupdate(x, P, H, v, R):
-    """ Kalman filter measurement update """
+    """Perform Kalman filter measurement update."""
     # select subset of states and covariance
     ix = []
     for i in range(len(x)):
@@ -1365,7 +1360,7 @@ def kfupdate(x, P, H, v, R):
 
 
 def dops_h(H):
-    """ calculate DOP from H """
+    """Calculate DOP from H."""
     Qinv = np.linalg.inv(np.dot(H.T, H))
     dop = np.diag(Qinv)
     hdop = np.sqrt(dop[0]+dop[1])
@@ -1377,7 +1372,7 @@ def dops_h(H):
 
 
 def dops(az, el, elmin=0):
-    """ calculate DOP from az/el """
+    """Calculate DOP from az/el."""
     nm = az.shape[0]
     H = np.zeros((nm, 4))
     n = 0
@@ -1397,7 +1392,7 @@ def dops(az, el, elmin=0):
 
 
 def xyz2enu(pos):
-    """ return ECEF to ENU conversion matrix from LLH """
+    """Return ECEF to ENU conversion matrix from LLH."""
     sp = sin(pos[0])
     cp = cos(pos[0])
     sl = sin(pos[1])
@@ -1409,12 +1404,12 @@ def xyz2enu(pos):
 
 
 def enu2xyz(pos):
-    """ return ENU to ECEF conversion matrix from LLH """
+    """Return ENU to ECEF conversion matrix from LLH."""
     return np.array(np.matrix(xyz2enu(pos)).I)
 
 
 def ecef2pos(r):
-    """  ECEF to LLH position conversion """
+    """Convert ECEF position to geodetic LLH coordinates."""
     e2 = rCST.FE_WGS84*(2-rCST.FE_WGS84)
     r2 = r[0]**2+r[1]**2
     v = rCST.RE_WGS84
@@ -1435,7 +1430,7 @@ def ecef2pos(r):
 
 
 def pos2ecef(pos, isdeg: bool = False):
-    """ LLH (rad/deg) to ECEF position conversion  """
+    """Convert geodetic LLH position to ECEF coordinates."""
     if isdeg:
         pos[0] *= np.pi/180.0
         pos[1] *= np.pi/180.0
@@ -1452,14 +1447,14 @@ def pos2ecef(pos, isdeg: bool = False):
 
 
 def ecef2enu(pos, r):
-    """ relative ECEF to ENU conversion """
+    """Convert relative ECEF vector to local ENU coordinates."""
     E = xyz2enu(pos)
     e = E@r
     return e
 
 
 def deg2dms(deg):
-    """ convert from deg to dms """
+    """Convert from deg to dms."""
     if deg < 0.0:
         sign = -1
     else:
@@ -1476,8 +1471,7 @@ def deg2dms(deg):
 
 
 def ionppp(pos, az, el, re, hion):
-    """ ionospheric pierce point (ipp) position and slant factor """
-
+    """Compute ionospheric pierce point (IPP) position and slant factor."""
     rp = re/(re+hion)*cos(el)
     ap = rCST.HALFPI-el-asin(rp)
     sinap = sin(ap)
@@ -1499,7 +1493,7 @@ def ionppp(pos, az, el, re, hion):
 
 
 def satazel(pos, e):
-    """ calculate az/el from LOS vector in ECEF (e) """
+    """Calculate az/el from LOS vector in ECEF (e)."""
     enu = ecef2enu(pos, e)
     az = atan2(enu[0], enu[1])
     el = asin(enu[2])
@@ -1507,7 +1501,7 @@ def satazel(pos, e):
 
 
 def interpc(coef, lat):
-    """ linear interpolation (lat step=15) """
+    """Interpolate coefficient table linearly by latitude."""
     i = int(lat/15.0)
     m = coef.shape[1]-1
     if i < 1:
@@ -1519,10 +1513,7 @@ def interpc(coef, lat):
 
 
 def tropmapf(t, pos, el, model=uTropoModel.SAAST):
-    """
-    Tropo mapping function
-    """
-
+    """Compute tropospheric mapping function."""
     if model == uTropoModel.SAAST:  # Saastamoinen model
         return tropmapfNiell(t, pos, el)
     elif model == uTropoModel.HOPF:  # Hopfield model
@@ -1534,10 +1525,7 @@ def tropmapf(t, pos, el, model=uTropoModel.SAAST):
 
 
 def tropmodel(t, pos, el=np.pi/2, humi=0.7, model=uTropoModel.SAAST):
-    """
-    Tropospheric delay model
-    """
-
+    """Compute tropospheric delay model."""
     if model == uTropoModel.SAAST:  # Saastamoinen model
         return tropmodelSaast(t, pos, el, humi)
     elif model == uTropoModel.HOPF:  # Hopfield model
@@ -1549,7 +1537,7 @@ def tropmodel(t, pos, el=np.pi/2, humi=0.7, model=uTropoModel.SAAST):
 
 
 def meteo(hgt, humi):
-    """ standard atmosphere model """
+    """Compute standard atmosphere parameters."""
     pres = 1013.25*np.power(1-2.2557e-5*hgt, 5.2568)
     temp = 15.0-6.5e-3*hgt+273.16
     e = 6.108*humi*np.exp((17.15*temp-4684.0)/(temp-38.45))
@@ -1557,12 +1545,12 @@ def meteo(hgt, humi):
 
 
 def mapf(sE, a, b, c):
-    """ simple tropospheric mapping function """
+    """Compute simple continued-fraction tropospheric mapping function."""
     return (1.0+a/(1.0+b/(1.0+c)))/(sE+(a/(sE+b/(sE+c))))
 
 
 def mapfParam(t, lat):
-    """ mapping function parameters based on lat ,time """
+    """Compute Niell mapping function parameters from latitude and time."""
     # lat = [15,30,45,60,75]
     # hs(average) [a,b,c] hs(amplitude) [a,b,c] wet [a,b,c]
     coef = np.array([
@@ -1589,8 +1577,7 @@ def mapfParam(t, lat):
 
 
 def tropmapfNiell(t, pos, el, ah=None, aw=None):
-    """ tropospheric mapping function by Niell (NMF) """
-
+    """Compute Niell tropospheric mapping function (NMF)."""
     hgt = pos[2]  # ellipsoidal height [m]
 
     if hgt < -1e3 or hgt > 20e3 or el <= 0.0:
@@ -1610,7 +1597,7 @@ def tropmapfNiell(t, pos, el, ah=None, aw=None):
 
 
 def tropmodelSaast(t, pos, el=np.pi/2, humi=0.7):
-    """ saastamoinen tropospheric delay model """
+    """Compute Saastamoinen tropospheric delay model."""
     hgt = pos[2]
     # standard atmosphere
     pres, temp, e = meteo(hgt, humi)
@@ -1622,9 +1609,7 @@ def tropmodelSaast(t, pos, el=np.pi/2, humi=0.7):
 
 
 def meteoHpf():
-    """
-    Hopfield atmosphere model
-    """
+    """Return standard atmosphere parameters for Hopfield model."""
     pres = 1010.0  # pressure [hPa]
     temp = 291.1  # temperature [K]
     e = 10.4  # water vapor pressure [hPa]
@@ -1632,10 +1617,7 @@ def meteoHpf():
 
 
 def tropmapfHpf(el):
-    """
-    Tropospheric mapping functions for Hopfield model
-    """
-
+    """Compute tropospheric mapping functions."""
     mapfh = 1.0/(np.sin(np.sqrt(el**2+(np.pi/72.0)**2)))
     mapfw = 1.0/(np.sin(np.sqrt(el**2+(np.pi/120.0)**2)))
 
@@ -1643,9 +1625,7 @@ def tropmapfHpf(el):
 
 
 def tropmodelHpf():
-    """
-    Hopfield tropospheric delay model
-    """
+    """Compute Hopfield tropospheric delay model."""
     # standard atmosphere for Hopfield model
     pres, temp, e = meteoHpf()
     # Hopfield
@@ -1656,10 +1636,7 @@ def tropmodelHpf():
 
 
 def tropmapfSBAS(el):
-    """
-    Tropospheric mapping functions for Hopfield model
-    """
-
+    """Compute tropospheric mapping functions."""
     s_el = np.sin(el)
     mf = 1.001/np.sqrt(0.002001+s_el**2)
 
@@ -1667,8 +1644,7 @@ def tropmapfSBAS(el):
 
 
 def atmosParam(t, lat, el=np.pi/2):
-    """ atmospheric model parameters (P[mbar], T[K], e[mbar], beta[K/m], lam) """
-
+    """Compute SBAS atmospheric model parameters."""
     # average of P[mbar], T[K], e[mbar], beta[K/m], lam
     tbl_a = np.array([
         [1013.25, 299.65, 26.31, 6.30e-3, 2.77],  # 15deg or less
@@ -1698,8 +1674,7 @@ def atmosParam(t, lat, el=np.pi/2):
 
 
 def tropheightCorr(t, temp, beta, lam, hgt):
-    """ tropspheric delay height correction  """
-
+    """Compute tropospheric delay height correction factors."""
     Rd, g = 287.054, 9.80665
 
     p1, p2 = 1-beta*hgt/temp, g/(Rd*beta)
@@ -1710,8 +1685,7 @@ def tropheightCorr(t, temp, beta, lam, hgt):
 
 
 def tropmodelSBAS(t, pos, el=np.pi/2):
-    """ SBAS tropospheric delay model """
-
+    """Compute SBAS tropospheric delay model."""
     lat = pos[0]*rCST.R2D
     hgt = pos[2]
 
@@ -1736,7 +1710,7 @@ def tropmodelSBAS(t, pos, el=np.pi/2):
 
 
 def copy_buff(src, dst, ofst_s=0, ofst_d=0, blen=0):
-    """ bit-wise buffer copy """
+    """Copy bit range from source buffer to destination buffer."""
     b = blen//32
     r = blen-b*32
     for k in range(b):
@@ -1749,6 +1723,7 @@ def copy_buff(src, dst, ofst_s=0, ofst_d=0, blen=0):
 
 
 def load_config(file_path):
+    """Load configuration parameters from YAML file."""
     with open(file_path, 'r') as file:
         config = yaml.safe_load(file)
     return config

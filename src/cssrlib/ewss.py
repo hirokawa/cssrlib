@@ -1,14 +1,13 @@
-"""
-Emergency Warning Satellite Service (EWSS) Decoder
+"""Emergency Warning Satellite Service (EWSS) Decoder.
 
 [1] Emergency Warning Satellite Service: Common Alert Message Format
-    Specification Issue 1.0, 2024
+    Specification Issue 1.2, March, 2026
 
 [2] Quasi-Zenith Satellite System Interface Specification
-    DCX Service (IS-QZSS-DCX-003), March, 2025
+    DCX Service (IS-QZSS-DCX-004), May, 2026
 
 [3] Quasi-Zenith Satellite System Interface Specification
-    DC Report Service (IS-QZSS-DCR-014), April, 2025
+    DC Report Service (IS-QZSS-DCR-017), September, 2026
 
 @author Rui Hirokawa
 
@@ -24,7 +23,8 @@ import pandas as pd
 
 
 class MsgType(IntEnum):
-    """ A1 – Message Type """
+    """A1 – Message Type."""
+
     TEST = 0
     ALERT = 1
     UPDATE = 2
@@ -32,7 +32,8 @@ class MsgType(IntEnum):
 
 
 class THazard(IntEnum):
-    """ A4 – Hazard Category and Type """
+    """A4 – Hazard Category and Type."""
+
     # CBRNE
     AIR_STRIKE = 0b0000001
     ATTACK_ON_IT = 0b0000010
@@ -165,9 +166,10 @@ class THazard(IntEnum):
 
 
 class ewsDec():
-    """ EWS Message decoder class """
+    """EWS Message decoder class."""
 
     def load_msg(self, file):
+        """Load emergency warning message table from TSV file."""
         s = {}
         with open(self.msg_path+file, "rt", encoding="utf-8") as f:
             for line in f:
@@ -177,29 +179,33 @@ class ewsDec():
         return s
 
     def __init__(self, bdir='../data/ewss/', year=0):
+        """Initialize Emergency Warning Service (EWS) base decoder."""
         self.msg_path = bdir
         self.monlevel = 0
         self.year = year
         self.time = gtime_t()
 
     def decode(self, msg, i):
+        """Decode emergency warning message."""
         None
 
     def add_day(self, month, day, nday=0):
+        """Adjust epoch day for month rollover relative to reference time."""
         t0 = epoch2time([self.year, month, day, 0, 0, 0.0])
         t1 = timeadd(t0, nday*86400.0)
         ep = time2epoch(t1)
         return ep[1], ep[2]
 
     def draw_ellipse(self, ax, lat, lon, LM, lm, az):
-        """ draw ellipse (TBD) """
+        """Draw ellipse (TBD)."""
         None
 
 
 class jmaDec(ewsDec):
-    """ JMA DC Report decoder class """
+    """JMA DC Report decoder class."""
 
     def __init__(self, bdir='../data/ewss/jma/', year=0):
+        """Initialize JMA disaster and crisis management report decoder."""
         super().__init__(bdir=bdir, year=year)
 
         self.rc_m_t = {3: 'Regular', 7: 'Test'}
@@ -270,7 +276,7 @@ class jmaDec(ewsDec):
         self.vn = -1  # version
 
     def decode_jma_earthquake(self, msg, i):
-        """ JMA Earthquake """
+        """Decode JMA earthquake early warning report."""
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
         self.it, _ = bs.unpack_from('u2u4', msg, i)
@@ -344,7 +350,7 @@ class jmaDec(ewsDec):
         return i
 
     def decode_jma_hypocenter(self, msg, i):
-        """ JMA Epicenter """
+        """Decode JMA hypocenter report."""
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
         self.it, _ = bs.unpack_from('u2u10', msg, i)
@@ -404,7 +410,7 @@ class jmaDec(ewsDec):
         return i
 
     def decode_jma_seismic_intencity(self, msg, i):
-        """ JMA Seismic Intensity """
+        """Decode JMA seismic intensity report."""
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
         self.it, _ = bs.unpack_from('u2u10', msg, i)
@@ -449,7 +455,7 @@ class jmaDec(ewsDec):
         return i
 
     def decode_jma_nankai_earthquake(self, msg, i):
-        """ JMA Nankai Earthquake """
+        """Decode JMA Nankai Trough earthquake report."""
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
         self.it, _, is_ = bs.unpack_from('u2u10u4', msg, i)
@@ -488,7 +494,7 @@ class jmaDec(ewsDec):
         return i
 
     def decode_jma_tsunami(self, msg, i):
-        """ JMA Tsunami """
+        """Decode JMA tsunami warning report."""
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
         self.it, _ = bs.unpack_from('u2u10', msg, i)
@@ -549,7 +555,7 @@ class jmaDec(ewsDec):
         return i
 
     def decode_jma_nw_pacific_tsunami(self, msg, i):
-        """ JMA North Pacific Tsunami """
+        """Decode JMA Northwest Pacific tsunami report."""
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
         self.it, _, tp = bs.unpack_from('u2u10u3', msg, i)
@@ -586,7 +592,7 @@ class jmaDec(ewsDec):
         return i
 
     def decode_jma_volcano(self, msg, i):
-        """ JMA Volcano """
+        """Decode JMA volcano warning report."""
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
         self.it, _, du = bs.unpack_from('u2u7u3', msg, i)
@@ -628,7 +634,7 @@ class jmaDec(ewsDec):
         return i
 
     def decode_jma_ash_fall(self, msg, i):
-        """ JMA Ash Fall """
+        """Decode JMA ash fall warning report."""
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
         self.it = bs.unpack_from('u2', msg, i)[0]
@@ -671,7 +677,7 @@ class jmaDec(ewsDec):
         return i
 
     def decode_jma_weather(self, msg, i):
-        """ JMA Weather """
+        """Decode JMA weather warning report."""
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
         # ar: warning state
@@ -706,7 +712,7 @@ class jmaDec(ewsDec):
         return i
 
     def decode_jma_flood(self, msg, i):
-        """ JMA Flood """
+        """Decode JMA flood warning report."""
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
         self.it, _ = bs.unpack_from('u2u10', msg, i)
@@ -741,8 +747,7 @@ class jmaDec(ewsDec):
         return i
 
     def decode_jma_typhoon(self, msg, i):
-        """ JMA Tyhoon """
-
+        """Decode JMA typhoon warning report."""
         # month, day, hour, minute: Report time (UTC)
         # itype: information type
         # d1, h1, m1: reference time
@@ -800,7 +805,7 @@ class jmaDec(ewsDec):
         return i
 
     def decode_jma_marine(self, msg, i):
-        """ JMA Marine """
+        """Decode JMA marine warning report."""
         month, day, hour, minute = bs.unpack_from('u4u5u5u6', msg, i)
         i += 20
         self.it = bs.unpack_from('u2', msg, i)[0]
@@ -834,7 +839,7 @@ class jmaDec(ewsDec):
         return i
 
     def gen_msg(self, dc):
-        """ generate message """
+        """Generate message."""
         msg = ""
 
         if dc == 12:  # typhoon
@@ -863,8 +868,7 @@ class jmaDec(ewsDec):
         return msg
 
     def decode(self, msg, i):
-        """ decode DC-report messages """
-
+        """Decode DC-report messages."""
         self.rc, self.dc = bs.unpack_from('u3u4', msg, i)
         i += 7
 
@@ -902,9 +906,10 @@ class jmaDec(ewsDec):
 
 
 class camfDec(ewsDec):
-    """ Common Alert Message Format (CAMF) Decoder class """
+    """Common Alert Message Format (CAMF) Decoder class."""
 
     def __init__(self, bdir='../data/ewss/camf/', year=0):
+        """Initialize Common Alert Message Format (CAMF) decoder."""
         super().__init__(bdir=bdir, year=year)
         self.bdir = bdir
 
@@ -1239,8 +1244,7 @@ class camfDec(ewsDec):
         }
 
     def decode_ext(self, msg, i):
-        """ decode DCX Extended Message (74bits) """
-
+        """Decode DCX Extended Message (74bits)."""
         if self.sel == 0:  # information from organizations outside Japan
             i += 68  # EX11 TBD
             vn = bs.unpack_from('u6', msg, i)[0]
@@ -1351,7 +1355,7 @@ class camfDec(ewsDec):
         return i
 
     def decode(self, msg, i):
-        """ decode CAMF message (122bits) """
+        """Decode CAMF message (122bits)."""
         # 3.1 Message Identifier (A1,A2,A3)
         mt, self.regi, pid = bs.unpack_from('u2u9u5', msg, i)
         i += 16

@@ -1,5 +1,4 @@
-"""
-integer ambiguity resolution by LAMBDA
+"""Integer ambiguity resolution by LAMBDA.
 
 reference:
      [1] P.J.G.Teunissen, The least-square ambiguity decorrelation adjustment:
@@ -24,7 +23,7 @@ from numpy.linalg import inv
 
 
 def ldldecom(Q):
-    """ Lt*d*L decomposition of positive symmetric matrix Q """
+    """Compute LDL^T decomposition of positive symmetric matrix Q."""
     n = len(Q)
     L = np.zeros((n, n))
     d = np.zeros(n)
@@ -43,6 +42,7 @@ def ldldecom(Q):
 
 
 def reduction(L, d):
+    """Perform LDL^T decomposition and integer Gauss transformation."""
     n = len(d)
     Z = np.eye(n)
     j = n-2
@@ -75,12 +75,13 @@ def reduction(L, d):
 
 
 def sr_boost(d):
-    """ Compute the bootstrapped success rate """
+    """Compute the bootstrapped success rate."""
     Ps = np.prod(2*norm.cdf(0.5/np.sqrt(d))-1)
     return Ps
 
 
 def msearch(L, d, ahat, ncands=2):
+    """Search integer least-squares candidates using modified Pohst."""
     n = len(d)
     Chi2 = 1e18
 
@@ -149,7 +150,7 @@ def msearch(L, d, ahat, ncands=2):
 
 
 def estimILS(L, d, ahat, ncands=2):
-    """ ILS estimator by search-and-shrink [4] """
+    """Estimate integer least-squares solution by search-and-shrink [4]."""
     n = len(d)
     Chi2 = 1e18
 
@@ -243,7 +244,7 @@ def estimILS(L, d, ahat, ncands=2):
 
 
 def parsearch(zhat, Qzhat, Z, L, d, Ps, P0=0.995, ncands=2, exclmax=1):
-    """ Partial Ambiguity Resolution """
+    """Perform partial ambiguity resolution."""
     n = len(Qzhat)
     k = 0
     # idx = np.argsort(d)[::-1]
@@ -287,7 +288,7 @@ def parsearch(zhat, Qzhat, Z, L, d, Ps, P0=0.995, ncands=2, exclmax=1):
 
 
 def mlambda(ahat, Qahat, ncands=2, parmode=1, P0=0.995):
-    """ modified LAMBDA method for ambiguity resolution """
+    """Resolve integer ambiguities using modified LAMBDA method."""
     # s = time.perf_counter_ns()
     L, d = ldldecom(Qahat)
     # e = time.perf_counter_ns()

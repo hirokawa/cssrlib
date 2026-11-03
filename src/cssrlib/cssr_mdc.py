@@ -1,9 +1,8 @@
-"""
-QZSS MADOCA-PPP correction data decoder
+"""QZSS MADOCA-PPP correction data decoder.
 
 [1] Quasi-Zenith Satellite System Interface Specification Multi-GNSS
     Advanced Orbit and Clock Augmentation - Precise Point Positioning
-    (IS-QZSS-MDC-004), 2025
+    (IS-QZSS-MDC-005draft), October, 2026
 
 """
 
@@ -15,7 +14,10 @@ from cssrlib.gnss import pos2ecef, gtime_t
 
 
 class areaInfo():
+    """Class to store MADOCA-PPP service area information."""
+
     def __init__(self, sid, latr, lonr, p1=0, p2=0):
+        """Initialize MADOCA-PPP area information."""
         self.sid = sid
         self.latr = latr
         self.lonr = lonr
@@ -27,7 +29,10 @@ class areaInfo():
 
 
 class ionoCorr():
+    """Class to store MADOCA-PPP regional ionospheric corrections."""
+
     def __init__(self):
+        """Initialize MADOCA-PPP ionospheric correction data."""
         self.t0 = None
         self.qi = []
         self.iodssr = 0
@@ -37,7 +42,10 @@ class ionoCorr():
 
 
 class cssr_mdc(cssr):
+    """Class to decode QZSS MADOCA-PPP L6D/L6E messages."""
+
     def __init__(self, foutname=None):
+        """Initialize MADOCA-PPP L6 message decoder."""
         super().__init__(foutname)
 
         self.cssrmode = sCSSRTYPE.QZS_MADOCA
@@ -67,8 +75,7 @@ class cssr_mdc(cssr):
             self.lc[inet].t0 = {}
 
     def find_grid_index(self, pos):
-        """ find region/area   """
-
+        """Find region/area."""
         latd, lond = np.rad2deg(pos[0:2])
         rr = pos2ecef(pos)
         self.reg = self.area = -1
@@ -101,7 +108,7 @@ class cssr_mdc(cssr):
         return inet
 
     def get_dpos(self, pos):
-        """ calculate position offset from reference """
+        """Calculate position offset from reference."""
         if self.reg < 0 or self.area < 0:
             print("get_dpos: region, area not defined.")
             return 0, 0
@@ -114,7 +121,7 @@ class cssr_mdc(cssr):
         return dlat, dlon
 
     def get_stec(self, dlat=0.0, dlon=0.0):
-        """ calculate STEC correction by interporation """
+        """Calculate STEC correction by interporation."""
         if self.inet < 0:
             print("get_stec: region, area not defined.")
             return np.zeros(self.nsat_n)
@@ -131,7 +138,7 @@ class cssr_mdc(cssr):
         return stec
 
     def decode_mdc_stec_area(self, buff, i=0):
-        """ decoder for MT1 - STEC Coverage Message """
+        """Decode MT1 STEC coverage message."""
         tow, uid, mi, iodssr = bs.unpack_from('u20u4u1u4', buff, i)
         i += 29
         self.tow = tow
@@ -170,8 +177,7 @@ class cssr_mdc(cssr):
         return i
 
     def get_inet(self, reg, area):
-        """ region, area to inet conversion """
-
+        """Convert region and area ID to network index."""
         if reg < 0 or area < 0:
             return -1
 
@@ -186,7 +192,7 @@ class cssr_mdc(cssr):
         return inet
 
     def decode_mdc_stec_corr(self, buff, i=0):
-        """ decoder for MT2 - STEC Correction Message """
+        """Decode MT2 STEC correction message."""
         dtow, uid, mi, iodssr = bs.unpack_from('u12u4u1u4', buff, i)
         i += 21
         if self.tow0 >= 0:
@@ -251,7 +257,7 @@ class cssr_mdc(cssr):
     def out_log(self):
         # if self.msgtype not in (1, 2):
         #    return super(cssr_mdc, self).out_log()
-
+        """Write decoded MADOCA-PPP STEC messages to log file."""
         sz_t = [1, 3, 4, 6]
 
         if self.time == -1:
@@ -291,7 +297,7 @@ class cssr_mdc(cssr):
         self.fh.flush()
 
     def decode_cssr(self, msg, i=0):
-        """decode Compact SSR message with MADOCA-PPP extension """
+        """Decode Compact SSR message with MADOCA-PPP extension."""
         df = {'msgtype': 4073}
         while df['msgtype'] in [1, 2, 4073]:
             if len(msg)*8 < i + 16:

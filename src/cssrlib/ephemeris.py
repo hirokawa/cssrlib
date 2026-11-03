@@ -1,6 +1,4 @@
-"""
-module for ephemeris processing
-"""
+"""Module for ephemeris processing."""
 
 from cssrlib.cssrlib import sCType
 from cssrlib.cssrlib import sCSSRTYPE as sc
@@ -20,7 +18,7 @@ MAXDTOE_t = {uGNSS.GPS: 7201.0, uGNSS.GAL: 14400.0, uGNSS.QZS: 7201.0,
 
 
 def findeph(nav, t, sat, iode=-1, mode=0):
-    """ find ephemeris for sat """
+    """Find ephemeris for sat."""
     sys, _ = sat2prn(sat)
     eph = None
     tmax = MAXDTOE_t[sys]
@@ -43,7 +41,7 @@ def findeph(nav, t, sat, iode=-1, mode=0):
 
 
 def dtadjust(t1, t2, tw=604800):
-    """ calculate delta time considering week-rollover """
+    """Calculate delta time considering week-rollover."""
     dt = timediff(t1, t2)
     if dt > tw:
         dt -= tw
@@ -53,6 +51,7 @@ def dtadjust(t1, t2, tw=604800):
 
 
 def deq(x, acc):
+    """Compute differential equations of motion for GLONASS orbit."""
     xdot = np.zeros(6)
 
     r2 = x[0:3]@x[0:3]
@@ -75,6 +74,7 @@ def deq(x, acc):
 
 
 def glorbit(t, x, acc):
+    """Integrate GLONASS satellite orbit using 4th-order Runge-Kutta."""
     k1 = deq(x, acc)
     w = x + k1*t/2.0
     k2 = deq(w, acc)
@@ -87,7 +87,7 @@ def glorbit(t, x, acc):
 
 
 def geph2pos(time: gtime_t, geph: Geph, flg_v=False, TSTEP=1.0):
-    """ calculate GLONASS satellite position based on ephemeris """
+    """Calculate GLONASS satellite position based on ephemeris."""
     t = timediff(time, geph.toe)
     dts = -geph.taun+geph.gamn*t
     x = np.zeros(6)
@@ -114,7 +114,7 @@ def geph2pos(time: gtime_t, geph: Geph, flg_v=False, TSTEP=1.0):
 
 
 def geph2clk(time: gtime_t, geph: Geph):
-    """ calculate GLONASS satellite clock offset based on ephemeris """
+    """Calculate GLONASS satellite clock offset based on ephemeris."""
     ts = timediff(time, geph.toe)
     t = ts
     for _ in range(2):
@@ -123,13 +123,12 @@ def geph2clk(time: gtime_t, geph: Geph):
 
 
 def geph2rel(rs, vs):
+    """Compute relativistic clock correction for GLONASS satellite."""
     return - 2.0*(rs@vs)/(rCST.CLIGHT**2)
 
 
 def eccentricAnomaly(M, e):
-    """
-    Compute eccentric anomaly based on mean anomaly and eccentricity
-    """
+    """Compute eccentric anomaly based on mean anomaly and eccentricity."""
     E = M
     for _ in range(10):
         Eold = E
@@ -142,6 +141,7 @@ def eccentricAnomaly(M, e):
 
 
 def sys2MuOmega(sys):
+    """Return gravitational constant and rotation rate for GNSS."""
     if sys == uGNSS.GAL:
         mu = rCST.MU_GAL
         omge = rCST.OMGE_GAL
@@ -155,7 +155,7 @@ def sys2MuOmega(sys):
 
 
 def eph2pos(t: gtime_t, eph: Eph, flg_v=False):
-    """ calculate satellite position based on ephemeris """
+    """Calculate satellite position based on ephemeris."""
     sys, prn = sat2prn(eph.sat)
     mu, omge = sys2MuOmega(sys)
     dt = dtadjust(t, eph.toe)
@@ -233,7 +233,7 @@ def eph2pos(t: gtime_t, eph: Eph, flg_v=False):
 
 
 def eph2clk(time, eph):
-    """ calculate clock offset based on ephemeris """
+    """Calculate clock offset based on ephemeris."""
     t = timediff(time, eph.toc)
     for _ in range(2):
         t -= eph.af0+eph.af1*t+eph.af2*t**2
@@ -242,6 +242,7 @@ def eph2clk(time, eph):
 
 
 def eph2rel(time, eph):
+    """Compute relativistic clock correction from broadcast ephemeris."""
     sys, _ = sat2prn(eph.sat)
     mu, _ = sys2MuOmega(sys)
     dt = dtadjust(time, eph.toe)
@@ -259,8 +260,7 @@ def eph2rel(time, eph):
 
 
 def satpos(sat, t, nav, cs=None, orb=None):
-    """
-    Calculate pos/vel/clk for single satellite
+    """Calculate pos/vel/clk for single satellite.
 
     The satellite position, velocity and clock offset are computed at epoch.
     The satellite health indicator is extracted from the broadcast navigation
@@ -290,7 +290,6 @@ def satpos(sat, t, nav, cs=None, orb=None):
     svh : np.array() of int
         satellite health code [-]
     """
-
     n = 1
     rs = np.ones((n, 3))*np.nan
     vs = np.ones((n, 3))*np.nan
@@ -484,8 +483,7 @@ def satpos(sat, t, nav, cs=None, orb=None):
 
 
 def satposs(obs, nav, cs=None, orb=None):
-    """
-    Calculate pos/vel/clk for observed satellites
+    """Calculate pos/vel/clk for observed satellites.
 
     The satellite position, velocity and clock offset are computed at
     transmission epoch. The signal time-of-flight is computed from
@@ -518,7 +516,6 @@ def satposs(obs, nav, cs=None, orb=None):
     nsat : int
         number of effective satellite
     """
-
     n = obs.sat.shape[0]
     rs = np.zeros((n, 3))
     vs = np.zeros((n, 3))
@@ -737,8 +734,9 @@ def satposs(obs, nav, cs=None, orb=None):
 
 
 def loadXmlAlmanac(fname, sys=uGNSS.GAL):
-    """ load Galileo Almanac in XML format:
-      https://www.gsc-europa.eu/gsc-products/almanac
+    """Load Galileo Almanac in XML format.
+
+    https://www.gsc-europa.eu/gsc-products/almanac
     """
     alm_t = []
     root = et.parse(fname).getroot()
@@ -789,7 +787,7 @@ def loadXmlAlmanac(fname, sys=uGNSS.GAL):
 
 
 def loadyuma(fname, sys=uGNSS.GPS):
-    """ load Yuma almanac """
+    """Load Yuma almanac."""
     alm_t = []
     if sys == uGNSS.GPS or sys == uGNSS.QZS:
         week_ref, _ = time2gpst(timeget())
@@ -858,7 +856,7 @@ def loadyuma(fname, sys=uGNSS.GPS):
 
 
 def findalm(alm_t, t, sat, tmax=np.inf):
-    """ find almanac for sat """
+    """Find almanac for sat."""
     sys, _ = sat2prn(sat)
     alm = None
     tmin = tmax + 1.0
@@ -876,7 +874,7 @@ def findalm(alm_t, t, sat, tmax=np.inf):
 
 
 def alm2pos(t: gtime_t, alm: Alm):
-    """ calculate satellite position based on ephemeris """
+    """Calculate satellite position based on ephemeris."""
     sys, prn = sat2prn(alm.sat)
     if sys == uGNSS.GAL:
         mu = rCST.MU_GAL

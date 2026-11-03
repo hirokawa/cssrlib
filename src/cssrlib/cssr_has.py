@@ -1,5 +1,4 @@
-"""
-Galileo HAS correction data decoder
+"""Galileo HAS correction data decoder.
 
 [1] Galileo High Accuracy Service Signal-in-Space
   Interface Control Document (HAS SIS ICD), Issue 1.0, May 2022
@@ -15,7 +14,10 @@ from binascii import unhexlify
 
 
 class cssr_has(cssr):
+    """Class to decode Galileo HAS Compact SSR messages."""
+
     def __init__(self, foutname=None):
+        """Initialize Galileo HAS SSR decoder."""
         super().__init__(foutname)
         self.MAXNET = 1
         self.cssrmode = sCSSRTYPE.GAL_HAS_SIS
@@ -29,13 +31,14 @@ class cssr_has(cssr):
         self.pb_scl = 0.01  # cycles
 
     def sval(self, u, n, scl):
-        """ calculate signed value based on n-bit int, lsb """
+        """Calculate signed value based on n-bit int, lsb."""
         invalid = -2**(n-1)
         dnu = 2**(n-1)-1
         y = np.nan if u == invalid or u == dnu else u*scl
         return y
 
     def decode_cssr_clk_sub(self, msg, i=0):
+        """Decode Galileo HAS clock subset correction message."""
         head, i = self.decode_head(msg, i)
         self.flg_net = False
         if self.iodssr != head['iodssr']:
@@ -58,8 +61,7 @@ class cssr_has(cssr):
         return i
 
     def decode_head(self, msg, i, st=-1):
-        """ decode header part of HAS messages """
-
+        """Decode header part of HAS messages."""
         if st == sCSSR.MASK:
             udi = 0
         else:
@@ -75,9 +77,8 @@ class cssr_has(cssr):
         return head, i
 
     def decode_cssr(self, msg, i=0):
-        """ decode HAS messages """
-
-        # Galileo HAS-SIS only defines MT=1, MT=4073 is CSSR message used in the
+        """Decode HAS messages."""
+        # Galileo HAS-SIS only defines MT=1; MT=4073 is CSSR used in the
         # Galileo HAS test dataset
         #
         if self.msgtype != 1 and self.msgtype != 4073:
@@ -131,9 +132,10 @@ class cssr_has(cssr):
 
 
 class cnav_msg():
-    """ class to handle Galileo E6 (CNAV) message """
+    """Class to handle Galileo E6 (CNAV) message."""
 
     def __init__(self):
+        """Initialize Galileo C/NAV HAS message decoder."""
         self.mid_decoded = []
         self.mid_ = -1
         self.ms_ = -1
@@ -148,10 +150,11 @@ class cnav_msg():
         self.monlevel = 0
 
     def load_gmat(self, file_gm):
+        """Load Reed-Solomon generator matrix for Galileo HAS decoding."""
         self.gMat = np.genfromtxt(file_gm, dtype="u1", delimiter=",")
 
     def decode_has_header(self, buff, i):
-        """ decode header of HAS pages (obsoleted) """
+        """Decode header of HAS pages (obsoleted)."""
         if bs.unpack_from('u24', buff, i)[0] == 0xaf3bc3:
             return 0, 0, 0, 0, 0
 
@@ -160,7 +163,7 @@ class cnav_msg():
         return hass, mt, mid, ms, pid
 
     def decode_has_page(self, idx, has_pages, gMat, ms):
-        """ HPVRS decoding for RS(255,32,224) """
+        """Decode HPVRS Reed-Solomon RS(255,32,224) page."""
         HASmsg = bytes()
         k = len(idx)
         if k >= ms:
@@ -172,8 +175,7 @@ class cnav_msg():
         return HASmsg
 
     def decode_cnav(self, tow, vi):
-        """ decode Galileo CNAV message """
-
+        """Decode Galileo CNAV message."""
         HASmsg = None
 
         for vn in vi:

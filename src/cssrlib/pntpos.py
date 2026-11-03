@@ -1,6 +1,4 @@
-"""
-module for standalone positioning
-"""
+"""Module for standalone positioning."""
 import numpy as np
 from cssrlib.gnss import rCST, ecef2pos, geodist, satazel, \
     tropmodel, tropmapf, sat2prn, uGNSS, uTropoModel, uIonoModel, \
@@ -14,7 +12,7 @@ from math import sin, cos
 
 
 def ionKlobuchar(t, pos, az, el, ion=None):
-    """ klobuchar model of ionosphere delay estimation """
+    """Compute Klobuchar broadcast ionospheric delay."""
     psi = 0.0137/(el/np.pi+0.11)-0.022
     phi = pos[0]/np.pi+psi*cos(az)
     phi = np.max((-0.416, np.min((0.416, phi))))
@@ -38,8 +36,7 @@ def ionKlobuchar(t, pos, az, el, ion=None):
 
 
 def ionmodel(t, pos, az, el, nav=None, model=uIonoModel.KLOBUCHAR, cs=None):
-    """ ionosphere delay estimation """
-
+    """Compute ionospheric delay estimation."""
     if model == uIonoModel.KLOBUCHAR:
         diono = ionKlobuchar(t, pos, az, el, nav.ion)
     elif model == uIonoModel.SBAS:
@@ -56,14 +53,15 @@ def ionmodel(t, pos, az, el, nav=None, model=uIonoModel.KLOBUCHAR, cs=None):
 
 
 class stdpos(pppos):
+    """Class for standalone positioning (SPP)."""
 
     def ICB(self, s=0):
-        """ return index of clock bias (s=0), clock drift (s=1) """
+        """Return index of clock bias (s=0), clock drift (s=1)."""
         return 3+s if self.nav.pmode == 0 else 6+s
 
     def __init__(self, nav, pos0=np.array([0, 0, rCST.RE_WGS84]), logfile=None, trop_opt=0,
                  iono_opt=0, phw_opt=0, csmooth=False, rmode=0):
-
+        """Initialize standalone positioning solver."""
         self.nav = nav
         self.monlevel = 0
 
@@ -134,7 +132,7 @@ class stdpos(pppos):
 
         self.nav.elmin = np.deg2rad(10.0)
 
-        self.nav.th_clk_rst = 1e2 # threshold value for clock bias initialize/reset
+        self.nav.th_clk_rst = 1e2  # threshold for clock bias init/reset
 
         self.nav.obad = None
 
@@ -184,8 +182,7 @@ class stdpos(pppos):
             self.nav.fout = open(logfile, 'w')
 
     def csmooth(self, obs: Obs, sat, Pm, Lm, ns=100, dt_th=1, cs_th=10):
-        """ Hatch filter for carrier smoothing """
-
+        """Apply Hatch filter for carrier-phase pseudorange smoothing."""
         if Pm == 0.0 or Lm == 0.0:
             self.cs_cnt[sat] = 1
             return Pm
@@ -211,7 +208,7 @@ class stdpos(pppos):
         return self.Ps_[sat]
 
     def varerr(self, nav, el, f, e=None, sat=None):
-        """ variation of measurement """
+        """Compute measurement error variance."""
         if nav.smode == 2:  # DGPS
             # if nav.cssrmode in [sCSSRTYPE.SBAS_L1, sCSSRTYPE.SBAS_L5]:
             #    v_sig = varsbas(el, nav, e, sat)
@@ -226,8 +223,7 @@ class stdpos(pppos):
         return v_sig
 
     def udstate(self, obs):
-        """ time propagation of states and initialize """
-
+        """Propagate filter states in time and initialize states."""
         tt = timediff(obs.t, self.nav.t)
 
         sys = []
@@ -257,8 +253,7 @@ class stdpos(pppos):
         return 0
 
     def zdres(self, obs, cs, bsx, rs, vs, dts, x, rtype=1):
-        """ non-differential residual """
-
+        """Compute undifferenced phase and code residuals."""
         _c = rCST.CLIGHT
 
         nf = self.nav.nf
@@ -370,12 +365,10 @@ class stdpos(pppos):
         return y, e, az, el
 
     def sdres(self, obs, x, y, e, sat, el):
-        """
-        SD phase/code residuals
+        """Compute single-differenced phase and code residuals.
 
         Parameters
         ----------
-
         obs : Obs()
             Data structure with observations
         x   :
@@ -398,7 +391,6 @@ class stdpos(pppos):
         R   : np.array of float values
             Covariance matrix of single-difference measurements
         """
-
         nf = self.nav.nf if self.nav.rmode == 0 else 1
         # number of frequencies (or signals)
 
@@ -459,7 +451,7 @@ class stdpos(pppos):
         return v, H, R
 
     def ddcov(self, nb, n, Rj, nv):
-        """ DD measurement error covariance """
+        """Compute double-differenced measurement error covariance matrix."""
         R = np.zeros((nv, nv))
         k = 0
         for b in range(n):
@@ -470,9 +462,7 @@ class stdpos(pppos):
         return R
 
     def process(self, obs, cs=None, orb=None, bsx=None, obsb=None):
-        """
-        standalone positioning
-        """
+        """Perform standalone positioning."""
         if len(obs.sat) == 0:
             return
 
@@ -562,7 +552,7 @@ class stdpos(pppos):
         #
         v, H, R = self.sdres(obs, xp, y, e, sat, el)
 
-        if abs(np.mean(v)) > self.nav.th_clk_rst:  # clock bias initialize/reset
+        if abs(np.mean(v)) > self.nav.th_clk_rst:  # clock bias init/reset
             ic = self.ICB()
             idx_ = np.where(v != 0.0)[0]
             xp[ic] = np.mean(v[idx_])

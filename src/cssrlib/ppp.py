@@ -1,6 +1,4 @@
-"""
-module for PPP processing
-"""
+"""Module for PPP processing."""
 from cssrlib.gnss import rCST, epoch2time, time2epoch, timeadd
 from cssrlib.gnss import timediff, vnorm, ecef2pos, xyz2enu, enu2xyz, gpst2utc
 from cssrlib.gnss import ecef2enu, Nav, prn2sat, pos2ecef, uGNSS
@@ -13,7 +11,7 @@ except ImportError:
 
 
 def nut_iau1980(t_, f):
-    """ define IAU1980 nutation """
+    """Define IAU1980 nutation."""
     nut = np.array([
         [0,   0,   0,   0,   1, -6798.4, -171996, -174.2, 92025,   8.9],
         [0,   0,   2,  -2,   2,   182.6,  -13187,   -1.6,  5736,  -3.1],
@@ -135,7 +133,7 @@ def nut_iau1980(t_, f):
 
 
 def ast_args(t_):
-    """ iau1980 nutation l,l',F,D,OMG [rad] """
+    """Compute IAU 1980 fundamental nutation arguments [rad]."""
     fc = np.array([[134.96340251, 1717915923.2178, 31.8792, 0.051635,
                     -0.00024470],
                    [357.52910918, 129596581.0481, -0.5532, 0.000136,
@@ -158,28 +156,28 @@ def ast_args(t_):
 
 
 def Rx(t_):
-    """ x-axis rotation matrix """
+    """Compute 3D coordinate rotation matrix around X-axis."""
     c = cos(t_)
     s = sin(t_)
     return np.array([[1, 0, 0], [0, c, s], [0, -s, c]])
 
 
 def Ry(t_):
-    """ y-axis rotation matrix """
+    """Compute 3D coordinate rotation matrix around Y-axis."""
     c = cos(t_)
     s = sin(t_)
     return np.array([[c, 0, -s], [0, 1, 0], [s, 0, c]])
 
 
 def Rz(t_):
-    """ z-axis rotation matrix """
+    """Compute 3D coordinate rotation matrix around Z-axis."""
     c = cos(t_)
     s = sin(t_)
     return np.array([[c, s, 0], [-s, c, 0], [0, 0, 1]])
 
 
 def utc2gmst(t_, ut1_utc=0):
-    """ UTC to GMST """
+    """Convert UTC time to Greenwich Mean Sidereal Time (GMST)."""
     ep0 = epoch2time([2000, 1, 1, 12, 0, 0])
     tut = timeadd(t_, ut1_utc)
     ep = time2epoch(tut)
@@ -194,7 +192,7 @@ def utc2gmst(t_, ut1_utc=0):
 
 
 def eci2ecef(tgps, erpv):
-    """ ECI to ECEF conversion matrix """
+    """Compute ECI to ECEF coordinate transformation matrix."""
     tutc = gpst2utc(tgps)
     ep0 = epoch2time([2000, 1, 1, 12, 0, 0])
     dt = timediff(tgps, ep0)
@@ -225,7 +223,7 @@ def eci2ecef(tgps, erpv):
 
 
 def sunmoonpos(tutc, erpv=np.zeros(5)):
-    """ calculate sun/moon position in ECEF """
+    """Calculate sun/moon position in ECEF."""
     tut = timeadd(tutc, erpv[2])
     ep0 = epoch2time([2000, 1, 1, 12, 0, 0])
     t_ = timediff(tut, ep0)/rCST.CENTURY_SEC
@@ -266,7 +264,7 @@ def sunmoonpos(tutc, erpv=np.zeros(5)):
 
 
 def shapiro(rsat, rrcv):
-    """ relativistic shapiro effect """
+    """Compute relativistic Shapiro signal propagation delay."""
     rs = np.linalg.norm(rsat)
     rr = np.linalg.norm(rrcv)
     rrs = np.linalg.norm(rsat-rrcv)
@@ -275,10 +273,10 @@ def shapiro(rsat, rrcv):
 
 
 def windupcorr(time, rs, vs, rr, rsun, phw, full=False):
-    """ calculate windup correction """
+    """Calculate windup correction."""
     ek = vnorm(rr-rs)
     if full:
-        # Satellite antenna frame unit vectors assuming standard yaw attitude law
+        # Satellite antenna frame unit vectors with standard yaw attitude law
         #
         r = -rs
         ezs = r/np.linalg.norm(r)
@@ -313,7 +311,7 @@ def windupcorr(time, rs, vs, rr, rsun, phw, full=False):
 
 
 def tide_pl(eu, rp, GMp, pos):
-    """ pole tide correction """
+    """Compute pole tide displacement correction."""
     H3 = 0.293
     L3 = 0.0156
     r = np.linalg.norm(rp)
@@ -345,7 +343,7 @@ def tide_pl(eu, rp, GMp, pos):
 
 
 def solid_tide(rsun, rmoon, pos, E, gmst, flag=True):
-    """ solid earth tide correction """
+    """Compute solid Earth tide displacement correction."""
     # time domain
     eu = E[2, :]
     dr1 = tide_pl(eu, rsun, rCST.GMS, pos)
@@ -367,7 +365,7 @@ def solid_tide(rsun, rmoon, pos, E, gmst, flag=True):
 
 
 def tidedisp(tutc, pos, erpv=None):
-    """ displacement by tide """
+    """Compute site displacement due to Earth tides."""
     if erpv is None:
         erpv = np.zeros(5)
     rs, rm, gmst = sunmoonpos(tutc, erpv)
@@ -377,8 +375,8 @@ def tidedisp(tutc, pos, erpv=None):
 
 
 def tidedispIERS2010(tutc, pos, erpv=None):
-    """
-    Wrapper for solid_grid() method of PySolid module to compute Earth tide
+    """Compute solid Earth tide displacement using PySolid (IERS 2010).
+
     displacement corrections according to the IERS2010 conventions
     """
     if solid_grid is None:  # workaround for missing PySolid

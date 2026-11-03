@@ -1,9 +1,8 @@
-"""
-module for Compact SSR processing
+"""Module for Compact SSR processing.
 
-[1] Specification of Compact SSR Messages for Satellite Based Augmentation 
-    Service, v08, DOI: 10.13140/RG.2.2.10749.49129, 2019
-    
+[1] Specification of Compact SSR Messages for Satellite Based Augmentation
+    Service v12, DOI: 10.13140/RG.2.2.27778.24009,2026
+
 @author Rui Hirokawa
 
 """
@@ -25,6 +24,8 @@ from cssrlib.osnma import raw2der, load_pubkey
 
 
 class sCSSRTYPE(IntEnum):
+    """Enumeration of Compact SSR and augmentation service types."""
+
     QZS_CLAS = 0     # QZS CLAS PPP-RTK
     QZS_MADOCA = 1   # MADOCA-PPP
     GAL_HAS_SIS = 2  # Galileo HAS Signal-In-Space
@@ -40,7 +41,8 @@ class sCSSRTYPE(IntEnum):
 
 
 class sGNSS(IntEnum):
-    """ class to define GNSS """
+    """Class to define GNSS."""
+
     GPS = 0
     GLO = 1
     GAL = 2
@@ -52,7 +54,8 @@ class sGNSS(IntEnum):
 
 
 class sCSSR(IntEnum):
-    """ class to define Compact SSR message types """
+    """Class to define Compact SSR message types."""
+
     MASK = 1
     ORBIT = 2
     CLOCK = 3
@@ -70,7 +73,8 @@ class sCSSR(IntEnum):
     HCLOCK = 19
 
 class sCType(IntEnum):
-    """ class to define correction message types """
+    """Class to define correction message types."""
+
     MASK = 0
     ORBIT = 1
     CLOCK = 2
@@ -91,7 +95,8 @@ class sCType(IntEnum):
 
 
 class sSigGPS(IntEnum):
-    """ class to define GPS signals """
+    """Class to define GPS signals."""
+
     L1C = 0
     L1P = 1
     L1W = 2
@@ -109,7 +114,8 @@ class sSigGPS(IntEnum):
 
 
 class sSigGLO(IntEnum):
-    """ class to define GLONASS signals """
+    """Class to define GLONASS signals."""
+
     L1C = 0
     L1P = 1
     L2C = 2
@@ -126,7 +132,8 @@ class sSigGLO(IntEnum):
 
 
 class sSigGAL(IntEnum):
-    """ class to define Galileo signals  """
+    """Class to define Galileo signals."""
+
     L1B = 0
     L1C = 1
     L1X = 2
@@ -145,7 +152,8 @@ class sSigGAL(IntEnum):
 
 
 class sSigBDS(IntEnum):
-    """ class to define BDS signals """
+    """Class to define BDS signals."""
+
     L2I = 0
     L2Q = 1
     L2X = 2
@@ -164,7 +172,8 @@ class sSigBDS(IntEnum):
 
 
 class sSigQZS(IntEnum):
-    """ class to define QZSS signals """
+    """Class to define QZSS signals."""
+
     L1C = 0
     L1S = 1
     L1L = 2
@@ -182,7 +191,8 @@ class sSigQZS(IntEnum):
 
 
 class sSigSBS(IntEnum):
-    """ class to define SBAS signals """
+    """Class to define SBAS signals."""
+
     L1C = 0
     L5I = 1
     L5Q = 2
@@ -190,7 +200,8 @@ class sSigSBS(IntEnum):
 
 
 class sSigIRN(IntEnum):
-    """ class to define NavIC signals """
+    """Class to define NavIC signals."""
+
     L1D = 0
     L1P = 1
     L1X = 2
@@ -199,6 +210,7 @@ class sSigIRN(IntEnum):
 
 
 def sgnss2sys(sys: sGNSS):
+    """Convert sGNSS enumeration to uGNSS system identifier."""
     ugnss_tbl = {
         sGNSS.GPS: uGNSS.GPS,
         sGNSS.GLO: uGNSS.GLO,
@@ -212,6 +224,7 @@ def sgnss2sys(sys: sGNSS):
 
 
 def sys2sgnss(sys: uGNSS):
+    """Convert uGNSS system identifier to sGNSS enumeration."""
     sgnss_tbl = {
         uGNSS.GPS: sGNSS.GPS,
         uGNSS.GLO: sGNSS.GLO,
@@ -224,9 +237,10 @@ def sys2sgnss(sys: uGNSS):
 
 
 class local_corr:
-    """ class for local corrections """
+    """Class for local corrections."""
 
     def __init__(self):
+        """Initialize local correction data structure."""
         self.inet = -1
         self.inet_ref = -1
         self.ng = 0
@@ -268,7 +282,8 @@ class local_corr:
 
 
 class cssr:
-    """ class to process Compact SSR messages """
+    """Class to process Compact SSR messages."""
+
     CSSR_MSGTYPE = 4073
     MAXNET = 32
     SYSMAX = 16
@@ -276,7 +291,7 @@ class cssr:
     stec_scl_t = [0.04, 0.12, 0.16, 0.24]
 
     def __init__(self, foutname=None):
-        """ constructor of cssr """
+        """Initialize Compact SSR decoder."""
         self.cssrmode = sCSSRTYPE.QZS_CLAS
         self.monlevel = 0
         self.week = -1
@@ -387,6 +402,7 @@ class cssr:
             self.fh = open(foutname, "w")
 
     def ssig2rsig(self, sys: sGNSS, utyp: uTYP, ssig):
+        """Convert Compact SSR signal identifier to RINEX signal code."""
         gps_tbl = {
             sSigGPS.L1C: uSIG.L1C,
             sSigGPS.L1P: uSIG.L1P,
@@ -501,7 +517,7 @@ class cssr:
         return rSigRnx(sys, utyp, usig_tbl[ssig])
 
     def set_time(self, t):
-        """ set observation time (week, tow) """
+        """Set observation time (week, tow)."""
         self.time0 = t
         week, tow = time2gpst(t)
         self.week = week
@@ -509,19 +525,19 @@ class cssr:
         return week, tow
 
     def sval(self, u, n, scl):
-        """ calculate signed value based on n-bit int, lsb """
+        """Calculate signed value based on n-bit int, lsb."""
         invalid = -2**(n-1)
         y = np.nan if u == invalid else u*scl
         return y
 
     def isset(self, mask, nbit, k):
-        """ check if k-th bit in nbit mask is set """
+        """Check if k-th bit in nbit mask is set."""
         if (mask >> (nbit-k-1)) & 1:
             return True
         return False
 
     def set_t0(self, inet=0, sat=0, ctype=0, t=gtime_t()):
-        """ set reference time for correction to check validity time """
+        """Set reference time for correction to check validity time."""
         sc_t = [sCType.CLOCK, sCType.ORBIT, sCType.CBIAS, sCType.PBIAS,
                 sCType.HCLOCK]
 
@@ -533,7 +549,7 @@ class cssr:
         self.lc[inet].t0[sat][ctype] = t
 
     def quality_idx(self, cl, val):
-        """ calculate quality index """
+        """Calculate quality index."""
         if cl == 7 and val == 7:
             y = 5.4665
         elif cl == 0 and val == 0:  # undefined/unknown
@@ -543,7 +559,7 @@ class cssr:
         return y
 
     def gnss2sys(self, gnss: sGNSS):
-        """ convert from sGNSS to sys """
+        """Convert from sGNSS to sys."""
         tbl = {sGNSS.GPS: uGNSS.GPS, sGNSS.GLO: uGNSS.GLO,
                sGNSS.GAL: uGNSS.GAL, sGNSS.BDS: uGNSS.BDS,
                sGNSS.QZS: uGNSS.QZS, sGNSS.SBS: uGNSS.SBS,
@@ -554,7 +570,7 @@ class cssr:
         return sys
 
     def decode_local_sat(self, netmask):
-        """ decode netmask, and return list of local sats """
+        """Decode netmask, and return list of local sats."""
         sat = []
         for k in range(self.nsat_n):
             if not self.isset(netmask, self.nsat_n, k):
@@ -563,7 +579,7 @@ class cssr:
         return sat
 
     def decode_mask(self, din, bitlen, ofst=1):
-        """ decode n-bit mask with offset """
+        """Decode n-bit mask with offset."""
         v = []
         n = 0
         for k in range(0, bitlen):
@@ -573,7 +589,7 @@ class cssr:
         return (v, n)
 
     def decode_head(self, msg, i, st=-1):
-        """ decode header of cssr message """
+        """Decode header of cssr message."""
         if st == sCSSR.MASK:
             self.tow = bs.unpack_from('u20', msg, i)[0]
             i += 20
@@ -592,7 +608,7 @@ class cssr:
         return (dfm, i)
 
     def decode_cssr_mask(self, msg, i):
-        """decode MT4073,1 Mask message """
+        """Decode MT4073,1 Mask message."""
         head, i = self.decode_head(msg, i, sCSSR.MASK)
         self.ngnss = bs.unpack_from('u4', msg, i)[0]
         self.flg_net = False
@@ -666,7 +682,7 @@ class cssr:
         return i
 
     def decode_orb_sat(self, msg, i, sat, sys=uGNSS.NONE, inet=0):
-        """ decoder orbit correction of cssr """
+        """Decode satellite orbit correction of Compact SSR."""
         n = 10 if sys == uGNSS.GAL else 8
         fmt = 'u{:d}s{:d}s{:d}s{:d}'\
             .format(n, self.dorb_blen[0], self.dorb_blen[1], self.dorb_blen[2])
@@ -687,7 +703,7 @@ class cssr:
         return i
 
     def decode_clk_sat(self, msg, i, sat, inet=0):
-        """ decoder clock correction of cssr """
+        """Decode satellite clock correction of Compact SSR."""
         dclk = bs.unpack_from('s'+str(self.dclk_blen), msg, i)[0]
 
         self.lc[inet].dclk[sat] = self.sval(
@@ -701,7 +717,7 @@ class cssr:
         return i
 
     def decode_cbias_sat(self, msg, i, sat, rsig, inet=0):
-        """ decoder code bias correction of cssr """
+        """Decode satellite code bias correction of Compact SSR."""
         cb = bs.unpack_from('s'+str(self.cb_blen), msg, i)[0]
         self.lc[inet].cbias[sat][rsig] = self.sval(
             cb, self.cb_blen, self.cb_scl)
@@ -709,7 +725,7 @@ class cssr:
         return i
 
     def decode_pbias_sat(self, msg, i, sat, rsig, inet=0):
-        """ decoder phase bias correction of cssr """
+        """Decode satellite phase bias correction of Compact SSR."""
         pb, di = bs.unpack_from('s'+str(self.pb_blen) + 'u2', msg, i)
         self.lc[inet].pbias[sat][rsig] = self.sval(
             pb, self.pb_blen, self.pb_scl)
@@ -718,7 +734,7 @@ class cssr:
         return i
 
     def decode_cssr_orb(self, msg, i, inet=0):
-        """decode MT4073,2 Orbit Correction message """
+        """Decode MT4073,2 Orbit Correction message."""
         head, i = self.decode_head(msg, i)
         self.flg_net = False
         self.udi[sCType.ORBIT] = head['udi']
@@ -735,7 +751,7 @@ class cssr:
         return i
 
     def decode_cssr_clk(self, msg, i, inet=0):
-        """decode MT4073,3 Clock Correction message """
+        """Decode MT4073,3 Clock Correction message."""
         head, i = self.decode_head(msg, i)
         self.flg_net = False
         self.udi[sCType.CLOCK] = head['udi']
@@ -765,7 +781,7 @@ class cssr:
         return i
 
     def decode_cssr_cbias(self, msg, i, inet=0):
-        """decode MT4073,4 Code Bias Correction message """
+        """Decode MT4073,4 Code Bias Correction message."""
         head, i = self.decode_head(msg, i)
         nsat = self.nsat_n
         self.flg_net = False
@@ -785,7 +801,7 @@ class cssr:
         return i
 
     def decode_cssr_pbias(self, msg, i, inet=0):
-        """decode MT4073,5 Phase Bias Correction message """
+        """Decode MT4073,5 Phase Bias Correction message."""
         head, i = self.decode_head(msg, i)
         nsat = self.nsat_n
         self.flg_net = False
@@ -807,7 +823,7 @@ class cssr:
         return i
 
     def decode_cssr_bias(self, msg, i, inet=0):
-        """decode MT4073,6 Bias Correction message """
+        """Decode MT4073,6 Bias Correction message."""
         nsat = self.nsat_n
         head, i = self.decode_head(msg, i)
 
@@ -865,7 +881,7 @@ class cssr:
         return i
 
     def decode_cssr_ura(self, msg, i, inet=0):
-        """decode MT4073,7 URA message """
+        """Decode MT4073,7 URA message."""
         head, i = self.decode_head(msg, i)
         if self.iodssr != head['iodssr']:
             return -1
@@ -882,7 +898,7 @@ class cssr:
         return i
 
     def decode_cssr_stec_coeff(self, msg, stype, i):
-        """ decode coefficient of STEC correction """
+        """Decode coefficient of STEC correction."""
         ci = np.zeros(6)
         v = bs.unpack_from('s14', msg, i)
         ci[0] = self.sval(v[0], 14, 0.05)
@@ -904,7 +920,7 @@ class cssr:
         return (ci, i)
 
     def decode_cssr_stec(self, msg, i):
-        """decode MT4073,8 STEC Correction message """
+        """Decode MT4073,8 STEC Correction message."""
         head, i = self.decode_head(msg, i)
         if self.iodssr != head['iodssr']:
             return -1
@@ -918,7 +934,7 @@ class cssr:
         self.lc[inet].nsat_n = len(self.lc[inet].sat_n)
         self.lc[inet].stec_quality = {}
         self.udi[sCType.STEC] = head['udi']
-        self.lc[inet].flg_stec = 2 # stec functional term
+        self.lc[inet].flg_stec = 2  # stec functional term
         self.lc[inet].ci = {}
         self.lc[inet].stype = {}
         for sat in self.lc[inet].sat_n:
@@ -934,7 +950,7 @@ class cssr:
         return i
 
     def decode_cssr_grid(self, msg, i):
-        """decode MT4073,9 Grid Correction message """
+        """Decode MT4073,9 Grid Correction message."""
         head, i = self.decode_head(msg, i)
         if self.iodssr != head['iodssr']:
             return -1
@@ -942,7 +958,7 @@ class cssr:
                                   ['ttype', 'range', 'inet', 'svmaskn',
                                   'class', 'value', 'ng'], msg, i)
         i += 20+self.nsat_n
-        
+
         self.flg_net = True
         self.udi[sCType.TROP] = head['udi']
         inet = dfm['inet']
@@ -955,7 +971,7 @@ class cssr:
                                                       dfm['value'])
 
         self.udi[sCType.TROP] = head['udi']
-        
+
         grid = self.grid[self.grid['nid'] == inet]
         if len(grid)>0:
             ah, aw = mapfParam(self.time, grid['lat'][0])
@@ -973,7 +989,7 @@ class cssr:
         fmt = 's'+str(sz)
         self.lc[inet].dstec = {}
         self.lc[inet].s_sz = {}
-        
+
         for sat in self.lc[inet].sat_n:
             self.lc[inet].dstec[sat] = {}
             self.lc[inet].s_sz[sat] = sz
@@ -984,9 +1000,9 @@ class cssr:
             if dfm['ttype'] > 0:
                 dth, dtw = bs.unpack_from('s9s8', msg, i)
                 i += 17
-                self.lc[inet].dth[j] = self.sval(dth, 9, 0.004)                
+                self.lc[inet].dth[j] = self.sval(dth, 9, 0.004)
                 self.lc[inet].dtw[j] = self.sval(dtw, 8, 0.004)
-                
+
             for sat in self.lc[inet].sat_n:
                 dstec = bs.unpack_from(fmt, msg, i)[0]
                 i += sz
@@ -999,12 +1015,12 @@ class cssr:
         return i
 
     def parse_sinfo(self):
-        """decode content of service info """
+        """Decode content of service info."""
         # TBD
         return 0
 
     def decode_cssr_sinfo(self, msg, i):
-        """decode MT4073,10 Service Information message """
+        """Decode MT4073,10 Service Information message."""
         dfm = bs.unpack_from_dict('b1u3u2', ['mi', 'cnt', 'dsize'], msg, i)
         self.flg_net = False
         i += 6
@@ -1020,7 +1036,7 @@ class cssr:
         return i
 
     def decode_cssr_comb(self, msg, i, inet=0):
-        """decode MT4073,11 Orbit,Clock Combined Correction message """
+        """Decode MT4073,11 Orbit,Clock Combined Correction message."""
         head, i = self.decode_head(msg, i)
         if self.iodssr != head['iodssr']:
             return -1
@@ -1065,7 +1081,7 @@ class cssr:
         return i
 
     def decode_cssr_atmos(self, msg, i):
-        """decode MT4073,12 Atmospheric Correction message """
+        """Decode MT4073,12 Atmospheric Correction message."""
         head, i = self.decode_head(msg, i)
         if self.iodssr != head['iodssr']:
             return -1
@@ -1175,7 +1191,7 @@ class cssr:
         return i
 
     def decode_cssr_auth_head(self, msg, i, st2=False):
-        """decode MT4073,13 Authentication header """
+        """Decode MT4073,13 Authentication header."""
         dtow = bs.unpack_from('u12', msg, i)[0]
         i += 12
         if self.tow0 >= 0:
@@ -1207,7 +1223,7 @@ class cssr:
         return dfm, i
 
     def decode_cssr_auth_info(self, msg, i):
-        """decode MT4073,13,1 Authentication Information Message """
+        """Decode MT4073,13,1 Authentication Information Message."""
         head, i = self.decode_cssr_auth_head(msg, i)
         chainid, ks_idx, ms_idx, nmac = bs.unpack_from('u2u4u4u4', msg, i)
         i += 14
@@ -1264,7 +1280,7 @@ class cssr:
         return i
 
     def decode_cssr_auth_nma(self, msg, i):
-        """decode MT4073,13,2 Authentication NMA Message """
+        """Decode MT4073,13,2 Authentication NMA Message."""
         head, i = self.decode_cssr_auth_head(msg, i, st2=True)
         chainid, ms_idx = bs.unpack_from('u2u4', msg, i)
         i += 6
@@ -1313,7 +1329,7 @@ class cssr:
         return i
 
     def decode_cssr_auth_rki(self, msg, i, i0=0):
-        """decode MT4073,13,3 Authentication Root Key Information """
+        """Decode MT4073,13,3 Authentication Root Key Information."""
         if len(msg) * 8 < i + 64:
             return -1
         head, i = self.decode_cssr_auth_head(msg, i)
@@ -1360,7 +1376,7 @@ class cssr:
         return i
 
     def decode_cssr_auth_pkr(self, msg, i):
-        """decode MT4073,13,4 Authentication Public Key Renewal """
+        """Decode MT4073,13,4 Authentication Public Key Renewal."""
         if len(msg) * 8 < i + 1062:
             return -1
         head, i = self.decode_cssr_auth_head(msg, i)
@@ -1392,7 +1408,7 @@ class cssr:
         return i
 
     def decode_cssr_auth_seg(self, msg, i):
-        """decode MT4073,13,11 Authentication Segmented Information """
+        """Decode MT4073,13,11 Authentication Segmented Information."""
         mi, msgcnt, auxfrm_iod, strmind, blk_idx, datasize = \
             bs.unpack_from('u1u8u2u4u2u3', msg, i)
         i += 20
@@ -1432,7 +1448,7 @@ class cssr:
         return i
 
     def decode_cssr_auth(self, msg, i):
-        """decode MT4073,13 Network and Navigation Message Authentication """
+        """Decode MT4073,13 Network and Navigation Message Authentication."""
         i0 = i - 16
         subsubtype = bs.unpack_from('u4', msg, i)[0]
         i += 4
@@ -1451,7 +1467,7 @@ class cssr:
         return i
 
     def verify_clas_root_key(self, chainid):
-        """ verify ST13,3 Root Key using ECDSA """
+        """Verify ST13,3 Root Key using ECDSA."""
         if chainid not in self.st13_3:
             return False
         r = self.st13_3[chainid]
@@ -1491,7 +1507,7 @@ class cssr:
         return status
 
     def verify_clas_tesla_key(self, st13_1_mac, st13_1_key, wn=None):
-        """ verify ST13,1 TESLA key against KROOT or previous key """
+        """Verify ST13,1 TESLA key against KROOT or previous key."""
         if st13_1_key.get('verified', False):
             return True
         cid = st13_1_key['chainid']
@@ -1564,7 +1580,7 @@ class cssr:
         return status
 
     def add_clas_msg(self, subtype, tow, msg, i0, nbit):
-        """ record L6D CSSR subtype message bits for CLAS MAC verification """
+        """Record L6D CSSR subtype message bits for CLAS MAC verification."""
         if subtype < 1 or subtype > 12 or nbit <= 0:
             return
         curclk_sf = (int(tow) % 30) // 5 + 1
@@ -1592,7 +1608,7 @@ class cssr:
         entry['st'].append(subtype)
 
     def verify_clas_mac(self, st13_1_mac, st13_1_key, wn=None, prn_a=None):
-        """ verify L6D CSSR messages using MACs in ST13,1 """
+        """Verify L6D CSSR messages using MACs in ST13,1."""
         cid = st13_1_mac['chainid']
         if cid not in self.st13_3:
             return {}
@@ -1655,7 +1671,7 @@ class cssr:
         return results
 
     def decode_cssr(self, msg, i=0):
-        """decode Compact SSR message """
+        """Decode Compact SSR message."""
         df = {'msgtype': 4073}
         while df['msgtype'] == 4073:
             if len(msg) * 8 < i + 16:
@@ -1709,7 +1725,7 @@ class cssr:
                 self.out_log()
 
     def chk_stat(self):
-        """ check status for received messages """
+        """Check status for received messages."""
         cs_global = self.lc[0].cstat
         cs_local = self.lc[self.inet_ref].cstat
 
@@ -1722,7 +1738,7 @@ class cssr:
         return True
 
     def check_validity(self, time):
-        """ check validity time of correction """
+        """Check validity time of correction."""
         for sat in self.sat_n:
             if timediff(time, self.lc[0].t0[sat][sCType.CLOCK]) > \
                     self.tmax[sCType.CLOCK]:
@@ -1733,7 +1749,7 @@ class cssr:
                 self.lc[0].dorb[sat] = np.zeros(3)
 
     def out_log(self):
-
+        """Write decoded Compact SSR message contents to log file."""
         if self.time == -1:
             return
 
@@ -1807,14 +1823,14 @@ class cssr:
         self.fh.flush()
 
     def read_griddef(self, file):
-        """load grid coordinates from file """
+        """Load grid coordinates from file."""
         dtype0 = [('nid', '<i4'), ('gid', '<i4'),
                   ('lat', '<f8'), ('lon', '<f8'), ('alt', '<f8')]
         self.grid = np.genfromtxt(file, dtype=dtype0, skip_header=1,
                                   skip_footer=0, encoding='utf8')
 
     def find_grid_index(self, pos):
-        """ find index/weight of surounding grid   """
+        """Find index/weight of surounding grid."""
         self.rngmin = 5e3
         clat = np.cos(pos[0])
         dlat = np.deg2rad(self.grid['lat'])-pos[0]
@@ -1859,7 +1875,7 @@ class cssr:
         return self.inet_ref
 
     def get_dpos(self, pos):
-        """ calculate position offset from reference """
+        """Calculate position offset from reference."""
         inet = self.inet_ref
         posd = np.rad2deg(pos[0:2])
         grid = self.grid[self.grid['nid'] == inet]
@@ -1868,7 +1884,7 @@ class cssr:
         return dlat, dlon
 
     def get_trop(self, dlat=0.0, dlon=0.0):
-        """ calculate trop delay correction by interporation """
+        """Calculate trop delay correction by interporation."""
         inet = self.inet_ref
         trph = 0
         trpw = 0
@@ -1884,7 +1900,7 @@ class cssr:
         return trph, trpw
 
     def get_stec(self, dlat=0.0, dlon=0.0):
-        """ calculate STEC correction by interporation """
+        """Calculate STEC correction by interporation."""
         inet = self.inet_ref
         nsat = self.lc[inet].nsat_n
         stec = np.zeros(nsat)
@@ -1906,7 +1922,7 @@ class cssr:
     # QZS CLAS specific function
     #
     def decode_l6msg(self, msg, ofst):
-        """decode QZS L6 message """
+        """Decode QZS L6 message."""
         fmt = 'u32u8u3u2u2u1u1'
         names = ['preamble', 'prn', 'vendor', 'facility', 'pt', 'sid',
                  'alert']
@@ -1939,7 +1955,7 @@ class cssr:
         self.fcnt = self.fcnt + 1
 
     def decode_l6emsg(self, msg, ofst=0):
-        """decode QZS L6E message for QZNMA-CLAS """
+        """Decode QZS L6E message for QZNMA-CLAS."""
         i = ofst * 8
         preamble, prn_a, mid = bs.unpack_from('u32u8u8', msg, i)
         if preamble != 0x1acffc1d:
@@ -1953,7 +1969,7 @@ class cssr:
         return self.decode_cssr(buf, 0)
 
     def merge_cssr(self, cs_):
-        """ merge additional correction """
+        """Merge additional correction."""
         if self.facility != cs_.facility:
             return False
 
@@ -2009,12 +2025,14 @@ class cssr:
 
 
 class cssre():
-    """ Class to encode the Compact SSR messages (experimental) """
+    """Class to encode the Compact SSR messages (experimental)."""
+
     monlevel = 0
     dlen = 0
     msgtype = 0
 
     def __init__(self):
+        """Initialize Compact SSR message encoder."""
         super().__init__()
         self.len = 0
         self.dlen = 0
@@ -2023,7 +2041,7 @@ class cssre():
         self.udi = np.zeros(sCType.MAX, dtype=int)
 
     def encode_mask(self, v, bitlen, ofst=1):
-        """ encode n-bit mask with offset """
+        """Encode n-bit mask with offset."""
         d = 0
         for p in v:
             k = p-ofst
@@ -2032,7 +2050,7 @@ class cssre():
         return d
 
     def quality2qi(self, y):
-        """ convert from quality to quality index (class, value) """
+        """Convert from quality to quality index (class, value)."""
         n3 = np.log(3)
         n_ = np.log(y*1000+1)/n3
         cls_ = int(n_)

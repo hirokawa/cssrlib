@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Sun Aug 22 21:01:49 2021
+"""Created on Sun Aug 22 21:01:49 2021.
 
 @author: ruihi
 """
@@ -24,7 +23,10 @@ EXTERR_EPH = 5e-7
 
 
 class peph_t:
+    """Class to store precise ephemeris and clock record at an epoch."""
+
     def __init__(self, time=None):
+        """Initialize precise ephemeris epoch record."""
         if time is not None:
             self.time = time
         else:
@@ -36,6 +38,8 @@ class peph_t:
 
 
 class peph:
+    """Class to parse, interpolate, and write SP3 precise ephemeris."""
+
     nsat = 0
     nep = 0
     t0 = None
@@ -49,10 +53,12 @@ class peph:
     scl = [0.0, 0.0]
 
     def __init__(self):
+        """Initialize SP3 precise ephemeris handler."""
         self.t = None
         self.nmax = 24*12
 
     def parse_satlist(self, line):
+        """Parse satellite list from SP3 header line."""
         n = len(line[9:60].strip())//3
         for k in range(n):
             svid = line[9+3*k:12+3*k]
@@ -61,6 +67,7 @@ class peph:
                 self.cnt += 1
 
     def parse_acclist(self, line):
+        """Parse satellite accuracy exponents from SP3 header line."""
         n = len(line[9:60].strip())//3
         for k in range(n):
             acc = int(line[9+3*k:12+3*k])
@@ -69,6 +76,7 @@ class peph:
             self.cnt += 1
 
     def parse_sp3(self, fname, nav, opt=0):
+        """Parse SP3 precise orbit and clock file."""
         ver_t = ['c', 'd']
         self.status = 0
         v = False
@@ -145,8 +153,8 @@ class peph:
                         self.cnt = 0
                         peph = peph_t(str2time(line, 3, 27))
                         # ep = time2epoch(peph.time)
-                        # print("{:4.0f}/{:02.0f}/{:02.0f} {:2.0f}:{:2.0f}:{:5.2f}"
-                        #       .format(ep[0], ep[1], ep[2], ep[3], ep[4], ep[5]))
+                        # print("{:4.0f}/{:02.0f}/{:02.0f} "
+                        #       "{:2.0f}:{:2.0f}:{:5.2f}".format(*ep))
 
                         nline = self.nsat if self.flag == 'P' else self.nsat*2
                         for _ in range(nline):
@@ -204,10 +212,7 @@ class peph:
         return nav
 
     def write_sp3(self, fname, nav, sats=None):
-        """
-        Write data to SP3 file
-        """
-
+        """Write data to SP3 file."""
         # Update accumulated satellite list
         #
         if sats is not None:
@@ -299,12 +304,14 @@ class peph:
             fh.write('EOF\n')
 
     def interppol(self, x, y, n):
+        """Interpolate value and derivative using Neville's algorithm."""
         for j in range(1, n):
             for i in range(n-j):
                 y[i] = (x[i+j]*y[i]-x[i]*y[i+1])/(x[i+j]-x[i])
         return y[0]
 
     def pephpos(self, time, sat, nav, vare=False, varc=False):
+        """Compute satellite position and velocity from precise ephemeris."""
         rs = np.zeros(3)
         dts = np.zeros(2)
         t = np.zeros(NMAX+1)
@@ -384,6 +391,7 @@ class peph:
         return rs, dts, vare, varc
 
     def pephclk(self, time, sat, nav, varc=False):
+        """Compute satellite clock bias from precise clock data."""
         dts = np.zeros(2)
         t = np.zeros(NMAX+1)
 
@@ -429,12 +437,11 @@ class peph:
         return dts, varc
 
     def pephrel(self, rs):
-        """ Relativistic correction based on satellite position and velocity """
+        """Compute relativistic clock correction from position and velocity."""
         return - 2.0*(rs[0:3]@rs[3:6])/(rCST.CLIGHT**2)
 
     def peph2pos(self, time, sat, nav, var=False):
-        """ Satellite position, velocity and clock offset """
-
+        """Compute satellite position, velocity, and clock offset from SP3."""
         tt = 1e-3
 
         # Satellite position based on SP3 at epoch
@@ -472,7 +479,7 @@ class peph:
         rs[0:3] = rss
         rs[3:6] = (rst-rss)/tt
 
-        # Apply relativistic correction to clock offset, compute clock rate from
+        # Apply relativistic correction to clock offset and compute rate from
         # differentiation
         #
         if dtss[0] != 0.0:
@@ -489,7 +496,10 @@ class peph:
 
 
 class pcv_t():
+    """Class to store antenna phase center offset and variation."""
+
     def __init__(self):
+        """Initialize antenna phase center parameter structure."""
         self.sat = 0
         self.code = ''
         self.type = ''
@@ -502,15 +512,15 @@ class pcv_t():
 
 
 class atxdec():
-    """ decoder for ANTEX files """
+    """Decoder for ANTEX files."""
 
     def __init__(self):
+        """Initialize ANTEX file decoder."""
         self.pcvs = []
         self.pcvr = []
 
     def readpcv(self, fname, onlyReceiver=False):
-        """ read ANTEX file """
-
+        """Read ANTEX file."""
         state = False
         sys = uGNSS.NONE
         sig = rSigRnx()
@@ -569,8 +579,7 @@ class atxdec():
                     pcv.var.update({sig: np.array(var)})
 
     def readngspcv(self, fname, pcvs=None):
-        """ read NGS antenna parameter file """
-
+        """Read NGS antenna parameter file."""
         state = False
         sys = uGNSS.NONE
         n = 0
@@ -612,8 +621,7 @@ class atxdec():
 
 
 def searchpcv(pcvs, name, time):
-    """ get satellite or receiver antenna pcv """
-
+    """Get satellite or receiver antenna pcv."""
     if isinstance(name, str):
 
         for pcv in pcvs:
@@ -640,8 +648,7 @@ def searchpcv(pcvs, name, time):
 
 
 def substSigTx(pcv, sig):
-    """
-    Substitute frequency band for PCO/PCV selection of transmitting antenna.
+    """Substitute frequency band for PCO/PCV selection of transmitting antenna.
 
     This function converts a RINEX observation code to a phase observation code
     without tracking attribute. If the signal is not available in the list of
@@ -659,7 +666,6 @@ def substSigTx(pcv, sig):
     sig : rRnxSig
         Substituted RINEX signal code
     """
-
     # Convert to phase observation without tracking attribute
     #
     sig = sig.toTyp(uTYP.L).toAtt()
@@ -685,8 +691,7 @@ def substSigTx(pcv, sig):
 
 
 def substSigRx(pcv, sig):
-    """
-    Substitute frequency band for PCO/PCV selection of receiving antenna.
+    """Substitute frequency band for PCO/PCV selection of receiving antenna.
 
     This function converts a RINEX observation code to a phase observation code
     without tracking attribute. If the signal is not available in the list of
@@ -704,7 +709,6 @@ def substSigRx(pcv, sig):
     sig : rRnxSig
         Substituted RINEX signal code
     """
-
     # Convert to phase observation without tracking attribute
     #
     sig = sig.toTyp(uTYP.L).toAtt()
@@ -754,8 +758,7 @@ def substSigRx(pcv, sig):
 
 
 def antModelTx(nav, e, sigs, sat, time, rs, sig0=None):
-    """
-    Range correction for transmitting antenna
+    """Compute phase center range correction for transmitting antenna.
 
     This function computes the range correction for the transmitting antenna
     from the PCO correction projected on line-of-sight vector as well as the
@@ -785,7 +788,6 @@ def antModelTx(nav, e, sigs, sat, time, rs, sig0=None):
     dant : np.array of float values
         range correction for each specified signal
     """
-
     sys, _ = sat2prn(sat)
     # Select satellite antenna
     #
@@ -861,8 +863,7 @@ def antModelTx(nav, e, sigs, sat, time, rs, sig0=None):
 
 
 def antModelRx(nav, pos, e, sigs, rtype=1):
-    """
-    Range correction for receiving antenna
+    """Compute phase center range correction for receiving antenna.
 
     This function computes the range correction for the receiving antenna
     from the PCO correction projected on line-of-sight vector as well as the
@@ -886,7 +887,6 @@ def antModelRx(nav, pos, e, sigs, rtype=1):
     dant : np.array of float
         Range correction for each specified signal
     """
-
     # Convert LOS vector to local antenna frame
     #
     e = ecef2enu(pos, e)
@@ -925,11 +925,10 @@ def antModelRx(nav, pos, e, sigs, rtype=1):
 
 
 def apc2com(nav, sat, time, rs, sigs, k=None):
-    """
-    Satellite position vector correction in ECEF from APC to CoM
+    """Compute satellite position offset in ECEF from APC to CoM.
+
     using ANTEX PCO corrections
     """
-
     # Select satellite antenna
     #
     ant = searchpcv(nav.sat_ant, sat, time)
@@ -970,21 +969,25 @@ def apc2com(nav, sat, time, rs, sigs, k=None):
 
 
 def Rx(t):
+    """Compute 3D coordinate rotation matrix around X-axis."""
     ct, st = cos(t), sin(t)
     return np.array([[1.0, 0.0, 0.0], [0.0, ct, st], [0.0, -st, ct]])
 
 
 def Ry(t):
+    """Compute 3D coordinate rotation matrix around Y-axis."""
     ct, st = cos(t), sin(t)
     return np.array([[ct, 0.0, -st], [0.0, 1.0, 0.0], [st, 0.0, ct]])
 
 
 def Rz(t):
+    """Compute 3D coordinate rotation matrix around Z-axis."""
     ct, st = cos(t), sin(t)
     return np.array([[ct, st, 0.0], [-st, ct, 0.0], [0.0, 0.0, 1.0]])
 
 
 def nut_iau1980(t, f):
+    """Compute IAU 1980 nutation angles in longitude and obliquity."""
     nut = np.array([
         [0,   0,   0,   0,   1, -6798.4, -171996, -174.2, 92025,   8.9],
         [0,   0,   2,  -2,   2,   182.6,  -13187,   -1.6,  5736,  -3.1],
@@ -1107,6 +1110,7 @@ def nut_iau1980(t, f):
 
 
 def time2sec(time):
+    """Convert time to seconds of day and Julian date at 0h."""
     ep = time2epoch(time)
     sec = ep[3]*3600.0+ep[4]*60.0+ep[5]
     ep[3] = ep[4] = ep[5] = 0.0
@@ -1115,6 +1119,7 @@ def time2sec(time):
 
 
 def utc2gmst(t: gtime_t, ut1_utc):
+    """Convert UTC time to Greenwich Mean Sidereal Time (GMST)."""
     ep2000 = [2000, 1, 1, 12, 0, 0]
 
     tut = timeadd(t, ut1_utc)
@@ -1129,11 +1134,10 @@ def utc2gmst(t: gtime_t, ut1_utc):
 
 
 def orb2ecef(time, rs, rsun=None):
-    """
-    Rotation matrix from satellite antenna frame to ECEF frame assuming
+    """Compute rotation matrix from satellite attitude frame to ECEF frame.
+
     standard yaw attitude law
     """
-
     if rsun is None:
         rsun, _, _ = sunmoonpos(gpst2utc(time), np.zeros(5), True)
     r = -rs
@@ -1148,6 +1152,7 @@ def orb2ecef(time, rs, rsun=None):
 
 
 def eci2ecef(tutc, erpv):
+    """Compute ECI to ECEF coordinate transformation matrix."""
     ep2000 = [2000, 1, 1, 12, 0, 0]
 
     tgps = utc2gpst(tutc)
@@ -1176,7 +1181,7 @@ def eci2ecef(tutc, erpv):
 
 
 def ast_args(t):
-    ''' astronomical arguments: f={l,l',F,D,OMG} (rad) '''
+    """Compute fundamental astronomical arguments f={l,l',F,D,OMG} (rad)."""
     # coefficients for iau 1980 nutation
     fc = np.array([[134.96340251, 1717915923.2178,  31.8792,  0.051635, -0.00024470],
                    [357.52910918,  129596581.0481,  -
@@ -1199,6 +1204,7 @@ def ast_args(t):
 
 
 def sunmoonpos_eci(tut, rsun=False, rmoon=False):
+    """Compute solar and lunar positions in ECI frame."""
     ep2000 = [2000, 1, 1, 12, 0, 0]
     t = timediff(tut, epoch2time(ep2000))/86400.0/36525.0
     f = ast_args(t)
@@ -1228,6 +1234,7 @@ def sunmoonpos_eci(tut, rsun=False, rmoon=False):
 
 
 def sunmoonpos(tutc, erpv, rsun=False, rmoon=False, gmst=False):
+    """Compute solar and lunar positions in ECEF frame."""
     tut = timeadd(tutc, erpv[2])
     rs, rm = sunmoonpos_eci(tut, rsun, rmoon)
     U, gmst_ = eci2ecef(tutc, erpv)
@@ -1241,8 +1248,11 @@ def sunmoonpos(tutc, erpv, rsun=False, rmoon=False, gmst=False):
 
 
 class bias_t():
+    """Class to store code and phase bias entry."""
+
     def __init__(self, sat: int, tst: gtime_t, ted: gtime_t, sig1: rSigRnx,
                  sig2=rSigRnx(), bias=0.0, std=0.0):
+        """Initialize Bias-SINEX bias record."""
         self.sat = sat
         self.tst = tst
         self.ted = ted
@@ -1253,12 +1263,15 @@ class bias_t():
 
 
 class biasdec():
+    """Class to parse Bias-SINEX (BSX) code and phase bias files."""
+
     def __init__(self):
+        """Initialize Bias-SINEX decoder."""
         self.dcb = []
         self.osb = []
 
     def doy2time(self, ep):
-        """ calculate time from doy """
+        """Calculate time from doy."""
         year = int(ep[0])
         doy = int(ep[1])
         sec = int(ep[2])
@@ -1268,7 +1281,7 @@ class biasdec():
         return gtime_t(days*86400+sec)
 
     def getdcb(self, sat, time, sig):
-        """ retrieve DCB based on satellite, epoch and signal code """
+        """Retrieve DCB based on satellite, epoch and signal code."""
         bias, std, bcode = None, None, None
 
         for dcb in self.dcb:
@@ -1284,8 +1297,7 @@ class biasdec():
         return bias, std, bcode
 
     def getosb(self, sat, time, sig):
-        """ retrieve OSB value based on satellite, epoch and signal code """
-
+        """Retrieve OSB value based on satellite, epoch and signal code."""
         bias = np.nan
 
         for osb in self.osb:
@@ -1300,8 +1312,7 @@ class biasdec():
         return bias
 
     def getosbstd(self, sat, time, sig):
-        """ retrieve OSB sigma based on satellite, epoch and signal code """
-
+        """Retrieve OSB sigma based on satellite, epoch and signal code."""
         std = np.nan
 
         for osb in self.osb:
@@ -1316,6 +1327,7 @@ class biasdec():
         return std
 
     def parse(self, fname, siteID=None):
+        """Parse Bias-SINEX file."""
         with open(fname, "r", encoding='latin-1') as fh:
             status = False
             for line in fh:
@@ -1404,7 +1416,7 @@ class biasdec():
                     tst = self.doy2time(ep1)
                     ted = self.doy2time(ep2)
                     unit = line[65:69]
-                    # if (type1 == 0 and unit[0:2] != 'ns') or (type1 == 1 and unit[0:3] != 'cyc'):
+                    # Check unit consistency ('ns' for code, 'cyc' for phase)
                     if (sig1.typ == uTYP.L and unit[0:2] != 'ns'):
                         print("format error: inconsistent dimension {} in {}"
                               .format(sig1.str(), unit))
@@ -1465,4 +1477,3 @@ if __name__ == '__main__':
         rsun, rmoon, _ = sunmoonpos(epoch2time(ep1), erpv, True, True)
         assert np.all(abs((rsun-rs)/rsun) < 0.03)
         assert np.all(abs((rmoon-rm)/rmoon) < 0.03)
-

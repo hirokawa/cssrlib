@@ -1,3 +1,5 @@
+"""CSSRLIB package for GNSS SSR and PPP/PPP-RTK processing."""
+
 
 from cssrlib.gnss import (gpst2time,epoch2time,ecef2pos,
                           prn2sat)
