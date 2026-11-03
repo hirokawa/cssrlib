@@ -6,3 +6,4 @@ notebook
 numpy
 matplotlib
 cartopy
+cryptography
