@@ -1128,11 +1128,12 @@ class pppos():
             for f in range(self.nav.nf):
                 n = 0
                 index = []
-                for i in range(uGNSS.MAXSAT):
-                    sys, _ = sat2prn(i+1)
-                    if sys != m or self.nav.fix[i, f] != 2:
+                for i in np.nonzero(self.nav.fix[:, f] == 2)[0]:
+                    sat_i = int(i) + 1
+                    sys, _ = sat2prn(sat_i)
+                    if sys != m:
                         continue
-                    index.append(self.IB(i+1, f, self.nav.na))
+                    index.append(self.IB(sat_i, f, self.nav.na))
                     n += 1
                 if n < 2:
                     continue
@@ -1149,34 +1150,38 @@ class pppos():
         na = nav.na
         ix = np.zeros((n, 2), dtype=int)
         nav.fix = np.zeros((n, nav.nf), dtype=int)
+        sat_by_sys = {}
+        for s in sorted(int(x) for x in sat):
+            sys_s, _ = sat2prn(s)
+            sat_by_sys.setdefault(sys_s, []).append(s)
+
         for m in range(uGNSS.GNSSMAX):
+            sats_m = sat_by_sys.get(m)
+            if not sats_m:
+                continue
             k = na
             for f in range(nav.nf):
-                for i in range(k, k+n):
-                    sat_i = i-k+1
-                    sys, _ = sat2prn(sat_i)
-                    if (sys != m):
-                        continue
-                    if sat_i not in sat or nav.x[i] == 0.0 \
-                       or nav.vsat[sat_i-1, f] == 0:
+                ref_i = -1
+                for sat_i in sats_m:
+                    i = k + sat_i - 1
+                    if nav.x[i] == 0.0 or nav.vsat[sat_i-1, f] == 0:
                         continue
                     if nav.el[sat_i-1] >= nav.elmaskar:
                         nav.fix[sat_i-1, f] = 2
+                        ref_i = i
                         break
                     else:
                         nav.fix[sat_i-1, f] = 1
-                for j in range(k, k+n):
-                    sat_j = j-k+1
-                    sys, _ = sat2prn(sat_j)
-                    if (sys != m):
-                        continue
-                    if i == j or sat_j not in sat or nav.x[j] == 0.0 \
-                       or nav.vsat[sat_j-1, f] == 0:
-                        continue
-                    if nav.el[sat_j-1] >= nav.elmaskar:
-                        ix[nb, :] = [i, j]
-                        nb += 1
-                        nav.fix[sat_j-1, f] = 2
+                if ref_i >= 0:
+                    for sat_j in sats_m:
+                        j = k + sat_j - 1
+                        if j == ref_i or nav.x[j] == 0.0 \
+                           or nav.vsat[sat_j-1, f] == 0:
+                            continue
+                        if nav.el[sat_j-1] >= nav.elmaskar:
+                            ix[nb, :] = [ref_i, j]
+                            nb += 1
+                            nav.fix[sat_j-1, f] = 2
                 k += n
         ix = np.resize(ix, (nb, 2))
         return ix
@@ -1234,11 +1239,12 @@ class pppos():
             for f in range(self.nav.nf):
                 n = 0
                 index = []
-                for i in range(uGNSS.MAXSAT):
-                    sys, _ = sat2prn(i+1)
-                    if sys != m or self.nav.fix[i, f] != 2:
+                for i in np.nonzero(self.nav.fix[:, f] == 2)[0]:
+                    sat_i = int(i) + 1
+                    sys, _ = sat2prn(sat_i)
+                    if sys != m:
                         continue
-                    index.append(self.IB(i+1, f, self.nav.na))
+                    index.append(self.IB(sat_i, f, self.nav.na))
                     n += 1
                     self.nav.fix[i, f] = 3  # hold
                 # constraint to fixed ambiguity

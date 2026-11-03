@@ -7,7 +7,6 @@ import numpy as np
 from datetime import datetime, timezone
 import bitstruct as bs
 import yaml
-from numba import njit
 
 gpst0 = [1980, 1, 6, 0, 0, 0]  # GPS system time reference
 gst0 = [1999, 8, 22, 0, 0, 0]  # Galileo system time reference
@@ -1208,10 +1207,9 @@ def prn2sat(sys, prn):
         sat = 0
     return sat
 
-@njit
-def sat2prn(sat):
-    """Convert sat to sys+prn."""
-    if sat > uGNSS.MAXSAT:
+def _sat2prn_calc(sat):
+    """Compute (sys, prn) tuple for satellite number."""
+    if sat <= 0 or sat > uGNSS.MAXSAT:
         prn = 0
         sys = uGNSS.NONE
     elif sat > uGNSS.IRNMIN:
@@ -1236,6 +1234,16 @@ def sat2prn(sat):
         prn = sat
         sys = uGNSS.GPS
     return (sys, prn)
+
+
+_SAT2PRN_TBL = tuple(_sat2prn_calc(s) for s in range(uGNSS.MAXSAT + 1))
+
+
+def sat2prn(sat):
+    """Convert sat to sys+prn."""
+    if 0 <= sat <= uGNSS.MAXSAT:
+        return _SAT2PRN_TBL[sat]
+    return (uGNSS.NONE, 0)
 
 
 def sat2id(sat):
@@ -1731,15 +1739,30 @@ def tropmodelSBAS(t, pos, el=np.pi/2):
 
 def copy_buff(src, dst, ofst_s=0, ofst_d=0, blen=0):
     """Copy bit range from source buffer to destination buffer."""
-    b = blen//32
-    r = blen-b*32
-    for k in range(b):
-        d = bs.unpack_from('u32', src, k*32+ofst_s)[0]
-        bs.pack_into('u32', dst, k*32+ofst_d, d)
-    if r > 0:
-        fmt = 'u'+str(r)
-        d = bs.unpack_from(fmt, src, b*32+ofst_s)[0]
-        bs.pack_into(fmt, dst, b*32+ofst_d, d)
+    if blen <= 0:
+        return
+    if ofst_s % 8 == 0 and ofst_d % 8 == 0 and blen % 8 == 0:
+        s0 = ofst_s // 8
+        d0 = ofst_d // 8
+        nbytes = blen // 8
+        dst[d0:d0+nbytes] = src[s0:s0+nbytes]
+        return
+    s_byte = ofst_s // 8
+    s_bit = ofst_s % 8
+    s_end = (ofst_s + blen + 7) // 8
+    s_nbytes = s_end - s_byte
+    val = (int.from_bytes(src[s_byte:s_end], 'big') >>
+           (s_nbytes * 8 - s_bit - blen)) & ((1 << blen) - 1)
+
+    d_byte = ofst_d // 8
+    d_bit = ofst_d % 8
+    d_end = (ofst_d + blen + 7) // 8
+    d_nbytes = d_end - d_byte
+    r_shift = d_nbytes * 8 - d_bit - blen
+    mask = ((1 << blen) - 1) << r_shift
+    orig = int.from_bytes(dst[d_byte:d_end], 'big')
+    dst[d_byte:d_end] = ((orig & ~mask) | (val << r_shift)).to_bytes(
+        d_nbytes, 'big')
 
 
 def load_config(file_path):
