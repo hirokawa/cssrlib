@@ -182,10 +182,10 @@ class process:
             xlim = [self.t[0], self.t[-1]]
 
         if fig_type == 1:
-            fig = plot_enu(self.t, self.enu, self.smode,
-                           self.ztd, ylim=ylim, ylim_v=ylim_v, xlim=xlim)
+            plot_enu(self.t, self.enu, self.smode,
+                     self.ztd, ylim=ylim, ylim_v=ylim_v, xlim=xlim)
         elif fig_type == 2:
-            fig = plot_enu(self.t, self.enu, self.smode, figtype=fig_type, ylim=ylim)
+            plot_enu(self.t, self.enu, self.smode, figtype=fig_type, ylim=ylim)
 
         plotFileFormat = gfmt
         plotFileName = '.'.join((ttl, plotFileFormat))
@@ -193,7 +193,6 @@ class process:
         plt.savefig(plotFileName, format=plotFileFormat,
                     bbox_inches='tight', dpi=dpi)
         # plt.show()
-        return fig
 
     def plot_live(self, ne, interval=15, ylim=1.0, ylim_v=2.0, fig_type=1,
                   show_status=True, force=False, xlim=None):
