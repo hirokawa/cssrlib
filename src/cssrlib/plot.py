@@ -112,7 +112,7 @@ def draw_circle(ax, ccrs, p, col, nc=10, alpha=0.5):
 
 
 def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, ylim_v=None, figtype=1,
-             figsize=None):
+             figsize=None, xlim=None):
     """Plot ENU coordinates."""
     lbl_t = ['East [m]', 'North [m]', 'Up [m]']
     fmt = '%H:%M'
@@ -159,6 +159,9 @@ def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, ylim_v=None, figtype=1,
             lim = ylim_v if k == 2 else ylim
             plt.ylim([-lim, lim])
 
+            if xlim is not None:
+                plt.xlim(xlim)
+
             plt.gca().xaxis.set_major_formatter(md.DateFormatter(fmt))
 
         if ztd is not None:
@@ -175,6 +178,8 @@ def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, ylim_v=None, figtype=1,
 
             plt.ylabel('ZTD [cm]')
             plt.ylim([0, 40])
+            if xlim is not None:
+                plt.xlim(xlim)
             plt.grid()
             plt.gca().xaxis.set_major_formatter(md.DateFormatter(fmt))
 

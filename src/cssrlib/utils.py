@@ -176,11 +176,14 @@ class process:
             self.nav.fout.close()
 
     def plot(self, ttl='test', fig_type=1, ylim=1, ylim_v=2, gfmt='png',
-             dpi=300):
+             dpi=300, xlim=None):
         """Plot utility."""
+        if xlim is None and fig_type == 1 and self.nep > 1:
+            xlim = [self.t[0], self.t[-1]]
+
         if fig_type == 1:
             fig = plot_enu(self.t, self.enu, self.smode,
-                           self.ztd, ylim=ylim, ylim_v=ylim_v)
+                           self.ztd, ylim=ylim, ylim_v=ylim_v, xlim=xlim)
         elif fig_type == 2:
             fig = plot_enu(self.t, self.enu, self.smode, figtype=fig_type, ylim=ylim)
 
@@ -193,7 +196,7 @@ class process:
         return fig
 
     def plot_live(self, ne, interval=15, ylim=1.0, ylim_v=2.0, fig_type=1,
-                  show_status=True, force=False):
+                  show_status=True, force=False, xlim=None):
         """Plot live positioning results sequentially during processing.
 
         Parameters
@@ -212,6 +215,8 @@ class process:
             Whether to display text status above the plot (default: True).
         force : bool, optional
             Force plot update regardless of interval (default: False).
+        xlim : tuple or list, optional
+            X-axis limits [t_min, t_max] (default: fixed from start time to final epoch).
         """
         if not _has_ipython or interval <= 0:
             return
@@ -224,6 +229,15 @@ class process:
         enu_sub = self.enu[:ne + 1, :]
         smode_sub = self.smode[:ne + 1] if self.smode is not None else None
         ztd_sub = self.ztd[:ne + 1] if (self.ztd is not None and getattr(self.nav, 'ntrop', 0) > 0) else None
+
+        # Fix horizontal axis maximum to final time
+        if xlim is None and fig_type == 1 and self.nep > 1:
+            if ne > 0:
+                dt = (self.t[ne] - self.t[0]) / ne
+            else:
+                dt = 1.0 / 86400.0
+            t_final = self.t[0] + dt * (self.nep - 1)
+            xlim = [self.t[0], t_final]
 
         # Clear previous plot from notebook cell output
         clear_output(wait=True)
@@ -239,7 +253,7 @@ class process:
                   f"2D: {pos_h:6.3f} m")
 
         fig = plot_enu(t_sub, enu_sub, smode=smode_sub, ztd=ztd_sub,
-                       ylim=ylim, ylim_v=ylim_v, figtype=fig_type)
+                       ylim=ylim, ylim_v=ylim_v, figtype=fig_type, xlim=xlim)
         display(fig)
         plt.close(fig)
 
