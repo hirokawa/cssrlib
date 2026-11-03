@@ -1,6 +1,4 @@
-"""
-module for plotting
-"""
+"""Module for plotting."""
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,7 +9,7 @@ from cssrlib.gnss import rCST
 
 
 def plot_nsat(t, nsat):
-    """ plot number of satellites """
+    """Plot number of satellites."""
     lbl_t = {uGNSS.GPS: 'GPS', uGNSS.GAL: 'Galileo', uGNSS.QZS: 'QZSS',
              uGNSS.GLO: 'GLONASS', uGNSS.BDS: 'BeiDou'}
     col_tbl = 'bygmkrc'
@@ -32,7 +30,7 @@ def plot_nsat(t, nsat):
 
 
 def plot_elv(t, elv, elmask=0, satlist=None):
-    """ elevation plot """
+    """Plot satellite elevation angles."""
     if satlist is None:
         satlist = range(1, uGNSS.MAXSAT)
     nsat = np.zeros((len(t), uGNSS.GNSSMAX), dtype=int)
@@ -56,7 +54,7 @@ def plot_elv(t, elv, elmask=0, satlist=None):
 
 
 def skyplot(azm, elv, elmask=0, satlist=None):
-    """ plot skyplot """
+    """Plot skyplot."""
     fig = plt.figure('skyplot')
     ax = fig.add_subplot(projection='polar')
     ax.set_theta_zero_location('N')
@@ -90,8 +88,7 @@ def skyplot(azm, elv, elmask=0, satlist=None):
 
 
 def draw_rect(ax, ccrs, p, col, alpha=0.5):
-    """ draw rectangle centered on [latr, lonr] """
-
+    """Draw rectangle centered on [latr, lonr]."""
     lonr_ = [p.lonr-p.lons, p.lonr+p.lons, p.lonr +
              p.lons, p.lonr-p.lons, p.lonr-p.lons]
     latr_ = [p.latr+p.lats, p.latr+p.lats, p.latr -
@@ -102,7 +99,7 @@ def draw_rect(ax, ccrs, p, col, alpha=0.5):
 
 
 def draw_circle(ax, ccrs, p, col, nc=10, alpha=0.5):
-    """ draw circle centered on [latr, lonr] with radius rng """
+    """Draw circle centered on [latr, lonr] with radius rng."""
     r_ = p.rng/(rCST.RE_WGS84*1e-3)*rCST.R2D
 
     the_ = np.linspace(0, 2*np.pi, nc)
@@ -115,8 +112,7 @@ def draw_circle(ax, ccrs, p, col, nc=10, alpha=0.5):
 
 
 def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, ylim_v=None, figtype=1):
-    """ plot ENU coordinates """
-
+    """Plot ENU coordinates."""
     lbl_t = ['East [m]', 'North [m]', 'Up [m]']
     fmt = '%H:%M'
 

@@ -1,16 +1,15 @@
-"""
-SBAS correction data decoder
+"""SBAS correction data decoder.
 
- [1] DO-229F, Minimum Operational Performance Standards for Global 
-  Positioning System/Satellite-Based Augmentation System Airborne 
+[1] DO-229F, Minimum Operational Performance Standards for Global
+  Positioning System/Satellite-Based Augmentation System Airborne
   Equipment, Revision F, RTCA, 2020
 
- [2] ED-259, Minimum Operational Performance Standards for Galileo –
-  Global Positioning System –Satellite-Based Augmentation System 
+[2] ED-259, Minimum Operational Performance Standards for Galileo –
+  Global Positioning System –Satellite-Based Augmentation System
   Airborne Equipment, EUROCAE, 2019
- 
- [3] DO-401, Minimum Operational Performance Standards (MOPS) 
-  for Dual-Frequency Multi-Constellation Satellite-Based Augmentation 
+
+[3] DO-401, Minimum Operational Performance Standards (MOPS)
+  for Dual-Frequency Multi-Constellation Satellite-Based Augmentation
   System Airborne Equipment, RTCA, 2023
 
 """
@@ -26,9 +25,10 @@ MAXBAND = 11
 
 
 class Salm():
-    """ class to define SBAS almanac """
+    """Class to define SBAS almanac."""
 
     def __init__(self, sat=0):
+        """Initialize SBAS almanac structure."""
         self.sat = sat
         self.t0 = gtime_t()
         self.svh = 0
@@ -38,9 +38,10 @@ class Salm():
 
 
 class SBASService():
-    """ structure SBAS service information for MT27 """
+    """Structure SBAS service information for MT27."""
 
     def __init__(self):
+        """Initialize SBAS MT27 service region structure."""
         self.iods = -1
         self.nmsg = 0
         self.snum = 0
@@ -56,9 +57,10 @@ class SBASService():
 
 
 class paramOBAD():
-    """ Old But Active Data (OBAD) parameters """
+    """Old But Active Data (OBAD) parameters."""
 
     def __init__(self):
+        """Initialize Old But Active Data (OBAD) parameter structure."""
         self.tid = 0
         self.dt_mt32 = 0
         self.dt_mt39 = 0
@@ -79,7 +81,7 @@ class paramOBAD():
 
 
 def searchIGP(t, posp, cs):
-    """ search IGP with pierce-point position """
+    """Search IGP with pierce-point position."""
     x = y = 0.0
     igp = {}
 
@@ -141,7 +143,7 @@ def searchIGP(t, posp, cs):
 
 
 def ionoSBAS(t, pos, az, el, cs):
-    """ ionospheric delay for SBAS """
+    """Compute SBAS ionospheric delay and variance."""
     re, hion = 6378.1363, 350.0
     diono = 0.0
     var = 0.0
@@ -197,8 +199,7 @@ def ionoSBAS(t, pos, az, el, cs):
 
 
 def varsbas(el, nav, e, sat):
-    """ error variance of pseudorange measurement """
-
+    """Compute SBAS pseudorange measurement error variance."""
     if nav.obad.dfrei[sat] == 15:  # do not use for SBAS
         return -1.0
 
@@ -243,7 +244,10 @@ def varsbas(el, nav, e, sat):
 
 
 class sbasDec(cssr):
+    """Class to decode L1 SBAS and L5 DFMC SBAS augmentation messages."""
+
     def __init__(self, foutname=None, nf=1):
+        """Initialize SBAS message decoder."""
         super().__init__(foutname)
         self.MAXNET = 1
         self.cssrmode = sCSSRTYPE.SBAS_L1 if nf == 1 else sCSSRTYPE.SBAS_L5
@@ -315,7 +319,7 @@ class sbasDec(cssr):
         self.init_sbas_gp()
 
     def init_sbas_gp(self):
-        """ SBAS IGP coordinates definition """
+        """Initialize SBAS ionospheric grid point (IGP) coordinate tables."""
         self.igp_t = {}
 
         p0 = np.r_[np.array([-85, -75, -65]),
@@ -367,13 +371,13 @@ class sbasDec(cssr):
                 i0 += n
 
     def sval(self, u, n, scl):
-        """ calculate signed value based on n-bit int, lsb """
+        """Calculate signed value based on n-bit int, lsb."""
         invalid = 2**(n-1)-1
         y = np.nan if u == invalid else u*scl
         return y
 
     def slot2sat(self, slot):
-        """ convert from satellite slot to satellite number """
+        """Convert from satellite slot to satellite number."""
         sat = 0
         if slot >= 1 and slot <= 32:
             prn = slot
@@ -396,6 +400,7 @@ class sbasDec(cssr):
         return sat
 
     def check_validity(self, time):
+        """Check validity time of SBAS clock and orbit corrections."""
         for sat in self.sat_n:
             if timediff(time, self.lc[0].t0[sat][sCType.CLOCK]) > \
                     self.tmax[sCType.CLOCK]:
@@ -406,7 +411,7 @@ class sbasDec(cssr):
                 self.lc[0].dorb[sat] = np.zeros(3)
 
     def decode_sbas_mask(self, msg, i):
-        """ Type 1 PRN mask message """
+        """Decode SBAS Type 1 PRN mask message."""
         self.sat = []
         mask_gps, mask_glo = bs.unpack_from('u37u24', msg, i)
         i += 61
@@ -433,7 +438,7 @@ class sbasDec(cssr):
         return i
 
     def decode_sbas_fast_corr_blk(self, msg, i, n, type_):
-        """ decode fast correction for n blocks """
+        """Decode fast correction for n blocks."""
         for k in range(n):
             fc = bs.unpack_from('s12', msg, i)[0]
             i += 12
@@ -454,7 +459,7 @@ class sbasDec(cssr):
         return i
 
     def decode_sbas_fast_corr(self, msg, i):
-        """ Types 2 to 5 fast correction message """
+        """Decode SBAS Types 2 to 5 fast correction message."""
         type_ = 0 if self.msgtype == 0 else self.msgtype-2
 
         iodf, iodp = bs.unpack_from('u2u2', msg, i)
@@ -468,7 +473,7 @@ class sbasDec(cssr):
         return i
 
     def decode_sbas_integrity(self, msg, i):
-        """ Type 6 integrity message """
+        """Decode SBAS Type 6 integrity message."""
         iodf2, iodf3, iodf4, iodf5 = bs.unpack_from('u2u2u2u2', msg, i)
         i += 8
         for k in range(51):
@@ -479,7 +484,7 @@ class sbasDec(cssr):
         return i
 
     def decode_sbas_fast_degradation(self, msg, i):
-        """ Type 7 fast correction degradation factor message """
+        """Decode SBAS Type 7 fast correction degradation factor message."""
         latency, iodp = bs.unpack_from('u4u2', msg, i)
         i += 8
         if iodp != self.iodp:
@@ -493,7 +498,7 @@ class sbasDec(cssr):
         return i
 
     def decode_sbas_ranging(self, msg, i):
-        """ Type 9 ranging function message """
+        """Decode SBAS Type 9 GEO navigation message."""
         i += 8
         t0, ura, xg, yg, zg = bs.unpack_from('u13u4s30s30s25', msg, i)
         i += 102
@@ -530,7 +535,7 @@ class sbasDec(cssr):
         return i
 
     def decode_sbas_degradation_param(self, msg, i):
-        """ Type 10 degradation parameter message """
+        """Decode SBAS Type 10 degradation parameter message."""
         Brrc, Cltc_lsb, Cltc_v1, Iltc_v1, Cltc_v0, Iltc_v0 = bs.unpack_from(
             'u10u10u10u9u10u9', msg, i)
         i += 58
@@ -549,7 +554,7 @@ class sbasDec(cssr):
         return i
 
     def decode_sbas_utc(self, msg, i):
-        """ Type 12 SBAS network time/UTC message """
+        """Decode SBAS Type 12 network time and UTC message."""
         A1snt, A0snt, t0t, wnt, dtls, wnlsf, dn, dtlsf = bs.unpack_from(
             's24s32u8u8s8u8u8s8', msg, i)
         i += 104
@@ -559,8 +564,7 @@ class sbasDec(cssr):
         return i
 
     def decode_sbas_almanac(self, msg, i):
-        """ Type 17 GEO almanac message """
-
+        """Decode SBAS Type 17 GEO satellite almanac message."""
         ta = bs.unpack_from('u11', msg, 201)[0]*64.0
         t0 = tod2tow(ta, self.time)
 
@@ -593,7 +597,7 @@ class sbasDec(cssr):
         return i
 
     def decode_sbas_igpmask(self, msg, i):
-        """ Type 18 IGP mask message """
+        """Decode SBAS Type 18 ionospheric grid point (IGP) mask message."""
         nb, band, iodi = bs.unpack_from('u4u4u2', msg, i)
         i += 10
         idx = []
@@ -615,7 +619,7 @@ class sbasDec(cssr):
 
     def add_sbas_corr(self, slot, iodn, dx, dy, dz, db,
                       dxd=0, dyd=0, dzd=0, dbd=0):
-        """ add SBAS long-term correction """
+        """Add SBAS long-term correction."""
         sat = self.slot2sat(slot)
         if sat not in self.sat_n:
             self.sat_n.append(sat)
@@ -641,7 +645,7 @@ class sbasDec(cssr):
         return sat
 
     def decode_sbas_lcorr_half(self, msg, i):
-        """ Type 25 long-term satellite error correction half message """
+        """Decode SBAS Type 25 long-term error correction half message."""
         vc = bs.unpack_from('u1', msg, i)[0]
         i += 1
 
@@ -675,8 +679,7 @@ class sbasDec(cssr):
         return i
 
     def decode_sbas_mixed_corr(self, msg, i):
-        """ Type 24 mixed fast/long correction """
-
+        """Decode SBAS Type 24 mixed fast/long-term error correction."""
         # fast correction (106bits)
         iodp, type_, iodf = bs.unpack_from('u2u2u2', msg, i+96)
 
@@ -689,13 +692,13 @@ class sbasDec(cssr):
         return i
 
     def decode_sbas_long_corr(self, msg, i):
-        """ Type 25 long-term satellite error correction """
+        """Decode SBAS Type 25 long-term satellite error correction message."""
         for k in range(2):
             i = self.decode_sbas_lcorr_half(msg, i)
         return i
 
     def decode_sbas_iono(self, msg, i):
-        """ Type 26 Ionospheric delay message """
+        """Decode SBAS Type 26 ionospheric delay and GIVEI message."""
         iodi = bs.unpack_from('u2', msg, i+203)[0]
         if iodi != self.iodi:
             i += 212
@@ -726,7 +729,7 @@ class sbasDec(cssr):
         return i
 
     def decode_sbas_service(self, msg, i):
-        """ Type 27 SBAS service message """
+        """Decode SBAS Type 27 service message."""
         iods, ns, sm, nreg, code = bs.unpack_from('u3u3u3u3u2', msg, i)
         i += 14
         dudre1, dudre2 = bs.unpack_from('u4u4', msg, i)
@@ -754,7 +757,7 @@ class sbasDec(cssr):
         return i
 
     def decode_cov(self, msg, i):
-        """ covarience for SBAS """
+        """Decode SBAS clock-ephemeris covariance matrix."""
         scale, E11, E22, E33, E44, E12, E13, E14, E23, E24, E34 = \
             bs.unpack_from('u3u9u9u9u9s10s10s10s10s10s10', msg, i)
         i += 99
@@ -768,7 +771,7 @@ class sbasDec(cssr):
         return i, C, scl
 
     def decode_sbas_cov(self, msg, i):
-        """ Type 28 clock-ephemeris covariance matrix """
+        """Decode SBAS Type 28 clock-ephemeris covariance matrix message."""
         iodp = bs.unpack_from('u2', msg, i)[0]
         i += 2
         if iodp != self.iodp:
@@ -788,8 +791,7 @@ class sbasDec(cssr):
     """ DFMC functions """
 
     def decode_dfmc_mask(self, msg, i):
-        """ Type 31 PRN mask message """
-
+        """Decode DFMC SBAS Type 31 satellite mask message."""
         mask_gps = bs.unpack_from('u32', msg, i)[0]
         i += 37
         mask_glo = bs.unpack_from('u32', msg, i)[0]
@@ -838,7 +840,7 @@ class sbasDec(cssr):
         return i
 
     def decode_dfmc_integrity_mt34(self, msg, i):
-        """ Types 34 integrity message (indexed) """
+        """Decode DFMC SBAS Type 34 indexed integrity message."""
         iodm = bs.unpack_from('u2', msg, 214)[0]
         if iodm != self.iodm:
             i += 216
@@ -872,7 +874,7 @@ class sbasDec(cssr):
         return i
 
     def decode_dfmc_integrity_mt35(self, msg, i):
-        """ Types 35 integrity message (for #1-53) """
+        """Decode DFMC SBAS Type 35 integrity message (slots 1-53)."""
         iodm = bs.unpack_from('u2', msg, 214)[0]
         if iodm != self.iodm:
             i += 216
@@ -886,7 +888,7 @@ class sbasDec(cssr):
         return i
 
     def decode_dfmc_integrity_mt36(self, msg, i):
-        """ Types 36 integrity message (for #54-92) """
+        """Decode DFMC SBAS Type 36 integrity message (slots 54-92)."""
         iodm = bs.unpack_from('u2', msg, 214)[0]
         if iodm != self.iodm:
             i += 216
@@ -899,7 +901,7 @@ class sbasDec(cssr):
         return i
 
     def decode_dfmc_obad(self, msg, i):
-        """ Types 37 OBAD parameter and DFREI scale table """
+        """Decode DFMC SBAS Type 37 OBAD parameter and DFREI scale table."""
         ivalid_mt32, ivalid_mt39, Cer, Ccov = \
             bs.unpack_from('u6u6u6u7', msg, i)
         i += 25
@@ -935,7 +937,7 @@ class sbasDec(cssr):
         return i
 
     def decode_dfmc_eph_mt39(self, msg, i):
-        """ Keplerian param. part I MT39 """
+        """Decode DFMC SBAS MT39 GEO Keplerian parameters part I."""
         slotd, iodg, provider = bs.unpack_from('u6u2u5', msg, i)
         i += 13
         # Keplerian param. part I
@@ -963,7 +965,7 @@ class sbasDec(cssr):
         return i
 
     def decode_dfmc_eph_mt40(self, msg, i):
-        """ Keplerian param. part II MT40 """
+        """Decode DFMC SBAS MT40 GEO Keplerian parameters part II."""
         iodg = bs.unpack_from('u2', msg, i)[0]
         i += 2
         if iodg != self.iodg:
@@ -993,7 +995,7 @@ class sbasDec(cssr):
         return i
 
     def decode_dfmc_alm(self, msg, i):
-        """ DFMC SBAS almanac MT47 """
+        """Decode DFMC SBAS MT47 almanac message."""
         for k in range(2):
             slotd, provider, bi = bs.unpack_from('u6u5u1', msg, i)
             i += 12
@@ -1023,6 +1025,7 @@ class sbasDec(cssr):
 
     def add_dfmc_corr(self, slot, iodn, dx, dy, dz, db,
                       dxd=0, dyd=0, dzd=0, dbd=0):
+        """Store decoded DFMC SBAS clock and orbit corrections."""
         sat = self.slot2sat(slot)
         if sat not in self.sat_n:
             self.sat_n.append(sat)
@@ -1049,7 +1052,7 @@ class sbasDec(cssr):
         return sat
 
     def decode_cssr_orb(self, msg, i, inet=0):
-        """ Types 32 clock-ephemeris correction and covariance matrix """
+        """Decode Type 32 clock-ephemeris correction and covariance matrix."""
         slot, iodn = bs.unpack_from('u8u10', msg, i)
         i += 18
 
@@ -1096,6 +1099,7 @@ class sbasDec(cssr):
         return i
 
     def decode_tvs_mc(self, pre, mt):
+        """Convert QZSS L5S TVS preamble and type to SBAS message type."""
         mt_t = {0: 34, 2: 32, 3: 63}
         dt_t = {0x53: 31, 0x9a: 37, 0xc6: 47}
         mt_ = mt >> 4
@@ -1103,8 +1107,7 @@ class sbasDec(cssr):
         return mt
 
     def decode_cssr(self, msg, i=0, src=0, prn=0):
-        """ decode SBAS/DFMC SBAS messages """
-
+        """Decode SBAS/DFMC SBAS messages."""
         if src == 1 and prn >= 184 and prn <= 189:  # QZSS TVS
             pre, mt = bs.unpack_from('u8u6', msg, i)
             i += 10

@@ -1,7 +1,4 @@
-"""
-module for RTK positioning
-
-"""
+"""Module for RTK positioning."""
 
 from cssrlib.pppssr import pppos
 import numpy as np
@@ -10,11 +7,10 @@ from cssrlib.ephemeris import satposs
 
 
 class rtkpos(pppos):
-    """ class for RTK processing """
+    """Class for RTK processing."""
 
     def __init__(self, nav, pos0=np.zeros(3), logfile=None, config=None):
-        """ initialize variables for PPP-RTK """
-
+        """Initialize variables for PPP-RTK."""
         # trop, iono from cssr
         # phase windup model is local/regional
         super().__init__(nav=nav, pos0=pos0, logfile=logfile,
@@ -27,7 +23,7 @@ class rtkpos(pppos):
         self.nav.armode = 1     # AR is enabled
 
     def base_process(self, obs, obsb, rs, dts, svh):
-        """ processing for base station in RTK """
+        """Process base station observations in RTK."""
         rsb, vsb, dtsb, svhb, _ = satposs(obsb, self.nav)
         yr, er, elr = self.zdres(
             obsb, None, None, rsb, vsb, dtsb, self.nav.rb, 0)

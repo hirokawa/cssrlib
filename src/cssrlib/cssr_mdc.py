@@ -1,9 +1,8 @@
-"""
-QZSS MADOCA-PPP correction data decoder
+"""QZSS MADOCA-PPP correction data decoder.
 
 [1] Quasi-Zenith Satellite System Interface Specification Multi-GNSS
     Advanced Orbit and Clock Augmentation - Precise Point Positioning
-    (IS-QZSS-MDC-004), 2025
+    (IS-QZSS-MDC-005draft), October, 2026
 
 """
 
@@ -11,10 +10,14 @@ import numpy as np
 import bitstruct as bs
 from cssrlib.cssrlib import cssr, sCSSRTYPE, sCSSR, local_corr, sCType
 from cssrlib.gnss import gpst2time, time2str, uGNSS, prn2sat, rCST, sat2id
+from cssrlib.gnss import pos2ecef, gtime_t
 
 
 class areaInfo():
+    """Class to store MADOCA-PPP service area information."""
+
     def __init__(self, sid, latr, lonr, p1=0, p2=0):
+        """Initialize MADOCA-PPP area information."""
         self.sid = sid
         self.latr = latr
         self.lonr = lonr
@@ -26,7 +29,10 @@ class areaInfo():
 
 
 class ionoCorr():
+    """Class to store MADOCA-PPP regional ionospheric corrections."""
+
     def __init__(self):
+        """Initialize MADOCA-PPP ionospheric correction data."""
         self.t0 = None
         self.qi = []
         self.iodssr = 0
@@ -36,7 +42,10 @@ class ionoCorr():
 
 
 class cssr_mdc(cssr):
+    """Class to decode QZSS MADOCA-PPP L6D/L6E messages."""
+
     def __init__(self, foutname=None):
+        """Initialize MADOCA-PPP L6 message decoder."""
         super().__init__(foutname)
 
         self.cssrmode = sCSSRTYPE.QZS_MADOCA
@@ -44,12 +53,18 @@ class cssr_mdc(cssr):
 
         self.pnt = {}
         self.ci = {}
+        self.reg_alrt = {}
+        self.reg_iod = {}
 
         self.area = -1
         self.reg = -1
         self.alrt = 0
         self.narea_t = {1: 8, 2: 16, 3: 5, 4: 1, 5: 8}
         self.MAXNET = np.sum(list(self.narea_t.values()))
+
+        self.tmax = {sCType.CLOCK: 60.0, sCType.ORBIT: 60.0,
+                     sCType.CBIAS: 60.0, sCType.PBIAS: 60.0,
+                     sCType.TROP: 120.0, sCType.STEC: 300.0}
 
         for inet in range(self.MAXNET+1):
             self.lc.append(local_corr())
@@ -60,35 +75,40 @@ class cssr_mdc(cssr):
             self.lc[inet].t0 = {}
 
     def find_grid_index(self, pos):
-        """ find region/area   """
-
+        """Find region/area."""
         latd, lond = np.rad2deg(pos[0:2])
+        rr = pos2ecef(pos)
         self.reg = self.area = -1
+        min_dist = 1e5
 
         for reg in self.pnt.keys():
+            if self.reg_alrt.get(reg, 0) != 0:
+                continue
             for area in self.pnt[reg].keys():
                 p = self.pnt[reg][area]
+                ref_ecef = pos2ecef(
+                    np.array([p.latr*rCST.D2R, p.lonr*rCST.D2R, 0.0]))
+                dist = np.linalg.norm(rr - ref_ecef)*1e-3  # [km]
+                if dist > min_dist:
+                    continue
                 if p.sid == 0:  # rectangle shape:
                     if p.latr-p.lats <= latd and latd <= p.latr+p.lats and \
                             p.lonr-p.lons <= lond and lond <= p.lonr+p.lons:
                         self.reg = reg
                         self.area = area
-                        break
+                        min_dist = dist
                 elif p.sid == 1:  # circle
-                    dn = (latd - p.latr)*rCST.D2R*rCST.RE_WGS84
-                    de = (lond - p.lonr)*rCST.D2R * \
-                        rCST.RE_WGS84*np.cos(p.lonr*rCST.D2R)
-                    r = np.sqrt(dn**2+de**2)
-                    if r <= p.rng:
+                    if dist <= p.rng:
                         self.reg = reg
                         self.area = area
-                        break
+                        min_dist = dist
 
         inet = self.get_inet(self.reg, self.area)
+        self.inet = inet
         return inet
 
     def get_dpos(self, pos):
-        """ calculate position offset from reference """
+        """Calculate position offset from reference."""
         if self.reg < 0 or self.area < 0:
             print("get_dpos: region, area not defined.")
             return 0, 0
@@ -101,7 +121,7 @@ class cssr_mdc(cssr):
         return dlat, dlon
 
     def get_stec(self, dlat=0.0, dlon=0.0):
-        """ calculate STEC correction by interporation """
+        """Calculate STEC correction by interporation."""
         if self.inet < 0:
             print("get_stec: region, area not defined.")
             return np.zeros(self.nsat_n)
@@ -118,14 +138,19 @@ class cssr_mdc(cssr):
         return stec
 
     def decode_mdc_stec_area(self, buff, i=0):
-        """ decoder for MT1 - STEC Coverage Message """
+        """Decode MT1 STEC coverage message."""
         tow, uid, mi, iodssr = bs.unpack_from('u20u4u1u4', buff, i)
         i += 29
+        self.tow = tow
         self.tow0 = tow//3600*3600
+        if self.week >= 0:
+            self.time = gpst2time(self.week, self.tow)
         reg, alrt, len_, narea = bs.unpack_from('u8u1u16u5', buff, i)
         i += 30
         self.reg = reg
         self.alrt = alrt
+        self.reg_alrt[reg] = alrt
+        self.reg_iod[reg] = iodssr
 
         if reg not in self.pnt:
             self.pnt[reg] = {}
@@ -152,8 +177,7 @@ class cssr_mdc(cssr):
         return i
 
     def get_inet(self, reg, area):
-        """ region, area to inet conversion """
-
+        """Convert region and area ID to network index."""
         if reg < 0 or area < 0:
             return -1
 
@@ -168,9 +192,17 @@ class cssr_mdc(cssr):
         return inet
 
     def decode_mdc_stec_corr(self, buff, i=0):
-        """ decoder for MT2 - STEC Correction Message """
+        """Decode MT2 STEC correction message."""
         dtow, uid, mi, iodssr = bs.unpack_from('u12u4u1u4', buff, i)
         i += 21
+        if self.tow0 >= 0:
+            tow = self.tow0 + dtow
+            if self.tow >= 0 and tow < self.tow - 1800:
+                tow += 3600
+            self.tow = tow
+        t0 = gpst2time(self.week, self.tow) if self.week >= 0 else gtime_t()
+        if self.week >= 0:
+            self.time = t0
         reg, area, stype_ = bs.unpack_from('u8u5u2', buff, i)
         i += 15
 
@@ -184,7 +216,6 @@ class cssr_mdc(cssr):
 
         inet = self.get_inet(reg, area)
 
-        self.lc[inet].nsat_n = np.sum(nsat)
         ci = {}
         qi = {}
         stype = {}
@@ -193,39 +224,29 @@ class cssr_mdc(cssr):
         for gnss in range(5):
             sys = sys_t[gnss]
             for k in range(nsat[gnss]):
-                c01 = c10 = c11 = c02 = c20 = 0.0
-
-                prn, qi_, c00 = bs.unpack_from('u6u6s14', buff, i)
-                i += 26
+                prn, cls_, val = bs.unpack_from('u6u3u3', buff, i)
+                i += 12
 
                 if sys == uGNSS.QZS:
                     prn += 192
                 sat = prn2sat(sys, prn)
-                qi[sat] = qi_
+                ci_sat, i = self.decode_cssr_stec_coeff(buff, stype_, i)
+                if np.isnan(ci_sat).any():
+                    continue
+                qi[sat] = self.quality_idx(cls_, val)
                 stype[sat] = stype_
-
-                if stype_ > 0:
-                    c01, c10 = bs.unpack_from('s12s12', buff, i)
-                    i += 24
-                if stype_ > 1:
-                    c11 = bs.unpack_from('s10', buff, i)[0]
-                    i += 10
-                if stype_ > 2:
-                    c02, c20 = bs.unpack_from('s8s8', buff, i)
-                    i += 16
-
                 sat_ += [sat]
-                ci[sat] = np.array(
-                    [c00*0.05, c01*0.02, c10*0.02, c11*0.02,
-                     c02*5e-3, c20*5e-3])
+                ci[sat] = ci_sat
+                self.set_t0(inet, sat, sCType.STEC, t0)
                 j += 1
 
+        self.lc[inet].nsat_n = len(sat_)
+        self.lc[inet].flg_stec = 2
         self.lc[inet].stype = stype
         self.lc[inet].sat_n = sat_
         self.lc[inet].ci = ci
         self.lc[inet].stec_quality = qi
 
-        t0 = gpst2time(self.week, self.tow0+dtow)
         self.set_t0(inet, 0, sCType.STEC, t0)
         self.lc[inet].cstat |= (1 << sCType.STEC)
 
@@ -236,7 +257,7 @@ class cssr_mdc(cssr):
     def out_log(self):
         # if self.msgtype not in (1, 2):
         #    return super(cssr_mdc, self).out_log()
-
+        """Write decoded MADOCA-PPP STEC messages to log file."""
         sz_t = [1, 3, 4, 6]
 
         if self.time == -1:
@@ -276,9 +297,11 @@ class cssr_mdc(cssr):
         self.fh.flush()
 
     def decode_cssr(self, msg, i=0):
-        """decode Compact SSR message with MADOCA-PPP extension """
+        """Decode Compact SSR message with MADOCA-PPP extension."""
         df = {'msgtype': 4073}
         while df['msgtype'] in [1, 2, 4073]:
+            if len(msg)*8 < i + 16:
+                return 0
             df = bs.unpack_from_dict('u12u4', ['msgtype', 'subtype'], msg, i)
             i += 16
             if df['msgtype'] not in [1, 2, 4073]:

@@ -1,11 +1,10 @@
-"""
-PVS (PPP via SouthPAN) correction data decoder
+"""PVS (PPP via SouthPAN) correction data decoder.
 
 [1] Service Definition Document for Open Services, SBAS-STN-0001,
-    Revision 02, December 2022
+    Revision 04, April 2026
 
 [2] Service Definition Document for Data Access Services, SBAS-STN-0002,
-    Revision 01, November 2023
+    Revision 02, April 2026
 
 For use of SSR corrections see section A 3.9.2 in
 
@@ -24,7 +23,7 @@ from binascii import unhexlify
 
 
 def decode_sinca_line(line):
-    """ SINCA (SISNeT compression algorithm) decoder  """
+    """Decode SINCA (SISNeT compression algorithm) line."""
     if line[0:4] != '*MSG':
         return None
     v = line.split(',')
@@ -47,7 +46,10 @@ def decode_sinca_line(line):
 
 
 class cssr_pvs(cssr):
+    """Class to decode SouthPAN PVS PPP messages."""
+
     def __init__(self, foutname=None):
+        """Initialize PVS PPP decoder."""
         super().__init__(foutname)
         self.MAXNET = 1
         self.cssrmode = sCSSRTYPE.PVS_PPP
@@ -67,6 +69,7 @@ class cssr_pvs(cssr):
         self.nav_mode = {uGNSS.GPS: 0, uGNSS.GAL: 1}
 
     def slot2sat(self, slot):
+        """Convert satellite slot index to satellite number."""
         sat = 0
         if slot >= 1 and slot <= 32:
             prn = slot
@@ -86,6 +89,7 @@ class cssr_pvs(cssr):
         return sat
 
     def adjust_time_week(self, time, time0):
+        """Adjust time-of-week for week rollover."""
         dt = timediff(time, time0)
         if dt > rCST.HALFWEEK_SEC:
             time = timeadd(time, -rCST.WEEK_SEC)
@@ -94,6 +98,7 @@ class cssr_pvs(cssr):
         return time
 
     def check_validity(self, time):
+        """Check validity time of PVS SSR corrections."""
         for sat in self.sat_n:
             if timediff(time, self.lc[0].t0[sat][sCType.CLOCK]) > \
                     self.tmax[sCType.CLOCK]:
@@ -104,7 +109,7 @@ class cssr_pvs(cssr):
                 self.lc[0].dorb[sat] = np.zeros(3)
 
     def decode_cssr_orb(self, msg, i, inet=0):
-        """ Types 32 clock-ephemeris correction and covariance matrix """
+        """Decode Type 32 clock-ephemeris correction and covariance matrix."""
         slot, iodn = bs.unpack_from('u8u10', msg, i)
         i += 18
         dx, dy, dz, db = bs.unpack_from('s11s11s11s12', msg, i)
@@ -158,7 +163,7 @@ class cssr_pvs(cssr):
         return i
 
     def decode_cssr(self, msg, i=0):
-
+        """Decode PVS PPP DFMC SBAS message."""
         _, mt = bs.unpack_from('u4u6', msg, i)
         i += 10
 

@@ -1,7 +1,6 @@
-"""
-BDS PPP correction data decoder
+"""BDS PPP correction data decoder.
 
-[1] BeiDou Navigation Satellite System Signal In Space Interface Control Document
+[1] BeiDou Navigation Satellite System Signal In Space ICD
 Precise Point Positioning Service Signal PPP-B2b (Version 1.0), 2020
 """
 
@@ -12,7 +11,10 @@ from cssrlib.gnss import bdt2time, bdt2gpst, uGNSS, uSIG, uTYP, rSigRnx
 
 
 class cssr_bds(cssr):
+    """Class to decode BDS PPP (B2b) Compact SSR messages."""
+
     def __init__(self, foutname=None):
+        """Initialize BDS PPP SSR decoder."""
         super().__init__(foutname)
         self.MAXNET = 1
         self.cssrmode = sCSSRTYPE.BDS_PPP
@@ -23,6 +25,7 @@ class cssr_bds(cssr):
         self.cb_scl = 0.017
 
     def ssig2rsig(self, sys: sGNSS, utyp: uTYP, ssig):
+        """Convert SSR signal index to RINEX signal code."""
         gps_tbl = {
             0: uSIG.L1C,
             1: uSIG.L1P,
@@ -72,13 +75,14 @@ class cssr_bds(cssr):
         return rSigRnx(sys, utyp, usig_tbl[ssig])
 
     def sval(self, u, n, scl):
-        """ calculate signed value based on n-bit int, lsb """
+        """Calculate signed value based on n-bit int, lsb."""
         invalid = -2**(n-1)
         dnu = -(2**(n-1)-1)  # this value seems to be invalid
         y = np.nan if u == invalid or u == dnu else u*scl
         return y
 
     def slot2prn(self, slot):
+        """Convert BDS B2b satellite slot index to system and PRN."""
         prn = 0
         sys = uGNSS.NONE
         if slot >= 1 and slot <= 63:
@@ -96,6 +100,7 @@ class cssr_bds(cssr):
         return sys, prn
 
     def decode_head(self, msg, i, st=-1):
+        """Decode BDS PPP message header."""
         self.tod, _, iodssr = bs.unpack_from('u17u4u2', msg, i)
         i += 23
 
@@ -111,6 +116,7 @@ class cssr_bds(cssr):
         return head, i
 
     def add_gnss(self, mask, blen, gnss):
+        """Add decoded GNSS satellite mask entries."""
         prn, nsat = self.decode_mask(mask, blen)
         self.nsat_g[gnss] = nsat
         self.nsat_n += nsat
@@ -124,7 +130,7 @@ class cssr_bds(cssr):
             self.gnss_n.append(gnss)
 
     def decode_cssr_mask(self, msg, i):
-        """decode MT1 Mask message """
+        """Decode MT1 Mask message."""
         head, i = self.decode_head(msg, i, sCSSR.MASK)
 
         self.iodp = bs.unpack_from('u4', msg, i)[0]
@@ -179,6 +185,7 @@ class cssr_bds(cssr):
         return i
 
     def decode_cssr_orb_sat(self, msg, i, inet, sat_n):
+        """Decode satellite orbit correction for BDS PPP."""
         slot, iodn, iodc = bs.unpack_from('u9u10u3', msg, i)
         i += 22
 
@@ -216,7 +223,7 @@ class cssr_bds(cssr):
         return i
 
     def decode_cssr_orb(self, msg, i, inet=0):
-        """decode MT2 orbit + URA message """
+        """Decode MT2 orbit + URA message."""
         head, i = self.decode_head(msg, i)
         sat_n = np.array(self.sat_n)
 
@@ -233,7 +240,7 @@ class cssr_bds(cssr):
         return i
 
     def decode_cssr_cbias(self, msg, i, inet=0):
-        """decode MT3 Code Bias Correction message """
+        """Decode MT3 Code Bias Correction message."""
         head, i = self.decode_head(msg, i)
         nsat = self.nsat_n
         self.flg_net = False
@@ -270,7 +277,7 @@ class cssr_bds(cssr):
         return i
 
     def decode_cssr_clk_sat(self, msg, i, inet, sat):
-        """ decode clock correction for satellite """
+        """Decode clock correction for satellite."""
         iodc, dclk = bs.unpack_from('u3s{:d}'.format(self.dclk_blen), msg, i)
         i += 3+self.dclk_blen
 
@@ -285,7 +292,7 @@ class cssr_bds(cssr):
         return i
 
     def decode_cssr_clk(self, msg, i, inet=0):
-        """decode MT4 Clock Correction message """
+        """Decode MT4 Clock Correction message."""
         head, i = self.decode_head(msg, i)
         if self.iodssr != head['iodssr']:
             return -1
@@ -311,7 +318,7 @@ class cssr_bds(cssr):
         return i
 
     def decode_cssr_ura(self, msg, i):
-        """decode MT5 URA message """
+        """Decode MT5 URA message."""
         head, i = self.decode_head(msg, i)
         if self.iodssr != head['iodssr']:
             return -1
@@ -332,7 +339,7 @@ class cssr_bds(cssr):
         return i
 
     def decode_cssr_comb1(self, msg, i, inet=0):
-        """decode MT6 combined message #1 """
+        """Decode MT6 combined message #1."""
         numc, numo = bs.unpack_from('u5u3', msg, i)
         sat_n = np.array(self.sat_n)
 
@@ -354,7 +361,7 @@ class cssr_bds(cssr):
         return i
 
     def decode_cssr_comb2(self, msg, i, inet=0):
-        """decode MT7 combined message #2 """
+        """Decode MT7 combined message #2."""
         numc, numo = bs.unpack_from('u5u3', msg, i)
         sat_n = np.array(self.sat_n)
 
@@ -377,6 +384,7 @@ class cssr_bds(cssr):
         return i
 
     def decode_cssr(self, msg, i=0):
+        """Decode BDS PPP B2b message."""
         mt = bs.unpack_from('u6', msg, i)[0]
         i += 6
 

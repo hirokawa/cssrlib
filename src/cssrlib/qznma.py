@@ -1,9 +1,8 @@
-"""
-QZSS Navigation Message Authentication (QZNMA)
+"""QZSS Navigation Message Authentication (QZNMA).
 
 [1] Quasi-Zenith Satellite System Interface Specification
-    Signal Authentication Service (IS-QZSS-SAS-001),
-    March, 2024
+    Signal Authentication Service (IS-QZSS-SAS-002 Draft),
+    October, 2026
 
 Note:
     to use the package for QZSNMA, the user needs to
@@ -13,7 +12,7 @@ Note:
 """
 
 import copy
-from binascii import unhexlify, hexlify
+from binascii import unhexlify
 import numpy as np
 import bitstruct.c as bs
 from cssrlib.gnss import uGNSS, prn2sat, sat2prn, copy_buff
@@ -28,7 +27,8 @@ dtype_ = [('wn', 'int'), ('tow', 'float'), ('prn', 'int'),
 
 
 class uNavId(IntEnum):
-    """ class for navigation message types"""
+    """Class for navigation message types."""
+
     # mt 1: GPS LNAV, 2: GPS CNAV, 3: GPS CNAV2
     #    4: Galileo F/NAV, 5: Galileo I/NAV
 
@@ -42,7 +42,8 @@ class uNavId(IntEnum):
 
 
 class NavMsg():
-    """ class to store the navigation message """
+    """Class to store the navigation message."""
+
     sys = 0
     navid = 0
     iodn = 0
@@ -53,13 +54,15 @@ class NavMsg():
     msg = None
 
     def __init__(self, sys, navid):
+        """Initialize navigation message container."""
         self.msg = bytearray(120)
         self.sys = sys
         self.navid = navid
 
 
 class NavParam():
-    """ class to store the parameters for authentication """
+    """Class to store the parameters for authentication."""
+
     nid = 0
     rtow = 0
     svid = 0
@@ -73,7 +76,7 @@ class NavParam():
 
     def __init__(self, keyid, ds, salt, mt=0, nid=0, rtow=0, svid=0,
                  iode1=0, iode2=0, iodc=0):
-
+        """Initialize authentication parameter container."""
         self.nid = nid
         self.mt = mt
         self.rtow = rtow
@@ -87,9 +90,10 @@ class NavParam():
 
 
 class qznma():
-    """ class for QZNMA processing """
+    """Class for QZNMA processing."""
 
     def __init__(self):
+        """Initialize QZNMA authentication processor."""
         self.navmsg = {}
         self.pk = None
         self.rds = {}
@@ -111,10 +115,12 @@ class qznma():
 
         self.cnav_mt_t = {10: 1, 11: 2, 30: 3, 31: 3, 32: 3, 33: 3,
                           35: 3, 36: 3, 37: 3, 61: 3}
+        self.cs = None
+        self.prn_a = 0
         self.pubk_bdir = '../data/pubkey/qznma'
 
     def load_navmsg_lnav(self, navfile):
-        """ load GPS/QZSS LNAV navigation messages """
+        """Load GPS/QZSS LNAV navigation messages."""
         v = np.genfromtxt(navfile, dtype=dtype_)
         prn_ = np.unique(v['prn'])
 
@@ -142,7 +148,7 @@ class qznma():
                         self.navmsg[sat][iodn][uNavId.GPS_LNAV] = navmsg
 
     def load_navmsg_cnav(self, navfile):
-        """ load GPS/QZSS CNAV navigation messages """
+        """Load GPS/QZSS CNAV navigation messages."""
         v = np.genfromtxt(navfile, dtype=dtype_)
         prn_ = np.unique(v['prn'])
 
@@ -176,7 +182,7 @@ class qznma():
                         self.navmsg[sat][iodn][uNavId.GPS_CNAV] = navmsg
 
     def load_navmsg_fnav(self, navfile):
-        """ load Galileo F/NAV navigation messages """
+        """Load Galileo F/NAV navigation messages."""
         v = np.genfromtxt(navfile, dtype=dtype_)
         prn_ = np.unique(v['prn'])
 
@@ -234,7 +240,7 @@ class qznma():
                     copy.copy(buff)
 
     def load_navmsg_inav(self, navfile):
-        """ load Galileo I/NAV navigation messages """
+        """Load Galileo I/NAV navigation messages."""
         v = np.genfromtxt(navfile, dtype=dtype_)
         prn_ = np.unique(v['prn'])
 
@@ -295,7 +301,7 @@ class qznma():
                     copy.copy(buff)
 
     def lnav_to_mnav(self, msg, sys=uGNSS.QZS):
-        """ genarate MNAV(900b) from LNAV SF1,2,3 """
+        """Generate MNAV (900 bits) from LNAV subframes 1, 2, and 3."""
         mnav = bytearray(113)
 
         # RAND
@@ -329,7 +335,7 @@ class qznma():
         return mnav
 
     def cnav2_to_mnav(self, toi, msg, sys=uGNSS.QZS):
-        """ genarate MNAV(600b) from CNAV2 SF2 """
+        """Generate MNAV (600 bits) from CNAV-2 subframe 2."""
         mnav = bytearray(77)
 
         mask_t = [0xffffffff, 0x7fffffff, 0xffffffff, 0xffffffff,
@@ -349,7 +355,7 @@ class qznma():
         return mnav
 
     def cnav_to_mnav(self, msg, sys=uGNSS.QZS):
-        """ genarate MNAV(900b) from CNAV SF1,2,3 """
+        """Generate MNAV (900 bits) from CNAV messages."""
         mnav = bytearray(113)
 
         # RAND
@@ -386,7 +392,7 @@ class qznma():
         return mnav
 
     def fnav_to_mnav(self, msg):
-        """ genarate MNAV(976b) from Galileo F/NAV message 1,2,3,4 """
+        """Generate MNAV (976 bits) from Galileo F/NAV pages 1-4."""
         mnav = bytearray(122)
 
         # RAND
@@ -402,11 +408,11 @@ class qznma():
         return mnav
 
     def inav_to_mnav(self, msg):
-        """ genarate MNAV(640b) from Galileo I/NAV message 1,2,3,4,5 """
+        """Generate MNAV (640 bits) from Galileo I/NAV words 1-5."""
         return copy.copy(msg)
 
     def svid2sat(self, svid):
-        """ convert svid in QZNMA to sat """
+        """Convert svid in QZNMA to sat."""
         if svid <= 63:
             sat = prn2sat(uGNSS.GPS, svid)
         elif svid <= 127:
@@ -419,7 +425,7 @@ class qznma():
         return sat
 
     def decode_gnss_rds(self, tow, msg, i):
-        """ generate RDS for GNSS  """
+        """Generate RDS for GNSS."""
         # nid = 0: QZNMA
         # rtow:
         #  GPS LNAV/CNAV: tow(17), CNAV2: toi(9),itow(8)
@@ -500,8 +506,18 @@ class qznma():
 
         return npr, mnav
 
+    def decode_clas_rds(self, tow, msg, i):
+        """Decode QZNMA-CLAS (485 bits)."""
+        if self.cs is None:
+            return i
+        self.cs.prn_a = self.prn_a
+        buf = bytearray(61)
+        copy_buff(msg, buf, i, 0, 485)
+        self.cs.decode_cssr(buf, 0)
+        return i + 485
+
     def verify_gnss_nav(self, npr, mnav):
-        """ verifify the navigation message in MNAV using DS """
+        """Verify navigation message in MNAV using ECDSA digital signature."""
         if npr.mt == uNavId.GPS_LNAV:
             blen, mlen = 125, 900
         elif npr.mt == uNavId.GPS_CNAV:
@@ -567,8 +583,7 @@ class qznma():
         return status
 
     def gen_rds(self, sat, mode, msg):
-        """ prepare RDS from navigation message and parameters  """
-
+        """Prepare RDS from navigation message and parameters."""
         if mode == uNavId.GPS_LNAV:  # 540bits (180bitsx3)
             sid, d = bs.unpack_from('u2u14', msg, 32*2+2+8)
             if sid > 0:
@@ -605,7 +620,7 @@ class qznma():
         return npr
 
     def chk_gps_lnav(self, sys, buff):
-        """ check the integrity of GPS LNAV """
+        """Check the integrity of GPS LNAV."""
         id1 = bs.unpack_from('u3', buff, 53)[0]
         id2 = bs.unpack_from('u3', buff, 320+53)[0]
         id3 = bs.unpack_from('u3', buff, 320*2+53)[0]
@@ -641,7 +656,7 @@ class qznma():
         return navmsg
 
     def chk_gps_cnav(self, sys, buff):
-        """ check the integrity of GPS CNAV """
+        """Check the integrity of GPS CNAV."""
         id1 = bs.unpack_from('u6', buff, 14)[0]
         id2 = bs.unpack_from('u6', buff, 304+14)[0]
         id3 = bs.unpack_from('u6', buff, 304*2+14)[0]
@@ -678,7 +693,7 @@ class qznma():
         return navmsg
 
     def msg2nav(self, sat, i0, msg, mode):
-        """ prepare navigation message (LNAV/CNAV) from raw nav message """
+        """Prepare navigation message (LNAV/CNAV) from raw nav message."""
         blen = 40 if mode == uNavId.GPS_LNAV else 38
 
         if sat not in self.buff.keys():
@@ -704,7 +719,7 @@ class qznma():
                 self.navmsg[sat][iodn][mode] = navmsg
 
     def verify_qzss_nav(self, sat, npr, msg, mode):
-        """ verify the navigation messages for QZSS LNAV/CNAV/CNAV2 """
+        """Verify the navigation messages for QZSS LNAV/CNAV/CNAV2."""
         if mode == uNavId.GPS_LNAV:
             blen, mlen = 116, 900
         elif mode == uNavId.GPS_CNAV:
@@ -750,7 +765,7 @@ class qznma():
         return status
 
     def count_valid_sat(self):
-        """ count number of authenticated satellite """
+        """Count number of authenticated satellite."""
         nsat = 0
         for sat in self.vstatus.keys():
             for iodn in self.vstatus[sat].keys():
@@ -761,7 +776,7 @@ class qznma():
         return nsat
 
     def count_tracked_sat(self, tow):
-        """ count number of tracked satellite """
+        """Count number of tracked satellite."""
         nsat = 0
         for sat in self.navmsg.keys():
             for iodn in self.navmsg[sat].keys():
@@ -778,7 +793,7 @@ class qznma():
 
     def decode(self, tow, msg=None, msg_n=None, sat=0,
                navmode=uNavId.GPS_LNAV):
-        """ decode QZNMA message and authenticate """
+        """Decode QZNMA message and authenticate."""
         self.tow = int(tow)
 
         if msg is not None:
@@ -871,12 +886,14 @@ class qznma():
                             print(f"CNAV2 {tow_},{prn:3d} signature NG.")
 
         if msg_n is not None:  # L6
-            mid, alrt = bs.unpack_from('u8u1', msg_n, 40)
+            self.prn_a, mid, alrt = bs.unpack_from('u8u8u1', msg_n, 32)
             vid = (mid >> 5) & 0x7  # vendor ID
 
             if vid == 3:  # QZNMA
                 npr1, mnav1 = self.decode_gnss_rds(tow, msg_n, 49)
                 npr2, mnav2 = self.decode_gnss_rds(tow, msg_n, 49+605)
+                self.decode_clas_rds(tow, msg_n, 49+605*2)
+
                 if npr1 is not None:
                     status = self.verify_gnss_nav(npr1, mnav1)
                 if npr2 is not None:

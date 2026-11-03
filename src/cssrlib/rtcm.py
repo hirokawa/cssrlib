@@ -1,5 +1,4 @@
-"""
-RTCM 3 decoder
+"""RTCM 3 decoder.
 
 [1] RTCM Standard 10403.4 with Amendment 1
     Differential GNSS (Global Navigation Satellite Systems)
@@ -28,7 +27,8 @@ from cssrlib.gnss import Eph, Obs, Geph, Seph
 
 
 class sRTCM(IntEnum):
-    """ class to define RTCM message types """
+    """Class to define RTCM message types."""
+
     NRTK_RES = 1001
     MSM = 1002
     ANT_DESC = 1003
@@ -69,15 +69,16 @@ class sRTCM(IntEnum):
 
 
 class satAntCorr():
-    """ class for satellite antenna corrections """
+    """Class for satellite antenna corrections."""
 
     def __init__(self, nadc, naddc):
+        """Initialize satellite antenna correction parameters."""
         self.nadc = nadc
         self.naddc = naddc
 
 
 class Integrity():
-    """ class for integrity information in SC-134 """
+    """Class for integrity information in SC-134."""
 
     sys_tbl = {0: uGNSS.GPS, 1: uGNSS.GLO, 2: uGNSS.GAL, 3: uGNSS.BDS,
                4: uGNSS.QZS, 5: uGNSS.IRN}
@@ -163,7 +164,7 @@ class Integrity():
     atype_t = {0:"Validity Radius", 1:"Area Points"}
     #
     mm_model_t = ['GMM', 'Mats Brenner', 'Jahn']
-    
+
     # DFi052 Satellite Integrity Fault Source
     fault_src_t = ['satellite orbit','satellite clock','atmospheric','other']
 
@@ -181,9 +182,9 @@ class Integrity():
     vp_tbl = [1, 2, 5, 10, 15, 30, 60, 120, 240,
               300, 600, 900, 1800, 3600, 7200, 10800]
 
-    mt_integ_t = {2000: "Minimum Integrity", 
-                  2005: "Extended Integrity (Service Levels and Overbounding)", 
-                  2006: "Extended Integrity (SIS and Local Error)", 
+    mt_integ_t = {2000: "Minimum Integrity",
+                  2005: "Extended Integrity (Service Levels and Overbounding)",
+                  2006: "Extended Integrity (SIS and Local Error)",
                   2007: "Primary Service Area",
                   2008: "Extended Service Area",
                   2011: "SIS SSR Integrity",
@@ -193,6 +194,7 @@ class Integrity():
                   2072: "Multipath Map"}
 
     def __init__(self):
+        """Initialize RTCM SC-134 integrity parameter container."""
         self.sys_r_tbl = {self.sys_tbl[s]: s for s in self.sys_tbl.keys()}
         self.vp_r_tbl = {s: k for k, s in enumerate(self.vp_tbl)}
 
@@ -219,7 +221,7 @@ class Integrity():
         self.ists = {}  # signal integrity status DFi031 (b32)
         self.msts = {}  # signal monitoring status DFi032 (b32)
 
-        self.pos_v = None # service area (polygon/circle)
+        self.pos_v = None  # service area (polygon/circle)
 
         self.Paug = 0  # Augmentation System Probability Falut DFi049
 
@@ -229,27 +231,27 @@ class Integrity():
         self.sig_p = {}
         self.Pa_cc = {}
         self.Pa_cp = {}
-        self.Pa_sc = {}  # Single Satellite Code Message Fault Probability DFi048
-        self.Pa_sp = {}  # Single Satellite Phase Message Fault Probability DFi046        
+        self.Pa_sc = {}  # Single-sat code message fault probability DFi048
+        self.Pa_sp = {}  # Single-sat phase message fault probability DFi046
         self.sig_ob_c = {}  # Ovebounding stdev of Code DFi038
         self.sig_ob_p = {}  # Ovebounding stdev of Phase DFi038
         self.b_ob_c = {}  # Overbounding bias of long-term CP bias DFi039
         self.b_ob_p = {}  # Overbounding bias of long-ter PR bias DFi037
-          
-        self.iod_m = {} # IOD GNSS Satellite mask DFi010
 
-        self.sig_cd = {} # Bound on rate of change of PR error stdev DFi120
-        self.sig_pd = {} # Bound on rate of change in phase error stdev DFi121
+        self.iod_m = {}  # IOD GNSS Satellite mask DFi010
 
-        self.cbr = {} # Nominal pseudorange bias rate of change DFi125
-        self.sig_dp = {} # Bounding sigma on phase-range-rate error DFi122
-        self.idx_dp = {} # Phase-range-rate error rate integrity index DFi123
+        self.sig_cd = {}  # Bound on rate of change of PR error stdev DFi120
+        self.sig_pd = {}  # Bound on rate of change in phase error stdev DFi121
 
-        self.ocr = {} # Orbit and clock error rate integrity parameter DFi127
-        self.sig_ion = {} # Residual ionospheric error stdev DFi128
-        self.idx_ion = {} # Index of bounding parameter on change in iono error DFi129
-        self.sig_trp = {} # Residual tropospheric error stdev DFi130
-        self.idx_trp = {} # Index of bounding parameter on change in tropo error  DFi131
+        self.cbr = {}  # Nominal pseudorange bias rate of change DFi125
+        self.sig_dp = {}  # Bounding sigma on phase-range-rate error DFi122
+        self.idx_dp = {}  # Phase-range-rate error rate integrity index DFi123
+
+        self.ocr = {}  # Orbit and clock error rate integrity parameter DFi127
+        self.sig_ion = {}  # Residual ionospheric error stdev DFi128
+        self.idx_ion = {}  # Bounding param index on iono error change DFi129
+        self.sig_trp = {}  # Residual tropospheric error stdev DFi130
+        self.idx_trp = {}  # Bounding param index on tropo error change DFi131
 
         self.cnr = {}
         self.agc_t = {}
@@ -263,10 +265,10 @@ class Integrity():
 
         self.mm_param = None
 
-        self.sat_e = [] # excluded satellites by SSR integrity flag
+        self.sat_e = []  # excluded satellites by SSR integrity flag
 
     def cnr_lvl(self, idx):
-        """ get index to C/N level [dB-Hz] """
+        """Get index to C/N level [dB-Hz]."""
         cnr = -1
         if idx>0 and idx<20:
             cnr = idx-1
@@ -274,18 +276,18 @@ class Integrity():
             cnr = 19+(idx-20)*0.2
         else:
             cnr = 64+(idx-245)
-        
+
         return cnr
 
     def agc_lvl(self, idx):
-        """ get index to AGC level [dB] """
+        """Get index to AGC level [dB]."""
         agc = 'N/A'
         if idx>0:
             agc = idx-128
         return agc
-    
+
     def decode_sol_t(self, mask):
-        """ decode Service Provider Solution Type"""
+        """Decode Service Provider Solution Type."""
         sol_t = ['ARAIM','SBAS','GBAS','DGNSS','RTK','NRTK/VRS','PPP','PPP-AR',
                  'PPP-RTK','','','','','','','other']
         s = ""
@@ -295,7 +297,7 @@ class Integrity():
         return s
 
 class rtcmUtil:
-    """ class to define common parameters and utilities for RTCM """
+    """Class to define common parameters and utilities for RTCM."""
 
     msm_t = {
         uGNSS.GPS: 1071, uGNSS.GLO: 1081, uGNSS.GAL: 1091,
@@ -413,7 +415,7 @@ class rtcmUtil:
         sCType.VTEC: "VTEC",
         sCType.GRID: "GRID",
         }
-    
+
     igsssrt_t = {
         sCSSR.VTEC: "VTEC",
         sCSSR.ORBIT: "ORBIT",
@@ -421,23 +423,23 @@ class rtcmUtil:
         sCSSR.COMBINED: "ORBIT/CLOCK",
         sCSSR.HCLOCK: "HIGH-RATE CLOCK",
         sCSSR.CBIAS: "CODE-BIAS",
-        sCSSR.PBIAS: "PHASE-BIAS",        
-        sCSSR.URA: "URA",        
+        sCSSR.PBIAS: "PHASE-BIAS",
+        sCSSR.URA: "URA",
         }
-    
+
     def mt2sct(self, s):
-        """ SSR Message type to SCType """
+        """Convert RTCM SSR message type to sCType."""
         return self.ssrtype_t[s]
 
     def sct2mt(self, sct: sCType, sys: uGNSS = uGNSS.NONE):
-        """ SCType to SSR Message type """
+        """Convert sCType to RTCM SSR message type."""
         for k, v in self.ssrtype_t.items():
             if v[0] == sys and v[1] == sct:
                 return k
         return -1
 
     def get_ssr_sys(self, msgtype):
-        """ get system from ssr message type """
+        """Get system from ssr message type."""
         if msgtype == 4076:
             return self.sysref
         else:
@@ -494,7 +496,7 @@ class rtcmUtil:
             return tbl_t[msgtype]
 
     def rsig2code(self, rsig):
-        """ convert rSigRnx to RTCM SSR code """
+        """Convert rSigRnx to RTCM SSR code."""
         gps_tbl = {
             0: uSIG.L1C,
             1: uSIG.L1P,
@@ -607,7 +609,7 @@ class rtcmUtil:
         return dic[rsig.sig]
 
     def msm2rsig(self, sys: uGNSS, utyp: uTYP, ssig):
-        """ convert ssig to rSigRnx for MSM """
+        """Convert ssig to rSigRnx for MSM."""
         gps_tbl = {
             2: uSIG.L1C,
             3: uSIG.L1P,
@@ -724,7 +726,7 @@ class rtcmUtil:
         return rSigRnx(sys, utyp, usig_tbl[ssig])
 
     def is_ssrtype(self, msgtype, tstmsg=False):
-        """ check if the message type is MSM """
+        """Check if the message type is MSM."""
         for sys_ in self.ssr_t.keys():
             if msgtype >= self.ssr_t[sys_] and msgtype <= self.ssr_t[sys_]+6:
                 return True
@@ -735,14 +737,14 @@ class rtcmUtil:
         return False
 
     def is_msmtype(self, msgtype):
-        """ check if the message type is MSM """
+        """Check if the message type is MSM."""
         for sys_ in self.msm_t.keys():
             if msgtype >= self.msm_t[sys_] and msgtype <= self.msm_t[sys_]+6:
                 return True
         return False
 
     def msmtype(self, msgtype):
-        """ get system and msm type from message type """
+        """Get system and msm type from message type."""
         sys = uGNSS.NONE
         msm = 0
         for sys_ in self.msm_t.keys():
@@ -753,7 +755,7 @@ class rtcmUtil:
         return sys, msm
 
     def nrtktype(self, msgtype):
-        """ get system from nrtk message type """
+        """Get system from nrtk message type."""
         gnss_t = {1030: uGNSS.GPS, 1031: uGNSS.GLO,
                   1303: uGNSS.BDS, 1304: uGNSS.GAL, 1305: uGNSS.QZS}
 
@@ -766,7 +768,7 @@ class rtcmUtil:
         return sys, nrtk
 
     def ssrtype(self, msgtype):
-        """ get system and ssr type from message type """
+        """Get system and ssr type from message type."""
         sys = uGNSS.NONE
         ssr = 0
         for sys_ in self.ssr_t.keys():
@@ -777,7 +779,7 @@ class rtcmUtil:
         return sys, ssr
 
     def sat2svid(self, sat):
-        """ convert sat number to svid """
+        """Convert sat number to svid."""
         sys, svid = sat2prn(sat)
         if sys == uGNSS.QZS:
             svid -= uGNSS.MINPRNQZS-1
@@ -786,7 +788,7 @@ class rtcmUtil:
         return svid
 
     def svid2sat(self, sys, svid):
-        """ convert svid to sat """
+        """Convert svid to sat."""
         prn = svid
         if sys == uGNSS.QZS:
             prn += uGNSS.MINPRNQZS-1
@@ -795,13 +797,13 @@ class rtcmUtil:
         return prn2sat(sys, prn)
 
     def adjustweek(self, week: int, tref: gtime_t):
-        """ adjust week number considering reference time """
+        """Adjust week number considering reference time."""
         week_, _ = time2gpst(tref)
         week_ref = (week_//1024)*1024
         return (week % 1024) + week_ref
 
     def sys2str(self, sys: uGNSS):
-        """ convert system enum to string """
+        """Convert system enum to string."""
         gnss_t = {uGNSS.GPS: "GPS", uGNSS.GLO: "GLO", uGNSS.GAL: "GAL",
                   uGNSS.BDS: "BDS", uGNSS.QZS: "QZS", uGNSS.SBS: "SBAS",
                   uGNSS.IRN: "NAVIC"}
@@ -811,9 +813,10 @@ class rtcmUtil:
 
 
 class rtcm(cssr, rtcmUtil):
-    """ class to decode RTCM3 messages """
+    """Class to decode RTCM3 messages."""
 
     def __init__(self, foutname=None):
+        """Initialize RTCM 3 message decoder."""
         super().__init__(foutname)
         self.len = 0
         self.monlevel = 1
@@ -841,13 +844,13 @@ class rtcm(cssr, rtcmUtil):
         self.antc = {}
         self.integ = Integrity()
         self.test_mode = False  # for interop testing in SC134
-        
-        self.mt_skip = [] # skip decode for the specified message types
-        
+
+        self.mt_skip = []  # skip decode for the specified message types
+
         self.workaround_sc134 = False
 
     def ssig2rsig(self, sys: uGNSS, utyp=None, ssig=None):
-        """ convert ssig to rSigRnx """
+        """Convert ssig to rSigRnx."""
         gps_tbl = {
             0: uSIG.L1C,
             1: uSIG.L1P,
@@ -866,7 +869,7 @@ class rtcm(cssr, rtcmUtil):
             18: uSIG.L1L,
             19: uSIG.L1X,
         }
-        
+
         glo_tbl = {
             0: uSIG.L1C,
             1: uSIG.L1P,
@@ -956,21 +959,21 @@ class rtcm(cssr, rtcmUtil):
         }
 
         usig_tbl = usig_tbl_[sys]
-        
+
         if ssig is None:
             return len(usig_tbl)
-        
+
         if ssig not in usig_tbl:
             print(f"sys={sys} sig={ssig} undefined.")
             return rSigRnx()
         return rSigRnx(sys, utyp, usig_tbl[ssig])
 
     def sync(self, buff, k):
-        """ check if the buffer has a sync pattern """
+        """Check if the buffer has a sync pattern."""
         return buff[k] == 0xd3
 
     def checksum(self, msg, k, maxlen=0):
-        """ check the checksum of the message """
+        """Check the checksum of the message."""
         len_ = st.unpack_from('>H', msg, k+1)[0] & 0x3ff
         if len_ < 6:
             return False
@@ -985,17 +988,16 @@ class rtcm(cssr, rtcmUtil):
         return cs == 0
 
     def decode_head(self, msg, i, sys=uGNSS.NONE):
-        """ decode the header of ssr message """
-        
+        """Decode the header of ssr message."""
         if sys==uGNSS.GLO and self.msgtype != 4076:
-            self.tod = bs.unpack_from('u17', msg, i)[0]     
+            self.tod = bs.unpack_from('u17', msg, i)[0]
             i += 17
             self.time = utc2gpst(glo2time(self.time, self.tod))
             if self.workaround_sc134:
-                self.time = timeadd(self.time, -36) # work-around
+                self.time = timeadd(self.time, -36)  # work-around
         else:
-            self.tow = bs.unpack_from('u20', msg, i)[0]   
-            i += 20               
+            self.tow = bs.unpack_from('u20', msg, i)[0]
+            i += 20
             self.time = gpst2time(self.week, self.tow)
 
         if self.subtype not in [sRTCM.SSR_PBIAS_EX]:
@@ -1034,7 +1036,7 @@ class rtcm(cssr, rtcmUtil):
         return i, v
 
     def decode_sat(self, msg, i, sys=uGNSS.NONE):
-        """ decode satellite id """
+        """Decode satellite id."""
         if self.msgtype == 4076:
             blen = 6
         else:
@@ -1052,7 +1054,7 @@ class rtcm(cssr, rtcmUtil):
         return i, sat
 
     def decode_orb_sat(self, msg, i, k, sys=uGNSS.NONE, inet=0):
-        """ decode orbit correction of cssr """
+        """Decode orbit correction of cssr."""
         if self.msgtype == 4076:
             blen = 8
         else:
@@ -1079,7 +1081,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_clk_sat(self, msg, i, k, inet=0):
-        """ decoder clock correction of cssr """
+        """Decode satellite clock correction of Compact SSR."""
         dclk, ddclk, dddclk = bs.unpack_from('s22s21s27', msg, i)
         i += 70
         self.dclk_n[k] = self.sval(dclk, 22, 0.1e-3)
@@ -1088,14 +1090,14 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_hclk_sat(self, msg, i, k, inet=0):
-        """ decoder high-rate clock correction of cssr """
+        """Decode satellite high-rate clock correction of Compact SSR."""
         hclk = bs.unpack_from('s22', msg, i)[0]
         i += 22
         self.dclk_n[k] = self.sval(hclk, 22, 0.1e-3)
         return i
 
     def decode_cssr_orb(self, msg, i, inet=0):
-        """ decode RTCM Orbit Correction message """
+        """Decode RTCM Orbit Correction message."""
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         nsat = v['nsat']
@@ -1136,7 +1138,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_cssr_clk(self, msg, i, inet=0):
-        """decode RTCM Clock Correction message """
+        """Decode RTCM Clock Correction message."""
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         nsat = v['nsat']
@@ -1172,7 +1174,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_cssr_cbias(self, msg, i, inet=0):
-        """decode RTCM Code Bias Correction message """
+        """Decode RTCM Code Bias Correction message."""
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         nsat = v['nsat']
@@ -1215,7 +1217,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_cssr_pbias(self, msg, i, inet=0):
-        """decode RTCM Phase Bias Correction message """
+        """Decode RTCM Phase Bias Correction message."""
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         nsat = v['nsat']
@@ -1292,7 +1294,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_cssr_comb(self, msg, i, inet=0):
-        """ decode RTCM Combined Orbit and Clock Correction message """
+        """Decode RTCM Combined Orbit and Clock Correction message."""
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         nsat = v['nsat']
@@ -1349,7 +1351,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_cssr_ura(self, msg, i, inet=0):
-        """ decode RTCM URA message """
+        """Decode RTCM URA message."""
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         nsat = v['nsat']
@@ -1375,7 +1377,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_cssr_hclk(self, msg, i, inet=0):
-        """ decode RTCM High-rate Clock Correction message """
+        """Decode RTCM High-rate Clock Correction message."""
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         # if self.iodssr != v['iodssr']:
@@ -1401,7 +1403,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_vtec(self, msg, i, inet=0):
-        """ decode RTCM VTEC Grid Point Data message """
+        """Decode RTCM VTEC Grid Point Data message."""
         sys = uGNSS.NONE
         i, v = self.decode_head(msg, i, sys)
         # if self.iodssr != v['iodssr']:
@@ -1436,7 +1438,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_igsssr(self, msg, i=0):
-        """ decode IGS SSR message """
+        """Decode IGS SSR message."""
         sys_t = {2: uGNSS.GPS,  4: uGNSS.GLO,  6: uGNSS.GAL,
                  8: uGNSS.QZS, 10: uGNSS.BDS, 12: uGNSS.SBS}
         ver, subtype = bs.unpack_from('u3u8', msg, i)
@@ -1477,7 +1479,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_nrtk_time(self, msg, i):
-        """ decode Network RTK Time Message """
+        """Decode Network RTK Time Message."""
         sys, nrtk = self.nrtktype(self.msgtype)
 
         sz = 20 if sys != uGNSS.GLO else 17
@@ -1494,7 +1496,7 @@ class rtcm(cssr, rtcmUtil):
         return i, sys, time
 
     def decode_nrtk_residual(self, msg, i=0):
-        """ decode Network RTK Residual Message """
+        """Decode Network RTK Residual Message."""
         i, sys, time = self.decode_nrtk_time(msg, i)
         sz = 6 if sys != uGNSS.QZS else 4
 
@@ -1513,7 +1515,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_time(self, msg):
-        """ decode time from message """
+        """Decode time from message."""
         i = 24
         self.msgtype = bs.unpack_from('u12', msg, i)[0]
         i += 12
@@ -1531,7 +1533,7 @@ class rtcm(cssr, rtcmUtil):
             if sys == uGNSS.GLO:
                 t = utc2gpst(glo2time(self.time, tow))
                 if self.workaround_sc134:
-                    t = timeadd(t, -36) # work-around on sc134
+                    t = timeadd(t, -36)  # work-around on sc134
                 return t
             else:
                 self.tow = tow
@@ -1545,7 +1547,7 @@ class rtcm(cssr, rtcmUtil):
         return False
 
     def out_log_ssr_clk(self, sys, flg_drift=True):
-        """ output ssr clock correction to log file """
+        """Output ssr clock correction to log file."""
         self.fh.write(f" IODSSR:{self.iodssr} ProvID:{self.pid} " +
                       f"SolID:{self.sid}\n")
         self.fh.write(" {:s}\t{:s}".format("SatID", "dclk [m]"))
@@ -1567,7 +1569,7 @@ class rtcm(cssr, rtcmUtil):
             self.fh.write("\n")
 
     def out_log_ssr_orb(self, sys, flg_vel=True):
-        """ output ssr orbit correction to log file """
+        """Output ssr orbit correction to log file."""
         self.fh.write(f" IODSSR:{self.iodssr} ProvID:{self.pid} " +
                       f"SolID:{self.sid}\n")
         self.fh.write(f" Reference Datum: {self.datum}\n")
@@ -1595,7 +1597,7 @@ class rtcm(cssr, rtcmUtil):
             self.fh.write("\n")
 
     def out_log_ssr_ura(self, sys):
-        """ output ssr URA to log file """
+        """Output ssr URA to log file."""
         self.fh.write(f" IODSSR:{self.iodssr} ProvID:{self.pid} " +
                       f"SolID:{self.sid}\n")
         self.fh.write(" {:s}\t{:s}\n".format("SatID", "ura [m]"))
@@ -1608,24 +1610,26 @@ class rtcm(cssr, rtcmUtil):
                                                     self.lc[0].ura[sat_]))
 
     def out_log_integ_head(self):
+        """Write integrity message header to log file."""
         self.fh.write(f" ASP Id: {self.integ.pid}\n")
         self.fh.write(f" Validity Period [s]: {self.integ.vp:4.1f}\n")
         self.fh.write(f" Update Interval [s]: {self.integ.udi:4.1f}\n")
-        self.fh.write(f" Service Area ID: {self.integ.aid:d}\n")        
+        self.fh.write(f" Service Area ID: {self.integ.aid:d}\n")
 
     def out_log_area_point(self):
-        if self.integ.atype == 1: # lat/lon
-            self.fh.write(f" Number of Area Points: {self.integ.npnt}\n")                
+        """Write integrity service area points to log file."""
+        if self.integ.atype == 1:  # lat/lon
+            self.fh.write(f" Number of Area Points: {self.integ.npnt}\n")
             self.fh.write(" Area Point (lat, lon):\n")
             for pos in self.integ.pos_v:
                 self.fh.write(f" {pos[0]:15.9f} {pos[1]:15.9f}\n")
-        else: # lat/lon/radius
+        else:  # lat/lon/radius
             pos = self.integ.pos_v
-            self.fh.write(" Area Point (lat, lon, radius): ") 
+            self.fh.write(" Area Point (lat, lon, radius): ")
             self.fh.write(f" {pos[0]:15.9f} {pos[1]:15.9f} {pos[2]:10.0f}\n")
 
     def out_log(self, obs=None, eph=None, geph=None, seph=None):
-        """ output ssr message to log file """
+        """Output ssr message to log file."""
         sys = -1
         inet = self.inet
         self.fh.write("{:4d}\t{:s}\n".format(self.msgtype,
@@ -1636,7 +1640,7 @@ class rtcm(cssr, rtcmUtil):
             sys, type_ = self.ssrtype_t[self.msgtype]
             self.fh.write(f" Message Type: RTCM-SSR {self.ssrt_t[type_]} {sys2str(sys)}\n")
 
-        if self.msgtype == 4076: # IGS-SSR
+        if self.msgtype == 4076:  # IGS-SSR
             self.fh.write(f" Message Type: IGS-SSR {self.igsssrt_t[self.subtype]} {sys2str(self.sysref)}\n")
 
         if sys > 0 and self.subtype not in [None, sRTCM.SSR_META, sRTCM.SSR_GRID]:
@@ -1854,20 +1858,21 @@ class rtcm(cssr, rtcmUtil):
             self.fh.write(" {:20s}{:6d}\n".format("Number of Signals:",
                                                   self.nsig))
 
-        if self.msgtype == 54 or self.msgtype in self.integ.mt_integ_t:  # RTCM SC134 integrity messages
+        # RTCM SC-134 integrity messages
+        if self.msgtype == 54 or self.msgtype in self.integ.mt_integ_t:
             if self.msgtype == 54:
                 self.fh.write(f" Message Type: {self.msgtype}\n")
             else:
                 self.fh.write(f" Message Type: {self.integ.mt_integ_t[self.msgtype]} ({self.msgtype})\n")
 
-            if self.subtype == sRTCM.INTEG_MIN: # MT2000
+            if self.subtype == sRTCM.INTEG_MIN:  # MT2000
                 self.out_log_integ_head()
 
                 self.fh.write(" Issue of Sat Mask: ")
                 for sys in self.integ.iod_sys:
-                    self.fh.write(f" {sys2char(sys)}:{self.integ.iod_sys[sys]}")                
-                self.fh.write("\n") 
-                    
+                    self.fh.write(f" {sys2char(sys)}:{self.integ.iod_sys[sys]}")
+                self.fh.write("\n")
+
                 self.fh.write(" Integrity Status:\n")
                 for sys in self.integ.sts:
                     self.fh.write(f"  {sys2char(sys)}:"
@@ -1877,12 +1882,12 @@ class rtcm(cssr, rtcmUtil):
                     self.fh.write(f"  {sys2char(sys)}:")
                     for sat in self.integ.freq[sys]:
                         self.fh.write(f" {sat2id(sat)}")
-                    self.fh.write("\n") 
-                        
+                    self.fh.write("\n")
+
                 self.fh.write(" Integrity Fault Source:\n")
                 for sys in self.integ.src:
                     msg = self.integ.fault_src_t[self.integ.src[sys]]
-                    self.fh.write(f"  {sys2char(sys)}: {msg}\n")                    
+                    self.fh.write(f"  {sys2char(sys)}: {msg}\n")
 
                 self.fh.write(" Frequency mask:\n")
                 for sys in self.integ.freq:
@@ -1890,38 +1895,38 @@ class rtcm(cssr, rtcmUtil):
                     s = self.integ.frq_idx[sys]
                     for sat in self.integ.freq[sys]:
                         f = self.integ.freq[sys][sat]
-                        self.fh.write(f" {sat2id(sat)}") 
+                        self.fh.write(f" {sat2id(sat)}")
                         for k in f:
-                            self.fh.write(f" {s[k]}")  
-                    self.fh.write("\n")  
-                        
+                            self.fh.write(f" {s[k]}")
+                    self.fh.write("\n")
+
                 self.fh.write(" IOD freq mask:\n")
                 for sys in self.integ.iod_freq:
-                    self.fh.write(f"  {sys2char(sys)}:")       
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat in self.integ.iod_freq[sys]:
                         self.fh.write(
-                            f" {sat2id(sat)} {self.integ.iod_freq[sys][sat]}")                           
-                    self.fh.write("\n") 
-                    
+                            f" {sat2id(sat)} {self.integ.iod_freq[sys][sat]}")
+                    self.fh.write("\n")
+
                 self.fh.write(" Integrity Status:\n")
                 for sys in self.integ.ists:
                     self.fh.write(f"  {sys2char(sys)}:")
-                    for sat in self.integ.ists[sys]: 
+                    for sat in self.integ.ists[sys]:
                         s = format(self.integ.ists[sys][sat], '08b')
                         self.fh.write(f" {sat2id(sat)} {s}")
-                    self.fh.write("\n")                     
-                    
+                    self.fh.write("\n")
+
                 self.fh.write(" Monitoring Status:\n")
                 for sys in self.integ.msts:
-                    self.fh.write(f"  {sys2char(sys)}:")    
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat in self.integ.msts[sys]:
                         s = format(self.integ.msts[sys][sat], '08b')
-                        self.fh.write(f" {sat2id(sat)} {s}")    
-                    self.fh.write("\n") 
-                    
+                        self.fh.write(f" {sat2id(sat)} {s}")
+                    self.fh.write("\n")
+
             elif self.subtype == sRTCM.INTEG_EXT:  # MT2005
                 self.out_log_integ_head()
-            
+
                 self.fh.write(f" Integrity Level: {self.integ.ilvl}\n")
                 self.fh.write(f" TTT: {self.integ.ttt}\n")
                 self.fh.write(f" Solution Type: {self.integ.decode_sol_t(self.integ.stype)}\n")
@@ -1933,177 +1938,177 @@ class rtcm(cssr, rtcmUtil):
                 self.fh.write(" Mean Failure Duration (MFD) of a Single Satellite Fault: ")
                 for sys, s in self.integ.mfd_s.items():
                     self.fh.write(f"  {sys2char(sys)}: {self.integ.mfd_s_t[s]}")
-                self.fh.write("\n")   
+                self.fh.write("\n")
                 self.fh.write(" Mean Failure Duration (MFD) of a Constellation Fault: ")
                 for sys, s in self.integ.mfd_c.items():
                     self.fh.write(f"  {sys2char(sys)}: {self.integ.mfd_c_t[s]}")
-                self.fh.write("\n")                 
+                self.fh.write("\n")
                 self.fh.write(" Correlation Time of Pseudorange Augmentation Message Error: ")
                 for sys, s in self.integ.tau_c.items():
                     self.fh.write(f"  {sys2char(sys)}: {self.integ.tau_c_t[s]}")
-                self.fh.write("\n") 
+                self.fh.write("\n")
                 self.fh.write(" Pseudorange stdev: ")
                 for sys, s in self.integ.sig_c.items():
                     self.fh.write(f"  {sys2char(sys)}: {self.integ.sig_ob_c_t[s]}")
-                self.fh.write("\n") 
+                self.fh.write("\n")
                 self.fh.write(" Correlation Time of Carrier Phase Augmentation Message Error: ")
                 for sys, s in self.integ.tau_p.items():
                     self.fh.write(f"  {sys2char(sys)}: {self.integ.tau_p_t[s]}")
-                self.fh.write("\n") 
+                self.fh.write("\n")
                 self.fh.write(" Carrier Phase stdev: ")
                 for sys, s in self.integ.sig_p.items():
                     self.fh.write(f"  {sys2char(sys)}: {self.integ.sig_ob_p_t[s]}")
-                self.fh.write("\n") 
+                self.fh.write("\n")
                 self.fh.write(" Multiple PR Augmentation Message Fault Probability: ")
                 for sys, s in self.integ.Pa_cc.items():
-                    self.fh.write(f"  {sys2char(sys)}: {self.integ.P_t[s]}") 
-                self.fh.write("\n") 
+                    self.fh.write(f"  {sys2char(sys)}: {self.integ.P_t[s]}")
+                self.fh.write("\n")
                 self.fh.write(" Multiple CP Augmentation Message Fault Probability: ")
                 for sys, s in self.integ.Pa_cp.items():
                     self.fh.write(f"  {sys2char(sys)}: {self.integ.P_t[s]}")
-                self.fh.write("\n") 
+                self.fh.write("\n")
 
                 self.fh.write(" Single PR Augmentation Message Fault Probability:\n")
                 for sys, s in self.integ.Pa_sc.items():
-                    self.fh.write(f"  {sys2char(sys)}:") 
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.P_t[v]}")
                     self.fh.write("\n")
                 self.fh.write(" Overbounding stdev of PR Augmentation Message Error under Fault-Free Scenario:\n")
                 for sys, s in self.integ.sig_ob_c.items():
-                    self.fh.write(f"  {sys2char(sys)}:")  
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.sig_ob_c_t[v]}")
                     self.fh.write("\n")
                 self.fh.write(" Single CP Augmentation Message Fault Probability:\n")
                 for sys, s in self.integ.Pa_sp.items():
-                    self.fh.write(f"  {sys2char(sys)}:") 
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.P_t[v]}")
                     self.fh.write("\n")
                 self.fh.write(" Overbounding Bias of the Long-Term PR Augmentation Message Bias Error under Fault-Free Scenario:\n")
                 for sys, s in self.integ.b_ob_c.items():
-                    self.fh.write(f"  {sys2char(sys)}:") 
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.b_ob_c_t[v]}")
-                    self.fh.write("\n") 
+                    self.fh.write("\n")
                 self.fh.write(" Overbounding stdev of CP Augmentation Message Error under Fault-Free Scenario:\n")
                 for sys, s in self.integ.sig_ob_p.items():
-                    self.fh.write(f"  {sys2char(sys)}:")  
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.sig_ob_p_t[v]}")
-                    self.fh.write("\n")           
+                    self.fh.write("\n")
                 self.fh.write(" Overbounding Bias of the Long-Term CP Augmentation Message Bias Error under Fault-Free Scenario:\n")
                 for sys, s in self.integ.b_ob_p.items():
-                    self.fh.write(f"  {sys2char(sys)}:") 
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.b_ob_p_t[v]}")
-                    self.fh.write("\n") 
+                    self.fh.write("\n")
 
             elif self.subtype == sRTCM.INTEG_EXT_SIS:  # MT2006
                 self.out_log_integ_head()
-                
+
                 self.fh.write(f" IOD param: {self.integ.iod_ip}\n")
                 self.fh.write(f" Time Correlation Integrity/Continuity Flag: {self.integ.fc}\n")
-                
+
                 b = self.integ.bias
                 self.fh.write(f" Bounding inter-constellation bia: {self.integ.b_intc_t[b[0]]}\n")
                 self.fh.write(f" Bounding inter-frequency bias: {self.integ.b_intf_t[b[1]]}\n")
 
                 self.fh.write(" Issue of GNSS Satellite Mask:\n")
                 for sys, s in self.integ.iod_m.items():
-                    self.fh.write(f"  {sys2char(sys)}: {s}")                 
-                self.fh.write("\n") 
-                
+                    self.fh.write(f"  {sys2char(sys)}: {s}")
+                self.fh.write("\n")
+
                 self.fh.write(" Bound on rate of change of PR error stdev:\n")
                 for sys, s in self.integ.sig_cd.items():
-                    self.fh.write(f"  {sys2char(sys)}:") 
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.sig_cd_t[v]}")
-                    self.fh.write("\n") 
+                    self.fh.write("\n")
 
                 self.fh.write(" Bound on rate of change in phase error stdev:\n")
                 for sys, s in self.integ.sig_pd.items():
-                    self.fh.write(f"  {sys2char(sys)}:") 
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.sig_pd_t[v]}")
-                    self.fh.write("\n")                 
+                    self.fh.write("\n")
 
                 self.fh.write(" Nominal pseudorange bias rate of change:\n")
                 for sys, s in self.integ.cbr.items():
-                    self.fh.write(f"  {sys2char(sys)}:")   
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.b_rsdsa_t[v]}")
-                    self.fh.write("\n") 
-                
+                    self.fh.write("\n")
+
                 self.fh.write(" Bounding sigma on phase-range-rate error:\n")
                 for sys, s in self.integ.sig_dp.items():
-                    self.fh.write(f"  {sys2char(sys)}:")       
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.sig_b_pd_t[v]}")
-                    self.fh.write("\n") 
+                    self.fh.write("\n")
 
                 self.fh.write(" Phase-range-rate error rate integrity index:\n")
                 for sys, s in self.integ.idx_dp.items():
-                    self.fh.write(f"  {sys2char(sys)}:")   
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.b_pd_t[v]}")
-                    self.fh.write("\n") 
+                    self.fh.write("\n")
 
                 self.fh.write(" Orbit/clock error rate integrity:\n")
                 for sys, s in self.integ.ocr.items():
                     self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.ocr_t[v]}")
-                    self.fh.write("\n") 
-                
+                    self.fh.write("\n")
+
                 self.fh.write(" Residual ionospheric error stdev:\n")
                 for sys, s in self.integ.sig_ion.items():
                     self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.sig_ion_t[v]}")
-                    self.fh.write("\n") 
-                
+                    self.fh.write("\n")
+
                 self.fh.write(" Index of bounding parameter on change in iono error:\n")
                 for sys, s in self.integ.idx_ion.items():
                     self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.b_datm_t[v]}")
-                    self.fh.write("\n") 
-                
+                    self.fh.write("\n")
+
                 self.fh.write(" Residual tropospheric error stdev:\n")
                 for sys, s in self.integ.sig_trp.items():
                     self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.sig_trp_t[v]}")
                     self.fh.write("\n")
-                
+
                 self.fh.write(" Index of bounding parameter on change in tropo error:\n")
                 for sys, s in self.integ.idx_trp.items():
-                    self.fh.write(f"  {sys2char(sys)}:") 
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f"  {sat2id(sat)} {self.integ.b_datm_t[v]}")
-                    self.fh.write("\n") 
-                
+                    self.fh.write("\n")
+
             elif self.subtype == sRTCM.INTEG_PRI_AREA:  # MT2007
                 self.out_log_integ_head()
 
-                self.fh.write(f" IOD area: {self.integ.iod_sa}\n")                
+                self.fh.write(f" IOD area: {self.integ.iod_sa}\n")
                 self.fh.write(f" Service Area Type: {self.integ.atype_t[self.integ.atype]}\n")
 
                 self.fh.write(f" Continuation Flag: {self.integ.cf}\n")
                 self.fh.write(f" Seq: {self.integ.seq}\n")
 
                 self.fh.write(f" Time Parameter Degradation Factor: {self.integ.df_t[self.integ.f_t]}\n")
-                
+
                 self.out_log_area_point()
 
             elif self.subtype == sRTCM.INTEG_EXT_AREA:  # MT2008
-                self.out_log_integ_head()              
-                
+                self.out_log_integ_head()
+
                 self.fh.write(f" IOD area: {self.integ.iod_sa}\n")
                 self.fh.write(f" Service Area Type: {self.integ.atype_t[self.integ.atype]}\n")
- 
+
                 self.fh.write(f" Continuation Flag: {self.integ.cf}\n")
                 self.fh.write(f" Seq: {self.integ.seq}\n")
 
@@ -2113,51 +2118,51 @@ class rtcm(cssr, rtcmUtil):
                 self.fh.write(f" Extended Area Spatial Parameter Degradation Factor: {self.integ.exs_df_t[self.integ.f_exs]}\n")
 
                 self.out_log_area_point()
-        
+
             elif self.subtype == sRTCM.INTEG_QUALITY:  # MT2051
                 self.out_log_integ_head()
-                
+
                 self.fh.write(f" Network ID: {self.integ.nid}\n")
                 self.fh.write(f" Quality Indicator [m]: {self.integ.qi}\n")
 
             elif self.subtype == sRTCM.INTEG_CNR:  # MT2091
                 self.out_log_integ_head()
-                
+
                 self.fh.write(" CNR [dB-Hz]:\n")
                 for sys, s in self.integ.cnr.items():
-                    self.fh.write(f"  {sys2char(sys)}:") 
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f" {sat2id(sat)}")
                         for sig, u in v.items():
-                            self.fh.write(f" {self.integ.cnr_lvl(u)}")                            
+                            self.fh.write(f" {self.integ.cnr_lvl(u)}")
 
-                    self.fh.write("\n") 
-                    
+                    self.fh.write("\n")
+
                 self.fh.write(" AGC type:\n")
                 for sys, s in self.integ.agc_t.items():
-                    self.fh.write(f"  {sys2char(sys)}:") 
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f" {sat2id(sat)}")
                         for sig, u in v.items():
                             self.fh.write(f" {u}")
-                    self.fh.write("\n") 
-                    
+                    self.fh.write("\n")
+
                 self.fh.write(" AGC [dB]:\n")
                 for sys, s in self.integ.agc.items():
-                    self.fh.write(f"  {sys2char(sys)}:") 
+                    self.fh.write(f"  {sys2char(sys)}:")
                     for sat, v in s.items():
                         self.fh.write(f" {sat2id(sat)}")
                         for sig, u in v.items():
                             self.fh.write(f" {self.integ.agc_lvl(u)}")
-                    self.fh.write("\n") 
+                    self.fh.write("\n")
 
             elif self.subtype == sRTCM.INTEG_VMAP:  # MT2071
                 self.out_log_integ_head()
-                
+
                 self.fh.write(f" Number of Area Points: {self.integ.narea:}\n")
                 self.fh.write(f" Continuation Flag: {self.integ.cf}\n")
                 self.fh.write(f" Seq: {self.integ.seq}\n")
-                
+
                 self.fh.write(" Boundary Points (lat, long, alt, naz):\n")
                 for k in range(self.integ.narea):
                     self.fh.write(" {:2d}\t{:12.9f}\t{:12.9f}\t{:4.0f}\t{:2d}\n".format
@@ -2171,15 +2176,15 @@ class rtcm(cssr, rtcmUtil):
 
             elif self.subtype == sRTCM.INTEG_MMAP:  # MT2072
                 self.out_log_integ_head()
-                
+
                 model = self.integ.mm_model_t[self.integ.mm_id]
                 self.fh.write(f" TOW (s): {self.integ.tow:9.3f}\n")
-                
+
                 self.fh.write(f" Number of Area Points: {self.integ.narea:}\n")
                 self.fh.write(f" Multipath Model ID: {model}\n")
                 self.fh.write(f" Continuation Flag: {self.integ.cf}\n")
                 self.fh.write(f" Seq: {self.integ.seq}\n")
-                
+
                 self.fh.write(" Boundary Points (lat, long, alt), np:\n")
                 for k in range(self.integ.narea):
                     self.fh.write(" {:2d}\t{:12.9f}\t{:12.9f}\t{:4.0f}\t{:2d}\n".format
@@ -2213,7 +2218,7 @@ class rtcm(cssr, rtcmUtil):
 
         if self.subtype in (sRTCM.INTEG_SSR, sRTCM.INTEG_SSR_IONO,
                             sRTCM.INTEG_SSR_TROP):
-            self.out_log_integ_head()            
+            self.out_log_integ_head()
 
             self.fh.write(f" SSR Provider ID: {self.integ.pidssr}\n")
             self.fh.write(f" SSR Solution ID: {self.integ.sidssr}\n")
@@ -2263,7 +2268,7 @@ class rtcm(cssr, rtcmUtil):
             None
 
     def decode_msm_time(self, sys, week, t):
-        """ decode msm time """
+        """Decode msm time."""
         if sys == uGNSS.GLO:
             dow = (t >> 27) & 0x1f
             tow = (t & 0x7ffffff)*1e-3
@@ -2278,7 +2283,7 @@ class rtcm(cssr, rtcmUtil):
         return time, tow
 
     def decode_msm(self, msg, i):
-        """ decode MSM message """
+        """Decode MSM message."""
         sys, msm = self.msmtype(self.msgtype)
 
         self.refid, tow_, self.mi, self.iods = bs.unpack_from(
@@ -2465,7 +2470,7 @@ class rtcm(cssr, rtcmUtil):
         return i, obs
 
     def decode_ant_desc(self, msg, i):
-        """ Antenna Description Message """
+        """Decode RTCM antenna description message."""
         self.refid, nc = bs.unpack_from('u12u8', msg, i)
         i += 20
         j = 7
@@ -2504,7 +2509,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_sta_pos(self, msg, i):
-        """ Physical Reference Station Position Message """
+        """Decode RTCM physical reference station position message."""
         if self.msgtype == 1032:
             self.np_staid = bs.unpack_from('u12', msg, i)[0]
             i += 12
@@ -2533,7 +2538,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_glo_bias(self, msg, i):
-        """ GLONASS Bias Information Message """
+        """Decode RTCM GLONASS code-phase bias message."""
         self.refid, cb, _, sigmask = bs.unpack_from('u12u1u3u4', msg, i)
         i += 20
         self.glo_bias = np.zeros(4)
@@ -2545,7 +2550,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_gps_eph(self, msg, i):
-        """ GPS Satellite Ephemeris Message """
+        """Decode RTCM GPS broadcast ephemeris message."""
         prn, week, sva, code, idot = bs.unpack_from('u6u10u4u2s14', msg, i)
         i += 6+10+4+2+14
         iode, toc, af2, af1, af0 = bs.unpack_from('u8u16s8s16s22', msg, i)
@@ -2602,7 +2607,7 @@ class rtcm(cssr, rtcmUtil):
         return i, eph
 
     def decode_glo_eph(self, msg, i):
-        """ GLONASS Satellite Ephemeris Message """
+        """Decode RTCM GLONASS broadcast ephemeris message."""
         prn, frq, cn, svh, P1 = bs.unpack_from('u6u5u1u1u2', msg, i)
         i += 15
         tk_h, tk_m, tk_s = bs.unpack_from('u5u6u1', msg, i)
@@ -2669,7 +2674,7 @@ class rtcm(cssr, rtcmUtil):
         return i, geph
 
     def decode_gal_eph(self, msg, i):
-        """ Galileo Satellite Ephemeris Message """
+        """Decode RTCM Galileo broadcast ephemeris message."""
         prn, week, iodnav, sisa, idot = bs.unpack_from('u6u12u10u8s14', msg, i)
         i += 6+12+10+8+14
         toc, af2, af1, af0 = bs.unpack_from('u14s6s21s31', msg, i)
@@ -2736,7 +2741,7 @@ class rtcm(cssr, rtcmUtil):
         return i, eph
 
     def decode_qzs_eph(self, msg, i):
-        """ QZS Satellite Ephemeris Message """
+        """Decode RTCM QZSS broadcast ephemeris message."""
         svid, toc, af2, af1, af0 = bs.unpack_from('u4u16s8s16s22', msg, i)
         i += 4+16+8+16+22
         iode, crs, deln, M0, cuc = bs.unpack_from('u8s16s16s32s16', msg, i)
@@ -2794,7 +2799,7 @@ class rtcm(cssr, rtcmUtil):
         return i, eph
 
     def decode_bds_eph(self, msg, i):
-        """ BDS Satellite Ephemeris Message """
+        """Decode RTCM BDS broadcast ephemeris message."""
         prn, week, ura, idot = bs.unpack_from('u6u13u4s14', msg, i)
         i += 6+13+4+14
         aode, toc, af2, af1, af0 = bs.unpack_from('u5u17s11s22s24', msg, i)
@@ -2847,7 +2852,7 @@ class rtcm(cssr, rtcmUtil):
         return i, eph
 
     def decode_irn_eph(self, msg, i):
-        """ NavIC Satellite Ephemeris Message """
+        """Decode RTCM NavIC broadcast ephemeris message."""
         prn, week, af0, af1, af2 = bs.unpack_from('u6u10s22s16s8', msg, i)
         i += 6+10+22+16+8
         ura, toc, tgd, deln, iode = bs.unpack_from('u4u16s8s22u8', msg, i)
@@ -2901,7 +2906,7 @@ class rtcm(cssr, rtcmUtil):
         return i, eph
 
     def decode_sbs_eph(self, msg, i):
-        """ SBAS Satellite Ephemeris Message """
+        """Decode RTCM SBAS broadcast ephemeris message."""
         svid, iodn, toc, ura = bs.unpack_from('u6u8u13u4', msg, i)
         i += 6+8+13+4
         x, y, z = bs.unpack_from('s30s30s25', msg, i)
@@ -2937,14 +2942,14 @@ class rtcm(cssr, rtcmUtil):
         return i, seph
 
     def decode_unicode_text(self, msg, i):
-        """ RTCM SC-104 Unicode Text Message"""
+        """Decode RTCM SC-104 Unicode text message."""
         refid, mjd, sod, nch, ncp = bs.unpack_from('u12u16u17u7u8', msg, i)
         i += 12+16+17+7+8
         ic = i//8
         self.ustr = bytes(msg[ic:ic+ncp]).decode()
 
     def decode_ssr_metadata(self, msg, i):
-        """ decode SSR Metadata Message """
+        """Decode SSR Metadata Message."""
         # nm: nomber of ssr model/correction entries
         iodssr, pid, sid, nm = bs.unpack_from('u4u16u4u5', msg, i)
         i += 29
@@ -3000,7 +3005,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_ssr_satant(self, msg, i):
-        """ decode GNSS Satellite Antenna Message (E80,81,82,83,84) """
+        """Decode GNSS Satellite Antenna Message (E80,81,82,83,84)."""
         sys = self.get_ssr_sys(self.msgtype)
 
         # Provider ID
@@ -3051,7 +3056,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_ssr_grid(self, msg, i):
-        """ decode SSR Grid Definition Message (E61) """
+        """Decode SSR Grid Definition Message (E61)."""
         self.pid, self.mi, gid, gtype = bs.unpack_from('u16b1u10u3', msg, i)
         i += 30
 
@@ -3153,8 +3158,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_ssr_pbias_ex(self, msg, i, inet=0):
-        """ decode SSR Extended Satellite Phase Bias Message """
-
+        """Decode SSR Extended Satellite Phase Bias Message."""
         """
         - linked with Phase bias messages with epoch time for given GNSS and
             id (DF+002).
@@ -3188,7 +3192,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_ssr_trop(self, msg, i, inet=0):
-        """ decode SSR Tropspheric Correction Message """
+        """Decode SSR Tropspheric Correction Message."""
         i, v = self.decode_head(msg, i)
         # Grid ID: DF+022
         # Residual model indicator DF+009
@@ -3265,7 +3269,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_ssr_iono(self, msg, i, inet=0):
-        """ decode SSR Regional Ionospheric Correction message (E96,E97,E98,E99,E100) """
+        """Decode SSR regional ionospheric correction message (E96-E100)."""
         sys = self.get_ssr_sys(self.msgtype)
         i, v = self.decode_head(msg, i, sys)
         # Grid ID DF+22
@@ -3336,30 +3340,29 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_integ_head(self, msg, i):
-        """ decode common headder of SC-134 messages """
+        """Decode common headder of SC-134 messages."""
         tow, pid, vp, udi = bs.unpack_from('u30u12u4u16', msg, i)
         i += 62
 
         self.integ.tow = tow*1e-3
-        self.integ.pid = pid # Augmentation Service Provider Id
-        self.integ.vp = self.integ.vp_tbl[vp] # Validity Period DFi065 (0-15)
-        self.integ.udi = udi*0.1  # update rate interval DFi067 (0.1) 
- 
-        self.tow = self.integ.tow        
-        self.time = gpst2time(self.week, self.tow)       
- 
+        self.integ.pid = pid  # Augmentation Service Provider Id
+        self.integ.vp = self.integ.vp_tbl[vp]  # Validity Period DFi065 (0-15)
+        self.integ.udi = udi*0.1  # update rate interval DFi067 (0.1)
+
+        self.tow = self.integ.tow
+        self.time = gpst2time(self.week, self.tow)
+
         if self.msgtype != 2000:
             aid = bs.unpack_from('u10', msg, i)[0]
             i += 10
             self.integ.aid = aid  # service area id DFi075
-        
+
         return i
 
     def decode_integrity_min(self, msg, i):
-        """ RTCM SC-134 minimum integrity message (MT3,2000) """
-
+        """Decode RTCM SC-134 minimum integrity message (MT2000)."""
         i = self.decode_integ_head(msg, i)
-        
+
         # Constellation Mask DFi013
         # constellation integirity status DFi029
         # constellation monitoring status DFi030
@@ -3434,11 +3437,12 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_integrity_ext(self, msg, i):
-        """ RTCM SC-134 extended integrity message
-        service levels and overbounding parameters (MT4,2005) """
+        """Decode RTCM SC-134 extended integrity message (MT2005).
 
+        Service levels and overbounding parameters.
+        """
         i = self.decode_integ_head(msg, i)
-        
+
         # Augmentation Integrity Level DFi026
         # TTTcomm DFi050
         # Service Provider Solution Type DFi004
@@ -3474,7 +3478,7 @@ class rtcm(cssr, rtcmUtil):
 
         self.integ.Pa_sc = {}
         self.integ.Pa_sp = {}
-        self.integ.sig_ob_c = {}        
+        self.integ.sig_ob_c = {}
         self.integ.sig_ob_p = {}
         self.integ.b_ob_c = {}
         self.integ.b_ob_p = {}
@@ -3531,7 +3535,7 @@ class rtcm(cssr, rtcmUtil):
 
             self.integ.Pa_sc[sys] = {}
             self.integ.Pa_sp[sys] = {}
-            self.integ.sig_ob_c[sys] = {}            
+            self.integ.sig_ob_c[sys] = {}
             self.integ.sig_ob_p[sys] = {}
             self.integ.b_ob_c[sys] = {}
             self.integ.b_ob_p[sys] = {}
@@ -3541,7 +3545,7 @@ class rtcm(cssr, rtcmUtil):
             # satellite-specific part
             for svid in svid_t:
                 sat = self.svid2sat(sys, svid)
-                
+
                 # Single Satellite Pseudorange Augmentation Message Fault
                 # Probability DFi046
                 # Overbounding Standard Deviation of the Pseudorange
@@ -3559,18 +3563,19 @@ class rtcm(cssr, rtcmUtil):
                 i += 26
 
                 self.integ.Pa_sc[sys][sat] = Pa_sc
-                self.integ.Pa_sp[sys][sat] = Pa_sp                
+                self.integ.Pa_sp[sys][sat] = Pa_sp
                 self.integ.sig_ob_c[sys][sat] = sig_ob_c
                 self.integ.sig_ob_p[sys][sat] = sig_ob_p
-                self.integ.b_ob_c[sys][sat] = b_ob_c                
+                self.integ.b_ob_c[sys][sat] = b_ob_c
                 self.integ.b_ob_p[sys][sat] = b_ob_p
 
         return i
 
     def decode_integrity_ext_sis_local(self, msg, i):
-        """ RTCM SC-134 extended integrity message
-        signal in space integrity and local error parameters (MT5, 2006) """
+        """Decode RTCM SC-134 extended integrity message (MT2006).
 
+        Signal-in-space integrity and local error parameters.
+        """
         i = self.decode_integ_head(msg, i)
 
         # integrity parameter IOD DFi006
@@ -3650,16 +3655,15 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_integrity_service_area(self, msg, i, ext=False):
-        """ decode SC-134 Primary/Extended Service Area Parameters (MT2007/2008) """
-        
+        """Decode SC-134 service area parameters (MT2007/2008)."""
         i = self.decode_integ_head(msg, i)
-        
+
         atype, iod_sa, cf = bs.unpack_from('u2u6u1', msg, i)
         i += 9
 
-        self.integ.atype = atype # service area type DFi056
-        self.integ.iod_sa = iod_sa 
-        self.integ.cf = cf # service area parameter continuation flag DFi041
+        self.integ.atype = atype  # service area type DFi056
+        self.integ.iod_sa = iod_sa
+        self.integ.cf = cf  # service area parameter continuation flag DFi041
 
         if not ext:
             # Time Parameter Degradation Factor (DFi138)
@@ -3669,15 +3673,15 @@ class rtcm(cssr, rtcmUtil):
         # multiple message sequence number DFi079
         self.integ.seq = bs.unpack_from('u5', msg, i)[0]
         i += 5
-        
-        if ext: # Extended Service Area
+
+        if ext:  # Extended Service Area
             f_ir, f_ttd, f_t, f_exs = bs.unpack_from('u2u2u3u3', msg, i)
             i += 10
-    
-            self.integ.f_ir = f_ir   # Augmentation IR Degradation Factor DFi140
-            self.integ.f_ttd = f_ttd # Augmentation TTD Degradation Factor DFi141
-            self.integ.f_t = f_t     # Time Parameter Degradation Factor DFi138
-            self.integ.f_exs = f_exs # Extended Area Spatial Parameter Degradation Factor DFi139
+
+            self.integ.f_ir = f_ir    # Augmentation IR degradation DFi140
+            self.integ.f_ttd = f_ttd  # Augmentation TTD degradation DFi141
+            self.integ.f_t = f_t      # Time parameter degradation DFi138
+            self.integ.f_exs = f_exs  # Spatial parameter degradation DFi139
 
         if atype == 1:  # Validity Area Parameters
             # number of area points DFi201
@@ -3706,8 +3710,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_integrity_quality(self, msg, i):
-        """ RTCM SC-134 Message Quality Indicator (MT7, 2051) """
-
+        """Decode RTCM SC-134 message quality indicator (MT2051)."""
         i = self.decode_integ_head(msg, i)
 
         # network id DFi071
@@ -3725,8 +3728,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_integrity_cnr_acg(self, msg, i):
-        """ RTCM SC-134 CNR/ACG SIS Monitoring Message (MT8, 2091) """
-
+        """Decode RTCM SC-134 CNR/AGC SIS monitoring message (MT2091)."""
         i = self.decode_integ_head(msg, i)
 
         # constellation mask DFi013
@@ -3770,8 +3772,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_integrity_vmap(self, msg, i):
-        """ RTCM SC-134 Satellite Visibility Map Message (MT9, 2071) """
-
+        """Decode RTCM SC-134 satellite visibility map message (MT2071)."""
         i = self.decode_integ_head(msg, i)
 
         # number of area points DFi201
@@ -3783,7 +3784,7 @@ class rtcm(cssr, rtcmUtil):
         self.integ.narea = narea
         self.integ.cf = cf
         self.integ.seq = seq
-        
+
         self.integ.pos = np.zeros((narea, 3))
         self.integ.naz = np.zeros(narea, dtype=int)
         self.integ.azel = {}
@@ -3815,8 +3816,7 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_integrity_mmap(self, msg, i):
-        """ RTCM SC-134 Multipath Map Message (MT10, 2072) """
-
+        """Decode RTCM SC-134 multipath map message (MT2072)."""
         i = self.decode_integ_head(msg, i)
 
         # number of area points DFi201
@@ -3894,9 +3894,9 @@ class rtcm(cssr, rtcmUtil):
         return i
 
     def decode_integrity_ssr(self, msg, i):
-        """ RTCM SC-134 SSR integrity message (MT2011) """
+        """Decode RTCM SC-134 SSR integrity message (MT2011)."""
         i = self.decode_integ_head(msg, i)
-        
+
         # SSR provider ID, solution type, iod
         self.integ.pidssr, self.integ.sidssr, self.integ.iodssr = \
             bs.unpack_from('u16u4u4', msg, i)
@@ -3923,9 +3923,9 @@ class rtcm(cssr, rtcmUtil):
                 sat = self.svid2sat(sys, svid)
                 flag_t[sys][sat] = bs.unpack_from('u2', msg, i)[0]
                 i += 2
-                if flag_t[sys][sat] == 1: # Do Not USe:
+                if flag_t[sys][sat] == 1:  # Do Not USe:
                     sat_e.append(sat)
-                    
+
         self.integ.sat_e = sat_e
         self.integ.iod_sys = iod_sys
         self.integ.flag = flag_t
@@ -3938,13 +3938,14 @@ class rtcm(cssr, rtcmUtil):
         # Working Group    DFi020 uint4
         # Sub-Message      DFi028 uint8
         # Message Revision DFi00x uint4 => uint8?
+        """Decode RTCM SC-134 test message header."""
         wg, self.subtype, self.ver = bs.unpack_from('u4u8u4', msg, i)
         self.wg = wg-1
         i += 16
         return i
 
     def decode(self, msg, subtype=None, scanmode=False):
-        """ decode RTCM messages """
+        """Decode RTCM messages."""
         i = 24
         self.msgtype = bs.unpack_from('u12', msg, i)[0]
         i += 12
@@ -4135,9 +4136,10 @@ class rtcm(cssr, rtcmUtil):
 
 
 class rtcme(cssre, rtcmUtil):
-    """ class for RTCM message encoder """
+    """Class for RTCM message encoder."""
 
     def __init__(self):
+        """Initialize RTCM 3 message encoder."""
         super().__init__()
         self.integ = Integrity()
 
@@ -4172,15 +4174,18 @@ class rtcme(cssre, rtcmUtil):
         self.egpmask = 0
 
     def set_sync(self, msg, k):
+        """Set RTCM 3 frame synchronization byte."""
         msg[k] = 0xd3
 
     def set_len(self, msg, k, len_):
+        """Set RTCM 3 message payload length."""
         st.pack_into('>H', msg, k+1, len_ & 0x3ff)
         self.len = len_
         self.dlen = len_+6
         return len_
 
     def set_checksum(self, msg, k, maxlen=0):
+        """Compute and pack CRC-24Q checksum into RTCM 3 frame."""
         if self.len < 6:
             return False
         if maxlen > 0 and k+self.len >= maxlen:
@@ -4191,13 +4196,15 @@ class rtcme(cssre, rtcmUtil):
         return cs
 
     def set_body(self, msg, buff, k, len_):
+        """Copy encoded message body into RTCM 3 frame."""
         msg[k+3:k+len_] = buff[3:len_]
 
     def round_i(self, v):
+        """Round positive float value to nearest integer."""
         return int(v+0.5)
 
     def ival(self, y, nbit, scl):
-        """ float to int conversion with scaling """
+        """Convert float value to scaled integer."""
         if np.isnan(y):
             u = -(1 << (nbit-1))  # -lim: data is not available
         else:
@@ -4206,7 +4213,7 @@ class rtcme(cssre, rtcmUtil):
         return u
 
     def encode_msm_time(self, sys, time):
-        """ decode msm time """
+        """Decode msm time."""
         if sys == uGNSS.GLO:
             time = timeadd(gpst2utc(time), 10800.0)
             week, tow = time2gpst(time)
@@ -4224,7 +4231,7 @@ class rtcme(cssre, rtcmUtil):
         return week, epoch
 
     def encode_msm(self, msg, obs, i):
-        """ encode MSM message """
+        """Encode MSM message."""
         sys, msm = self.msmtype(self.msgtype)
 
         # self.time, self.tow = self.encode_msm_time(sys, self.week, tow_)
@@ -4352,8 +4359,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode_integrity_ssr(self, msg, i):
-        """ RTCM SC-134 SSR integrity message (MT11,12,13) """
-
+        """Encode RTCM SC-134 SSR integrity message (MT2011-2013)."""
         sys_t = self.integ.iod_sys.keys()
         gnss_t = []
         for sys in sys_t:
@@ -4403,8 +4409,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode_ssr_metadata(self, msg, i):
-        """ encode SSR meta-information message (MT60) """
-
+        """Encode SSR meta-information message (MT60)."""
         # nm: nomber of ssr model/correction entries
         bs.pack_into('u4u16u4u5', msg, i, self.iodssr, self.pid,
                      self.sid, self.nm)
@@ -4418,8 +4423,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode_ssr_grid(self, msg, i):
-        """ encode SSR grid definition message (MT61) """
-
+        """Encode SSR grid definition message (MT61)."""
         bs.pack_into('u16b1u10u3', msg, i, self.pid,
                      self.mi, self.gid, self.gtype)
         i += 30
@@ -4509,7 +4513,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode_head(self, msg, i, sys=uGNSS.NONE):
-        """ encode the header of ssr message """
+        """Encode the header of ssr message."""
         if self.msgtype == 4076 or sys != uGNSS.GLO:
             blen = 20
         else:
@@ -4554,8 +4558,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode_sat(self, msg, i, sat):
-        """ encode satellite id """
-
+        """Encode satellite id."""
         sys, prn = sat2prn(sat)
         svid = prn
 
@@ -4574,7 +4577,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode_orb_sat(self, msg, i, sat, inet=0):
-        """ encode orbit correction of cssr """
+        """Encode orbit correction of cssr."""
         sys, _ = sat2prn(sat)
 
         if self.msgtype == 4076:
@@ -4609,8 +4612,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode_clk_sat(self, msg, i, sat, inet=0):
-        """ encoder clock correction of cssr """
-
+        """Encode satellite clock correction of Compact SSR."""
         dclk = self.ival(self.lc[inet].dclk[sat], 22, 0.1e-3)
 
         if self.lc[inet].ddclk is not None:
@@ -4624,7 +4626,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode_hclk_sat(self, msg, i, sat, inet=0):
-        """ encoder high-rate clock correction of cssr """
+        """Encode satellite high-rate clock correction of Compact SSR."""
         if self.lc[inet].hclk is not None:
             hclk = self.ival(self.lc[inet].hclk[sat], 22, 0.1e-3)
         else:
@@ -4635,7 +4637,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode_cssr_orb(self, msg, i, inet=0):
-        """ encode RTCM SSR Orbit Correction message """
+        """Encode RTCM SSR Orbit Correction message."""
         sys = self.get_ssr_sys(self.msgtype)
         i = self.encode_head(msg, i, sys)
 
@@ -4649,7 +4651,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode_cssr_clk(self, msg, i, inet=0):
-        """encode RTCM SSR Clock Correction message """
+        """Encode RTCM SSR Clock Correction message."""
         sys = self.get_ssr_sys(self.msgtype)
         i = self.encode_head(msg, i, sys)
 
@@ -4663,7 +4665,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode_cssr_ura(self, msg, i, inet=0):
-        """ encode RTCM SSR URA message """
+        """Encode RTCM SSR URA message."""
         sys = self.get_ssr_sys(self.msgtype)
         i = self.encode_head(msg, i, sys)
         ura = self.lc[inet].ura
@@ -4683,7 +4685,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode_cssr_cbias(self, msg, i, inet=0):
-        """ encode RTCM SSR code bias message """
+        """Encode RTCM SSR code bias message."""
         sys = self.get_ssr_sys(self.msgtype)
         i = self.encode_head(msg, i, sys)
 
@@ -4706,7 +4708,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode_cssr_pbias(self, msg, i, inet=0):
-        """ encode RTCM SSR phase bias message """
+        """Encode RTCM SSR phase bias message."""
         sys = self.get_ssr_sys(self.msgtype)
         i = self.encode_head(msg, i, sys)
 
@@ -4760,7 +4762,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode_ssr_trop(self, msg, i, inet=0):
-        """ encode SSR Tropspheric Correction Message """
+        """Encode SSR Tropspheric Correction Message."""
         i = self.encode_head(msg, i)
         inet = self.gid
         rmi = self.lc[inet].flg_trop & 1
@@ -4830,7 +4832,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode_ssr_iono(self, msg, i, inet=0):
-        """ encode SSR Regional Ionospheric Correction message (E96,E97,E98,E99,E100) """
+        """Encode SSR regional ionospheric correction message (E96-E100)."""
         sys_m = self.get_ssr_sys(self.msgtype)
         i = self.encode_head(msg, i, sys_m)
 
@@ -4917,7 +4919,7 @@ class rtcme(cssre, rtcmUtil):
         return i
 
     def encode(self, msg, obs=None):
-        """ encode RTCM messages """
+        """Encode RTCM messages."""
         i = 24
         bs.pack_into('u12', msg, i, self.msgtype)
         i += 12

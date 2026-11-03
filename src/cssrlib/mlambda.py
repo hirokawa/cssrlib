@@ -1,5 +1,4 @@
-"""
-integer ambiguity resolution by LAMBDA
+"""Integer ambiguity resolution by LAMBDA.
 
 reference:
      [1] P.J.G.Teunissen, The least-square ambiguity decorrelation adjustment:
@@ -22,124 +21,171 @@ import numpy as np
 from scipy.stats import norm
 from numpy.linalg import inv
 
+try:
+    from numba import njit
+except ImportError:
+    def njit(*args, **kwargs):
+        """Fallback decorator when Numba is not available."""
+        def decorator(func):
+            return func
+        return decorator
+
+
+@njit(fastmath=True)
+def _ldldecom_core(Q):
+    n = len(Q)
+    L = np.zeros((n, n), dtype=np.float64)
+    d = np.zeros(n, dtype=np.float64)
+    A = Q.copy()
+    for i in range(n - 1, -1, -1):
+        d[i] = A[i, i]
+        sqrtd = np.sqrt(d[i])
+        for col in range(i + 1):
+            L[i, col] = A[i, col] / sqrtd
+        for j in range(i):
+            L_ij = L[i, j]
+            for col in range(j + 1):
+                A[j, col] -= L[i, col] * L_ij
+        L_ii = L[i, i]
+        for col in range(i + 1):
+            L[i, col] /= L_ii
+    return L, d
+
 
 def ldldecom(Q):
-    """ Lt*d*L decomposition of positive symmetric matrix Q """
-    n = len(Q)
-    L = np.zeros((n, n))
-    d = np.zeros(n)
-    A = Q.copy()
-    for i in range(n-1, -1, -1):
-        d[i] = A[i, i]
-        L[i, :i+1] = A[i, :i+1]/np.sqrt(d[i])
-        for j in range(i):
-            A[j, :j+1] -= L[i, :j+1]*L[i, j]
-        L[i, :i+1] /= L[i, i]
-
+    """Compute LDL^T decomposition of positive symmetric matrix Q."""
+    L, d = _ldldecom_core(Q)
     if np.any((d < 1e-10)):
         raise SystemExit("Qah should be positive definite.")
 
     return L, d
 
 
+@njit(fastmath=True)
 def reduction(L, d):
+    """Perform LDL^T decomposition and integer Gauss transformation."""
     n = len(d)
     Z = np.eye(n)
-    j = n-2
-    k = n-2
+    j = n - 2
+    k = n - 2
     while j >= 0:
         if j <= k:
-            for i in range(j+1, n):
+            for i in range(j + 1, n):
                 mu = np.round(L[i, j])
                 if mu != 0.0:
-                    L[i:, j] -= mu*L[i:, i]
-                    Z[:, j] -= mu*Z[:, i]
+                    for r in range(i, n):
+                        L[r, j] -= mu * L[r, i]
+                    for r in range(n):
+                        Z[r, j] -= mu * Z[r, i]
 
-        delta = d[j]+L[j+1, j]**2*d[j+1]
-        if delta+1e-6 < d[j+1]:  # permutation
-            eta = d[j]/delta
-            lam = d[j+1]*L[j+1, j]/delta
-            d[j] = eta*d[j+1]
-            d[j+1] = delta
-            L[j:j+2, :j] = np.array([[-L[j+1, j], 1], [eta, lam]])@L[j:j+2, :j]
-            L[j+1, j] = lam
-            # swap j,j+1 row
-            L[j+2:, [j+1, j]] = L[j+2:, [j, j+1]]
-            Z[:, [j+1, j]] = Z[:, [j, j+1]]
+        delta = d[j] + L[j + 1, j]**2 * d[j + 1]
+        if delta + 1e-6 < d[j + 1]:  # permutation
+            eta = d[j] / delta
+            lam = d[j + 1] * L[j + 1, j] / delta
+            d[j] = eta * d[j + 1]
+            d[j + 1] = delta
+
+            # 2x2 matrix product on L[j:j+2, :j]
+            L_j1_j = L[j + 1, j]
+            for col in range(j):
+                v0 = L[j, col]
+                v1 = L[j + 1, col]
+                L[j, col] = -L_j1_j * v0 + v1
+                L[j + 1, col] = eta * v0 + lam * v1
+
+            L[j + 1, j] = lam
+
+            # swap columns j and j+1 in L (from j+2 to n)
+            for r in range(j + 2, n):
+                tmp = L[r, j]
+                L[r, j] = L[r, j + 1]
+                L[r, j + 1] = tmp
+
+            # swap columns j and j+1 in Z
+            for r in range(n):
+                tmp = Z[r, j]
+                Z[r, j] = Z[r, j + 1]
+                Z[r, j + 1] = tmp
 
             k = j
-            j = n-2
+            j = n - 2
         else:
             j -= 1
     return L, d, Z
 
 
 def sr_boost(d):
-    """ Compute the bootstrapped success rate """
+    """Compute the bootstrapped success rate."""
     Ps = np.prod(2*norm.cdf(0.5/np.sqrt(d))-1)
     return Ps
 
 
+@njit(fastmath=True)
 def msearch(L, d, ahat, ncands=2):
+    """Search integer least-squares candidates using modified Pohst."""
     n = len(d)
     Chi2 = 1e18
 
-    dist = np.zeros(n)
-    acond = np.zeros(n)
+    dist = np.zeros(n, dtype=np.float64)
+    acond = np.zeros(n, dtype=np.float64)
     zcond = np.zeros(n, dtype=np.int32)
     step = np.zeros(n, dtype=np.int32)
-    afixed = np.zeros((n, ncands))
-    sqnorm = np.zeros(ncands)
+    afixed = np.zeros((n, ncands), dtype=np.float64)
+    sqnorm = np.zeros(ncands, dtype=np.float64)
 
     acond[-1] = ahat[-1]
-    zcond[-1] = round(acond[-1])
-    left = acond[-1]-zcond[-1]
-    step[-1] = np.sign(left)
-    if step[-1] == 0:
-        step[-1] = 1
+    zcond[-1] = int(np.round(acond[-1]))
+    left = acond[-1] - zcond[-1]
+    s_val = np.sign(left)
+    step[-1] = int(s_val) if s_val != 0 else 1
 
     imax = ncands - 1
-    S = np.zeros((n, n))
+    S = np.zeros((n, n), dtype=np.float64)
     count = -1  # number of candidates
     endSearch = False
-    k = n-1
+    k = n - 1
 
     while not endSearch:
-        newdist = dist[k]+left**2/d[k]
+        newdist = dist[k] + left**2 / d[k]
         if newdist < Chi2:
             if k != 0:
                 k -= 1
                 dist[k] = newdist
-                S[k, :k+1] = S[k+1, :k+1]+(zcond[k+1]-acond[k+1])*L[k+1, :k+1]
-                acond[k] = ahat[k]+S[k, k]
-                zcond[k] = round(acond[k])
-                left = acond[k]-zcond[k]
-                step[k] = np.sign(left)
-                if step[k] == 0:
-                    step[k] = 1
+                diff = zcond[k + 1] - acond[k + 1]
+                for col in range(k + 1):
+                    S[k, col] = S[k + 1, col] + diff * L[k + 1, col]
+                acond[k] = ahat[k] + S[k, k]
+                zcond[k] = int(np.round(acond[k]))
+                left = acond[k] - zcond[k]
+                s_val = np.sign(left)
+                step[k] = int(s_val) if s_val != 0 else 1
             else:
-                if count < ncands-2:
+                if count < ncands - 2:
                     count += 1
-                    afixed[:, count] = zcond
+                    for r in range(n):
+                        afixed[r, count] = zcond[r]
                     sqnorm[count] = newdist
                 else:
-                    afixed[:, imax] = zcond
+                    for r in range(n):
+                        afixed[r, imax] = zcond[r]
                     sqnorm[imax] = newdist
 
-                    imax = np.argmax(sqnorm)
+                    imax = int(np.argmax(sqnorm))
                     Chi2 = sqnorm[imax]
 
                 zcond[0] += step[0]
-                left = acond[0]-zcond[0]
-                step[0] = -step[0]-np.sign(step[0])
+                left = acond[0] - zcond[0]
+                s_val = np.sign(step[0])
+                step[0] = -step[0] - (int(s_val) if s_val != 0 else 1)
         else:
-            if k == n-1:
+            if k == n - 1:
                 endSearch = True
             else:
                 k += 1
                 zcond[k] += step[k]
-                left = acond[k]-zcond[k]
-                step[k] = -step[k]-np.sign(step[k])
+                left = acond[k] - zcond[k]
+                s_val = np.sign(step[k])
+                step[k] = -step[k] - (int(s_val) if s_val != 0 else 1)
 
     order = np.argsort(sqnorm)
     sqnorm = sqnorm[order]
@@ -148,88 +194,92 @@ def msearch(L, d, ahat, ncands=2):
     return afixed, sqnorm
 
 
+@njit(fastmath=True)
 def estimILS(L, d, ahat, ncands=2):
-    """ ILS estimator by search-and-shrink [4] """
+    """Estimate integer least-squares solution by search-and-shrink [4]."""
     n = len(d)
     Chi2 = 1e18
 
     k0 = 1 if (ncands == 1 and n > 1) else 0
 
-    afixed = np.zeros((n, ncands))
-    sqnorm = np.zeros(ncands)
+    afixed = np.zeros((n, ncands), dtype=np.float64)
+    sqnorm = np.zeros(ncands, dtype=np.float64)
 
-    acond = np.zeros(n)
+    acond = np.zeros(n, dtype=np.float64)
     zcond = np.zeros(n, dtype=np.int32)
-    left = np.zeros(n)
+    left = np.zeros(n, dtype=np.float64)
     step = np.zeros(n, dtype=np.int32)
 
     acond[-1] = ahat[-1]
-    zcond[-1] = round(acond[-1])
+    zcond[-1] = int(np.round(acond[-1]))
     left[-1] = acond[-1] - zcond[-1]
-    step[-1] = np.sign(left[-1])
-    if step[-1] == 0:
-        step[-1] = 1
+    s_val = np.sign(left[-1])
+    step[-1] = int(s_val) if s_val != 0 else 1
 
     count = -1  # number of candidates
     imax = ncands - 1
 
-    S = np.zeros((n, n))
-    dist = np.zeros(n)
-    path = (n-1)*np.ones(n, dtype=np.int32)
+    S = np.zeros((n, n), dtype=np.float64)
+    dist = np.zeros(n, dtype=np.float64)
+    path = (n - 1) * np.ones(n, dtype=np.int32)
 
     endSearch = False
-    k = n-1
+    k = n - 1
 
     while not endSearch:
-        newdist = dist[k]+left[k]**2/d[k]
+        newdist = dist[k] + left[k]**2 / d[k]
         while newdist < Chi2:
             if k != 0:
                 k -= 1
                 dist[k] = newdist
 
                 for j in range(path[k], k, -1):
-                    S[j-1, k] = S[j, k]-left[j]*L[j, k]
+                    S[j - 1, k] = S[j, k] - left[j] * L[j, k]
 
-                acond[k] = ahat[k]+S[k, k]
-                zcond[k] = round(acond[k])
-                left[k] = acond[k]-zcond[k]
-                step[k] = np.sign(left[k])
-                if step[k] == 0:
-                    step[k] = 1
+                acond[k] = ahat[k] + S[k, k]
+                zcond[k] = int(np.round(acond[k]))
+                left[k] = acond[k] - zcond[k]
+                s_val = np.sign(left[k])
+                step[k] = int(s_val) if s_val != 0 else 1
             else:
-                if count < ncands-2:
+                if count < ncands - 2:
                     count += 1
-                    afixed[:, count] = zcond
+                    for r in range(n):
+                        afixed[r, count] = zcond[r]
                     sqnorm[count] = newdist
                 else:
-                    afixed[:, imax] = zcond
+                    for r in range(n):
+                        afixed[r, imax] = zcond[r]
                     sqnorm[imax] = newdist
 
-                    imax = np.argmax(sqnorm)
+                    imax = int(np.argmax(sqnorm))
                     Chi2 = sqnorm[imax]
 
                 # next valid integer (k+1 level)
                 k = k0
                 zcond[k] += step[k]
-                left[k] = acond[k]-zcond[k]
-                step[k] = -step[k]-np.sign(step[k])
+                left[k] = acond[k] - zcond[k]
+                s_val = np.sign(step[k])
+                step[k] = -step[k] - (int(s_val) if s_val != 0 else 1)
 
-            newdist = dist[k] + left[k]**2/d[k]
+            newdist = dist[k] + left[k]**2 / d[k]
 
         ilevel = k
 
         while newdist >= Chi2:
-            if k == n-1:
+            if k == n - 1:
                 endSearch = True
                 break
             k += 1
             zcond[k] += step[k]
-            left[k] = acond[k]-zcond[k]
-            step[k] = -step[k]-np.sign(step[k])
-            newdist = dist[k] + left[k]**2/d[k]
+            left[k] = acond[k] - zcond[k]
+            s_val = np.sign(step[k])
+            step[k] = -step[k] - (int(s_val) if s_val != 0 else 1)
+            newdist = dist[k] + left[k]**2 / d[k]
 
-        path[ilevel:k] = k
-        for j in range(ilevel-1, -1, -1):
+        for p_idx in range(ilevel, k):
+            path[p_idx] = k
+        for j in range(ilevel - 1, -1, -1):
             if path[j] < k:
                 path[j] = k
             else:
@@ -243,7 +293,7 @@ def estimILS(L, d, ahat, ncands=2):
 
 
 def parsearch(zhat, Qzhat, Z, L, d, Ps, P0=0.995, ncands=2, exclmax=1):
-    """ Partial Ambiguity Resolution """
+    """Perform partial ambiguity resolution."""
     n = len(Qzhat)
     k = 0
     # idx = np.argsort(d)[::-1]
@@ -287,7 +337,7 @@ def parsearch(zhat, Qzhat, Z, L, d, Ps, P0=0.995, ncands=2, exclmax=1):
 
 
 def mlambda(ahat, Qahat, ncands=2, parmode=1, P0=0.995):
-    """ modified LAMBDA method for ambiguity resolution """
+    """Resolve integer ambiguities using modified LAMBDA method."""
     # s = time.perf_counter_ns()
     L, d = ldldecom(Qahat)
     # e = time.perf_counter_ns()

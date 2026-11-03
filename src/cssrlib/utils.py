@@ -1,5 +1,4 @@
-"""
-Utility functions for cssrlib
+"""Utility functions for cssrlib.
 
 @author: ruihi
 """
@@ -15,9 +14,10 @@ from cssrlib.plot import plot_enu
 
 
 class process:
-    """ class to process the positioning """
+    """Class to process the positioning."""
 
     def __init__(self, nav=None, rnx=None, config=None, nep=0, xyz_ref=[]):
+        """Initialize batch positioning processor."""
         self.nav = nav
         self.rnx = rnx
         self.config = config
@@ -37,14 +37,14 @@ class process:
             self.smode = np.zeros(nep, dtype=int)
 
     def init_time(self, t):
-        """ initialize time """
+        """Initialize time."""
         self.nav.t = deepcopy(t)
         self.t0 = deepcopy(t)
         self.t0.time = self.t0.time//30*30
         self.nav.time_p = self.t0
 
     def init_sig(self, sig_t):
-        """ convert gnss/signals table to signals """
+        """Convert gnss/signals table to signals."""
         # sig_t = {'G': ['1C', '5Q'], 'J': ['1C', '5Q']}
         sigs = []
         nf = 0
@@ -61,8 +61,7 @@ class process:
         return sigs, nf
 
     def prepare_signal(self, obsfile=None):
-        """ prepare signals """
-
+        """Prepare signals."""
         self.rnx.autoSubstituteSignals()  # auto-substitute signals
 
         # Initialize navigation parameters
@@ -124,15 +123,14 @@ class process:
         self.nav.fout.write("\n")
 
     def save_output(self, t, ne, ppp=None):
-        """ output result """
-
+        """Output result."""
         self.t[ne] = timediff(t, self.t0)/86400.0
 
         sol = self.nav.xa[0:3] if self.nav.smode == 4 else self.nav.x[0:3]
         self.enu[ne, :] = ecef2enu(self.pos_ref, sol-self.xyz_ref)
         self.smode[ne] = self.nav.smode
 
-        if ppp is None:
+        if ppp is None or self.nav.ntrop == 0:
             self.ztd = None
         else:
             self.ztd[ne] = self.nav.xa[ppp.IT(self.nav.na)] \
@@ -157,8 +155,7 @@ class process:
                              enu[0], enu[1], enu[2], pos_h, smode))
 
     def close(self):
-        """ finish processing """
-
+        """Finish processing."""
         # Send line-break to stdout
         #
         stdout.write('\n')
@@ -174,8 +171,7 @@ class process:
 
     def plot(self, ttl='test', fig_type=1, ylim=1, ylim_v=2, gfmt='png',
              dpi=300):
-        """ plot utility """
-
+        """Plot utility."""
         if fig_type == 1:
             plot_enu(self.t, self.enu, self.smode,
                      self.ztd, ylim=ylim, ylim_v=ylim_v)

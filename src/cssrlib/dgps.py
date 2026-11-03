@@ -1,8 +1,7 @@
-"""
-DGPS (QZSS SLAS) correction data decoder
+"""DGPS (QZSS SLAS) correction data decoder.
 
 [1] Quasi-Zenith Satellite System Interface Specification
-    Sub-meter Level Augmentation Service (IS-QZSS-L1S-006), 2023
+    Sub-meter Level Augmentation Service (IS-QZSS-L1S-009), 2026
 
 """
 
@@ -16,7 +15,7 @@ from cssrlib.ewss import jmaDec, camfDec
 
 
 def vardgps(el, nav):
-    """ measurement error varianvce for DGPS [1] """
+    """Compute measurement error variance for DGPS [1]."""
     c_el = np.cos(el)
     el_d = el*rCST.R2D
     pos = ecef2pos(nav.x[0:3])
@@ -42,10 +41,13 @@ def vardgps(el, nav):
 
 
 class dgpsDec(cssr):
+    """Class to decode QZSS L1S SLAS (DGPS) messages."""
+
     MAX_ST = 64
     MAX_SAT = 23
 
     def __init__(self, foutname=None, year=0):
+        """Initialize QZSS SLAS DGPS decoder."""
         super().__init__(foutname)
         self.MAXNET = 1
         self.cssrmode = sCSSRTYPE.DGPS
@@ -84,7 +86,7 @@ class dgpsDec(cssr):
         self.posr[5, :] = [36.400, 136.410,  50]
         self.posr[6, :] = [34.710, 135.040, 200]
         self.posr[7, :] = [34.350, 132.450,  50]
-        self.posr[8, :] = [33.600, 130.230,  50]
+        self.posr[8, :] = [33.670, 130.390,  50]
         self.posr[9, :] = [30.550, 130.940, 100]
         self.posr[10, :] = [28.420, 129.690,  50]
         self.posr[11, :] = [26.150, 127.690, 100]
@@ -103,12 +105,13 @@ class dgpsDec(cssr):
         self.dcx = camfDec(year=year)
 
     def sval(self, u, n, scl):
-        """ calculate signed value based on n-bit int, lsb """
+        """Calculate signed value based on n-bit int, lsb."""
         invalid = 2**(n-1)-1
         y = np.nan if u == invalid else u*scl
         return y
 
     def check_validity(self, time):
+        """Check validity time of SLAS DGPS corrections."""
         for sat in self.sat_n:
             if timediff(time, self.lc[0].t0[sat][sCType.CLOCK]) > \
                     self.tmax[sCType.CLOCK]:
@@ -119,12 +122,12 @@ class dgpsDec(cssr):
                 self.lc[0].dorb[sat] = np.zeros(3)
 
     def decode_mt43(self, msg, i):
-        """ decode DC report by JMA (TBD) """
+        """Decode DC report by JMA (TBD)."""
         i = self.dcr.decode(msg, i)
         return i
 
     def decode_mt44(self, msg, i):
-        """ decode DC report by other organization (TBD) """
+        """Decode DC report by other organization (TBD)."""
         sdmt, sdm = bs.unpack_from('u1u9', msg, i)
         i += 10
         if self.monlevel >= 1:
@@ -134,7 +137,7 @@ class dgpsDec(cssr):
         return i
 
     def decode_mt47(self, msg, i):
-        """ decode location of reference station """
+        """Decode location of reference station."""
         i = 14
         for k in range(5):
             code, lat, lon, alt = bs.unpack_from('u6s15s15u6', msg, i)
@@ -150,7 +153,7 @@ class dgpsDec(cssr):
         return 0
 
     def decode_mt48(self, msg, i):
-        """ decode satellite mask """
+        """Decode satellite mask."""
         self.iodssr_p = self.iodp
         self.sat_n_p = self.sat_n
 
@@ -177,7 +180,7 @@ class dgpsDec(cssr):
         return i
 
     def decode_mt49(self, msg, i):
-        """ decode issue of data """
+        """Decode issue of data."""
         iodp = bs.unpack_from('u2', msg, 223)[0]
         if iodp != self.iodp:
             return -1
@@ -200,7 +203,7 @@ class dgpsDec(cssr):
         return i
 
     def decode_mt50(self, msg, i):
-        """ decode DGPS correction """
+        """Decode DGPS correction."""
         iodp, iodi, code, h, mask_s = bs.unpack_from('u2u2u6u1u23', msg, i)
         i += 34
         if iodp != self.iodp or iodi != self.iodi or h == 1:
@@ -247,7 +250,7 @@ class dgpsDec(cssr):
         return i
 
     def decode_mt51(self, msg, i):
-        """ decode satellite health """
+        """Decode satellite health."""
         v = bs.unpack_from('u64u9u36u36u36', msg, i)
         i += 181
         self.svh[uGNSS.GPS] = v[0]
@@ -258,8 +261,7 @@ class dgpsDec(cssr):
         return i
 
     def decode_cssr(self, msg, i=0):
-        """ decode DGPS messages """
-
+        """Decode DGPS messages."""
         _, mt = bs.unpack_from('u8u6', msg, i)
         i += 14
 
@@ -286,7 +288,7 @@ class dgpsDec(cssr):
             self.fh.write("{:s} mt={:2d} \n".format(time2str(self.time), mt))
 
     def get_station(self, r):
-        """ get the nearest referece station """
+        """Get the nearest referece station."""
         pos = ecef2pos(r)
         c_lat = np.cos(pos[0])
         idx = np.where(self.posr[:, 0]**2+self.posr[:, 1]**2 > 0)[0]
@@ -299,7 +301,7 @@ class dgpsDec(cssr):
         return refid, rng[kmin]
 
     def set_dgps_corr(self, rr):
-        """ get DGPS correction """
+        """Get DGPS correction."""
         if self.iodp < 0 or self.iodi < 0:
             return -1
         refid, rmin = self.get_station(rr)

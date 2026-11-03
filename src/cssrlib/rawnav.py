@@ -1,5 +1,4 @@
-"""
-Raw Navigation Message decoder
+"""Raw Navigation Message decoder.
 
 [1-1] NAVSTAR GPS Space Segment/Navigation User Segment Interfaces
     (IS-GPS-200) Rev.N, 2022
@@ -33,7 +32,7 @@ from cssrlib.rinex import rnxenc, rSigRnx
 
 
 def gep2time(N4, Nt, sod):
-    """ calculate time from Glonass epoch """
+    """Calculate time from Glonass epoch."""
     time = gtime_t()
 
     if Nt <= 366:
@@ -58,9 +57,10 @@ def gep2time(N4, Nt, sod):
 
 
 class RawNav():
-    """ Raw Navigation Message decoder """
+    """Raw Navigation Message decoder."""
 
     def __init__(self, opt=None, prefix=''):
+        """Initialize raw navigation message decoder."""
         self.gps_lnav = {}
         for k in range(uGNSS.GPSMAX):
             self.gps_lnav[k] = bytearray(200)
@@ -109,15 +109,18 @@ class RawNav():
             self.irn_nav[k] = bytearray(200)
 
     def u2s(self, u, blen):
+        """Convert unsigned n-bit integer to two's complement signed int."""
         if u & (1 << (blen-1)):
             u = u-(1 << blen)
         return u
 
     def getbitu2(self, buff, p1, l1, p2, l2):
+        """Extract and concatenate two unsigned bit fields from buffer."""
         return (bs.unpack_from('u'+str(l1), buff, p1)[0] << l2) + \
             bs.unpack_from('u'+str(l2), buff, p2)[0]
 
     def getbits2(self, buff, p1, l1, p2, l2):
+        """Extract and concatenate two bit fields as a signed integer."""
         s = bs.unpack_from('u1', buff, p1)[0]
         if s:
             return (bs.unpack_from('s'+str(l1), buff, p1)[0] << l2) + \
@@ -126,11 +129,13 @@ class RawNav():
             return self.getbitu2(buff, p1, l1, p2, l2)
 
     def getbitu3(self, buff, p1, l1, p2, l2, p3, l3):
+        """Extract and concatenate three unsigned bit fields from buffer."""
         return (bs.unpack_from('u'+str(l1), buff, p1)[0] << (l2+l3)) + \
             (bs.unpack_from('u'+str(l2), buff, p2)[0] << l3) + \
             bs.unpack_from('u'+str(l3), buff, p3)[0]
 
     def getbits3(self, buff, p1, l1, p2, l2, p3, l3):
+        """Extract and concatenate three bit fields as a signed integer."""
         s = bs.unpack_from('u1', buff, p1)[0]
         if s:
             return (bs.unpack_from('s'+str(l1), buff, p1)[0] << (l2+l3)) + \
@@ -140,11 +145,12 @@ class RawNav():
             return self.getbitu3(buff, p1, l1, p2, l2, p3, l3)
 
     def getbitg(self, buff, pos, len_):
+        """Extract sign-magnitude bit field from buffer."""
         s, v = bs.unpack_from('u1u'+str(len_-1), buff, pos)
         return -v if s else v
 
     def urai2sva(self, urai, sys=uGNSS.GPS):
-        """ GPS/QZSS SV accuracy [1] 20.3.3.3.1.3, [2] Tab. 5.4.3-2 """
+        """Convert GPS/QZSS URA index to SV accuracy [1], [2]."""
         # sva_t = [2.40, 3.40, 4.85, 6.85, 9.65, 13.65, 24.00, 48.00, 96.00,
         #         192.00, 384.00, 768.00, 1536.00, 3072.00, 6144.00, -1.0]
 
@@ -155,7 +161,7 @@ class RawNav():
         return sva_t[urai]
 
     def sisa2sva(self, sisa):
-        """ Galileo SISA Index Values [3] Tab. 89 """
+        """Convert Galileo SISA index to accuracy value [3]."""
         sva = np.nan
         if sisa < 50:
             sva = sisa*0.01
@@ -171,7 +177,7 @@ class RawNav():
         return sva
 
     def decode_gal_inav(self, week, time, sat, type_, msg):
-        """ Galileo I/NAV message decoder [3] """
+        """Decode Galileo I/NAV navigation message [3]."""
         sys, prn = sat2prn(sat)
         eph = Eph(sat)
         # 1:even/odd, 1:page, 112:data1, 6:tail, 1:even/odd, 1:page, 16:page2
@@ -276,7 +282,7 @@ class RawNav():
         return eph
 
     def decode_gal_fnav(self, week, time, sat, type_, msg):
-        """ Galileo F/NAV message decoder [3] """
+        """Decode Galileo F/NAV navigation message [3]."""
         sys, prn = sat2prn(sat)
         eph = Eph(sat)
         # 244bit => type(6) + svid(6) + iodnav(10) + body () + crc(24)+tail(6)
@@ -361,8 +367,7 @@ class RawNav():
         return eph
 
     def decode_gps_lnav(self, week, time, sat, msg):
-        """ GPS/QZSS LNAV Message decoder [1], [2] """
-
+        """Decode GPS/QZSS LNAV navigation message [1], [2]."""
         sys, prn = sat2prn(sat)
         eph = Eph(sat)
 
@@ -474,7 +479,7 @@ class RawNav():
         return eph
 
     def decode_gps_cnav_gd(self, msg, eph, i):
-        """ GPS/QZSS CNAV group delay """
+        """Decode GPS/QZSS CNAV group delay parameters."""
         isc1, isc2, isc3, isc4 = \
             bs.unpack_from('s13s13s13s13', msg, i)
         i += 52
@@ -482,7 +487,7 @@ class RawNav():
         return i
 
     def decode_gps_cnav_iono(self, msg, i):
-        """ GPS/QZSS CNAV iono delay """
+        """Decode GPS/QZSS CNAV ionospheric delay parameters."""
         a0, a1, a2, a3, b0, b1, b2, b3 = \
             bs.unpack_from('s8s8s8s8s8s8s8s8', msg, i)
         i += 64
@@ -493,15 +498,14 @@ class RawNav():
         return i
 
     def decode_gps_cnav_utc(self, msg, i):
-        """ GPS/QZSS CNAV UTC parameters """
+        """Decode GPS/QZSS CNAV UTC parameters."""
         a0, a1, a2, dtls, tot, wnot, wnlsf, dn, dtlsf = \
             bs.unpack_from('s16s13s7s8u16u13u13u4s8', msg, i)
         i += 98
         return i
 
     def decode_gps_cnav(self, week, time, sat, msg):
-        """ GPS/QZSS CNAV Message decoder """
-
+        """Decode GPS/QZSS CNAV navigation message."""
         sys, prn = sat2prn(sat)
         eph = Eph(sat)
 
@@ -662,8 +666,7 @@ class RawNav():
         return eph
 
     def decode_gps_cnav2(self, week, time, sat, msg):
-        """ GPS/QZSS CNAV/2 Message decoder """
-
+        """Decode GPS/QZSS CNAV-2 navigation message."""
         sys, prn = sat2prn(sat)
         eph = Eph(sat)
 
@@ -772,7 +775,7 @@ class RawNav():
         return eph
 
     def decode_bds_cnav_eph1(self, msg, eph, i):
-        """ BDS CNAV message decoder for Ephemeris I """
+        """Decode BDS CNAV ephemeris I parameters."""
         toe, sattype, dA, Adot, deln, delnd, M0, ecc, omg = \
             bs.unpack_from('u11u2s26s25s17s23s33u33s33', msg, i)
         i += 203
@@ -791,7 +794,7 @@ class RawNav():
         return i
 
     def decode_bds_cnav_eph2(self, msg, eph, i):
-        """ BDS CNAV message decoder for Ephemeris II """
+        """Decode BDS CNAV ephemeris II parameters."""
         OMG0, i0, OMGd, idot, cis, cic, crs, crc, cus, cuc = \
             bs.unpack_from('s33s33s19s15s16s16s24s24s21s21', msg, i)
         i += 222
@@ -809,7 +812,7 @@ class RawNav():
         return i
 
     def decode_bds_cnav_clk(self, msg, eph, i):
-        """ BDS CNAV message decoder for Clock """
+        """Decode BDS CNAV clock parameters."""
         toc, a0, a1, a2 = \
             bs.unpack_from('u11s25s22s11', msg, i)
         i += 69
@@ -821,7 +824,7 @@ class RawNav():
         return i
 
     def decode_bds_cnav_iono(self, msg, i):
-        """ BDS CNAV message decoder for Ionoephere parameters """
+        """Decode BDS CNAV ionospheric parameters."""
         a1, a2, a3, a4, a5, a6, a7, a8, a9 = \
             bs.unpack_from('u10s8u8u8u8s8s8s8s8', msg, i)
         i += 74
@@ -829,35 +832,35 @@ class RawNav():
         return i
 
     def decode_bds_cnav_utc(self, msg, i):
-        """ BDS CNAV message decoder for UTC parameters """
+        """Decode BDS CNAV UTC parameters."""
         a0, a1, a2, dtls, tot, wn_ot, wn_lsf, dn, dt_lsf = \
             bs.unpack_from('s16s13s7s8u16u13u13u3s8', msg, i)
         i += 97
         return i
 
     def decode_bds_cnav_ralm(self, msg, i):
-        """ BDS CNAV message decoder for reduced almanacs """
+        """Decode BDS CNAV reduced almanac parameters."""
         prn, sattype, dela, OMG0, Phi0, svh = \
             bs.unpack_from('u6u2s8s7s7u8', msg, i)
         i += 38
         return i
 
     def decode_bds_cnav_eop(self, msg, i):
-        """ BDS CNAV message decoder for Earth Orientation Parameters """
+        """Decode BDS CNAV Earth Orientation Parameters (EOP)."""
         teop, x, xd, y, yd, dut1, dut1d = \
             bs.unpack_from('u16s21s15s21s15s31s19', msg, i)
         i += 138
         return i
 
     def decode_bds_cnav_ggto(self, msg, i):
-        """ BDS CNAV message decoder for GGTO """
+        """Decode BDS CNAV GNSS-to-GNSS time offset (GGTO) parameters."""
         gnss, wn, t0, a0, a1, a2 = \
             bs.unpack_from('u3u13u16s16s13s7', msg, i)
         i += 38
         return i
 
     def decode_bds_cnav_malm(self, msg, i):
-        """ BDS CNAV message decoder for Midium Almanacs """
+        """Decode BDS CNAV medium almanac parameters."""
         prn, sattype, wn, toa, ecc, inc, sqrta, OMG0, OMGd, omg, M0, \
             af0, af1, svh = bs.unpack_from(
                 'u6u2u13u8u11s11u17s16s11s16s16s11s10u8', msg, i)
@@ -865,7 +868,7 @@ class RawNav():
         return i
 
     def decode_bds_cnav_sisai(self, msg, eph, i):
-        """ BDS CNAV message decoder for SISAI """
+        """Decode BDS CNAV signal-in-space accuracy index (SISAI)."""
         top, eph.sisai[1], eph.sisai[2], eph.sisai[3] = bs.unpack_from(
             'u11s5s3s3', msg, i)
         eph.tops = top*300.0
@@ -873,8 +876,7 @@ class RawNav():
         return i
 
     def decode_bds_b1c(self, week, time_, sat, msg):
-        """ BDS B1C (B-CNAV1 message decoder) [4] """
-
+        """Decode BDS B1C (B-CNAV1) navigation message [4]."""
         eph = Eph()
         eph.sat = sat
         eph.sisai = np.zeros(4, dtype=int)
@@ -934,8 +936,7 @@ class RawNav():
         return eph
 
     def decode_bds_b2a(self, week, time_, sat, msg):
-        """ BDS B2a (B-CNAV2 message decoder) [4] """
-
+        """Decode BDS B2a (B-CNAV2) navigation message [4]."""
         sys, prn = sat2prn(sat)
         prn_, sid, sow = bs.unpack_from('u6u6u18', msg, 0)
 
@@ -1015,8 +1016,7 @@ class RawNav():
         return eph
 
     def decode_bds_b2b(self, week, time_, sat, msg, ofst=12):
-        """ BDS B2b (B-CNAV3 message decoder) [4] """
-
+        """Decode BDS B2b (B-CNAV3) navigation message [4]."""
         sys, prn = sat2prn(sat)
         sid, sow = bs.unpack_from('u6u20', msg, ofst)
 
@@ -1072,8 +1072,7 @@ class RawNav():
         return eph
 
     def decode_bds_d1(self, week, time, sat, msg, i=0):
-        """ BDS D1 Message decoder """
-
+        """Decode BDS D1 navigation message."""
         sys, prn = sat2prn(sat)
         pre, _, sid, sow1 = bs.unpack_from('u11u4u3u8', msg, i)
         if pre != 0x712:
@@ -1162,8 +1161,7 @@ class RawNav():
         return eph
 
     def decode_bds_d2(self, week, time, sat, msg):
-        """ BDS D2 Message decoder """
-
+        """Decode BDS D2 navigation message."""
         sys, prn = sat2prn(sat)
 
         pre, _, frame, sow1, _, sow2, page = bs.unpack_from(
@@ -1281,8 +1279,7 @@ class RawNav():
         return eph
 
     def decode_irn_lnav(self, week, time, sat, msg):
-        """ NavIC (IRNSS) navigation message decoder """
-
+        """Decode NavIC (IRNSS) L5/S LNAV navigation message."""
         sys, prn = sat2prn(sat)
 
         i = 0
@@ -1371,7 +1368,7 @@ class RawNav():
         return eph
 
     def decode_irn_l1nav_iono_grid(self, msg, i):
-        """ NavIC L1NAV Ionosphere delay at grid points """
+        """Decode NavIC L1NAV ionospheric grid point delays."""
         mask, regid = bs.unpack_from('u10u4', msg, i)
         i += 14
         for k in range(15):
@@ -1382,14 +1379,14 @@ class RawNav():
         return i
 
     def decode_irn_l1nav_alm(self, msg, i):
-        """ NavIC L1NAV Almanac """
+        """Decode NavIC L1NAV almanac parameters."""
         wna, e, toa, i0, OMGd, sqrtA, OMG0, omg, M0, af0, af1, prn_a = \
             bs.unpack_from('u13u20u16s24s19u24s24s24s24s14s11u6', msg, i)
         i += 243
         return i
 
     def decode_irn_l1nav_iono_nequick(self, msg, i):
-        """ NavIC L1NAV NeQuick Iono parameters """
+        """Decode NavIC L1NAV NeQuick ionospheric parameters."""
         for k in range(3):
             modip_mac, modip_min, mlon_max, mlon_min, a0, a1, a2, idf = \
                 bs.unpack_from('s6s6s7s7u11s11s14u1', msg, i)
@@ -1400,7 +1397,7 @@ class RawNav():
         return i
 
     def decode_irn_l1nav_iono_klob(self, msg, i):
-        """ NavIC L1NAV Klobuchar like Iono parameters """
+        """Decode NavIC L1NAV Klobuchar-like ionospheric parameters."""
         alp0, alp1, alp2, alp3 = \
             bs.unpack_from('s8s8s10s12', msg, i)
         i += 38
@@ -1414,14 +1411,14 @@ class RawNav():
         return i
 
     def decode_irn_l1nav_eop(self, msg, i):
-        """ NavIC L1NAV Earth Orientation Parameters """
+        """Decode NavIC L1NAV Earth Orientation Parameters."""
         teop, pmx, pmxd, pmy, pmyd, dut1, dut1d = \
             bs.unpack_from('u16s21s15s21s15s31s19', msg, i)
         i += 138
         return i
 
     def decode_irn_l1nav_utc(self, msg, i):
-        """ NavIC L1NAV UTC parameters """
+        """Decode NavIC L1NAV UTC parameters."""
         iodt, tug, wnug, dtls, wnlsf, dn, dtlsf = \
             bs.unpack_from('u3u8u13s8u13u4s8', msg, i)
         i += 57
@@ -1445,8 +1442,7 @@ class RawNav():
         return i
 
     def decode_irn_l1nav(self, week, time, sat, msg):
-        """ NavIC L1NAV Message decoder """
-
+        """Decode NavIC L1NAV navigation message."""
         sys, prn_ = sat2prn(sat)
         eph = Eph(sat)
 
@@ -1551,8 +1547,7 @@ class RawNav():
         return eph
 
     def decode_glo_fdma(self, week, time, sat, msg, freq=0):
-        """ Glonass FDMA navigation message decoder """
-
+        """Decode GLONASS FDMA navigation message."""
         sys, prn = sat2prn(sat)
 
         sid = bs.unpack_from('u4', msg, 1)[0]
@@ -1687,7 +1682,7 @@ class RawNav():
         return geph
 
     def decode_glo_l1oc(self, week, time, sat, msg):
-        """ Glonass CDMA L1OC navigation message decoder """
+        """Decode GLONASS CDMA L1OC navigation message."""
         sid_t = {10: 0, 11: 1, 12: 2, 16: 3, 25: 4}
 
         sys, prn = sat2prn(sat)
@@ -1707,7 +1702,7 @@ class RawNav():
         return geph
 
     def decode_glo_l3oc(self, week, time, sat, msg):
-        """ Glonass CDMA L3OC navigation message decoder """
+        """Decode GLONASS CDMA L3OC navigation message."""
         sid_t = {10: 0, 11: 1, 12: 2, 16: 3, 25: 4}
 
         pre, sid = bs.unpack_from('u20u6', msg, 0)
@@ -1727,8 +1722,7 @@ class RawNav():
         return geph
 
     def decode_glo_cdma(self, week, time, sat, buff, stype):
-        """ Glonass CDMA L3OC navigation message decoder """
-
+        """Decode GLONASS CDMA L3OC navigation message."""
         sid10 = bs.unpack_from('u6', buff, 0)[0]
         sid11 = bs.unpack_from('u6', buff, 32*8)[0]
         sid12 = bs.unpack_from('u6', buff, 32*2*8)[0]
@@ -1865,7 +1859,7 @@ class RawNav():
         return geph
 
     def decode_sbs_l1(self, week, tow, sat, msg):
-        """ SBAS L1 navigation message decoder """
+        """Decode SBAS L1 navigation message."""
         ura_t = [2, 2.8, 4, 5.7, 8, 11.3, 16, 32,
                  64, 128, 256, 512, 1024, 2048, 4096, 0]
 
@@ -1910,7 +1904,8 @@ class RawNav():
 
 
 class rcvOpt():
-    """ template class for receiver options """
+    """Template class for receiver options."""
+
     flg_qzslnav = False
     flg_gpslnav = False
     flg_qzscnav = False
@@ -1936,7 +1931,7 @@ class rcvOpt():
 
 
 class rcvDec():
-    """ template class for receiver message decoder """
+    """Template class for receiver message decoder."""
 
     monlevel = 0
     flg_qzslnav = False
@@ -1987,9 +1982,10 @@ class rcvDec():
     re = None  # placeholder for RINEX encoder
 
     sig_tab = {}
-    sys_t = [] # list of enabled GNSS
+    sys_t = []  # list of enabled GNSS
 
     def __init__(self, opt=None, prefix='', gnss_t='GECJ'):
+        """Initialize receiver message decoder."""
         self.sys_t = char2sys(gnss_t)
         self.sig_tab = self.init_sig_tab(gnss_t)
         if opt is not None:
@@ -1998,7 +1994,7 @@ class rcvDec():
         self.prn_ref = -1
 
     def init_sig_tab(self, gnss_t='GEJ'):
-        """ initialize signal table for RINEX output """
+        """Initialize signal table for RINEX output."""
         sig_tab = {}
 
         if 'G' in gnss_t:
@@ -2080,7 +2076,7 @@ class rcvDec():
         return sig_tab
 
     def init_param(self, opt: rcvOpt, prefix=''):
-        """ initialize parameters and file handlers """
+        """Initialize parameters and file handlers."""
         if opt.flg_rnxnav or opt.flg_rnxobs:
             self.re = rnxenc(sig_tab=self.sig_tab)
 
@@ -2129,7 +2125,7 @@ class rcvDec():
             self.fh_galfnav = open(prefix+'.fnv', mode='w')
         if opt.flg_bdsb1c:
             self.flg_bdsb1c = True
-            #self.fh_bdsb1c = open(prefix+'.b1c', mode='w')
+            # self.fh_bdsb1c = open(prefix+'.b1c', mode='w')
         if opt.flg_bdsb2a:
             self.flg_bdsb2a = True
         if opt.flg_bdsb2b:
@@ -2157,7 +2153,7 @@ class rcvDec():
             self.useL1CB = True
 
     def file_close(self):
-        """ close file handlers """
+        """Close file handlers."""
         if self.fh_qzsl6 is not None:
             self.fh_qzsl6.close()
 
@@ -2204,7 +2200,7 @@ class rcvDec():
             self.fh_rnxobs.close()
 
     def output_sbas(self, prn, msg, fh, itype=0):
-        """ output ascii encoded SBAS raw message into file. """
+        """Output ascii encoded SBAS raw message into file."""
         if itype == 3:  # QZSS L5S experimental message
             pre_t = [0x5, 0xc, 0x6, 0x9, 0x3, 0xa]
             preamble = msg[0]
