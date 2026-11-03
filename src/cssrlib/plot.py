@@ -111,12 +111,21 @@ def draw_circle(ax, ccrs, p, col, nc=10, alpha=0.5):
             transform=ccrs)
 
 
-def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, ylim_v=None, figtype=1):
+def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, ylim_v=None, figtype=1,
+             figsize=None):
     """Plot ENU coordinates."""
     lbl_t = ['East [m]', 'North [m]', 'Up [m]']
     fmt = '%H:%M'
 
-    fig = plt.figure(figsize=[7, 9])
+    if figsize is None:
+        if figtype == 2:
+            figsize = [6, 6]
+        elif ztd is None:
+            figsize = [7, 6]
+        else:
+            figsize = [7, 9]
+
+    fig = plt.figure(figsize=figsize)
     fig.set_rasterized(True)
     idx2 = np.array([])
 
@@ -192,3 +201,5 @@ def plot_enu(t, enu, smode=None, ztd=None, ylim=1.0, ylim_v=None, figtype=1):
         ax = plt.gca()
         ax.set(xlim=(-ylim, ylim), ylim=(-ylim, ylim))
         ax.set_aspect('equal', 'box')
+
+    return fig

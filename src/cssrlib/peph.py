@@ -15,8 +15,67 @@ from cssrlib.rinex import rnxdec
 import numpy as np
 from math import pow, sin, cos
 
+try:
+    from numba import njit
+    _has_numba = True
+except ImportError:
+    _has_numba = False
+
+if not _has_numba:
+    def njit(*args, **kwargs):
+        def decorator(f):
+            return f
+        return decorator
+
 
 NMAX = 10
+MAXDTE = 900.0
+EXTERR_CLK = 1e-3
+EXTERR_EPH = 5e-7
+
+
+@njit(fastmath=True)
+def _interppol_core(x, y, n):
+    """Interpolate value and derivative using Neville's algorithm."""
+    for j in range(1, n):
+        for i in range(n - j):
+            y[i] = (x[i + j] * y[i] - x[i] * y[i + 1]) / (x[i + j] - x[i])
+    return y[0]
+
+
+@njit(fastmath=True)
+def _interpolate_sp3_core(pos_slice, t_arr, omge, n):
+    """Rotate and interpolate SP3 coordinates for 3 axes in one pass."""
+    p = np.empty((3, n), dtype=np.float64)
+    for j in range(n):
+        tj = t_arr[j]
+        sinl = np.sin(omge * tj)
+        cosl = np.cos(omge * tj)
+        x = pos_slice[j, 0]
+        y = pos_slice[j, 1]
+        z = pos_slice[j, 2]
+        p[0, j] = cosl * x - sinl * y
+        p[1, j] = sinl * x + cosl * y
+        p[2, j] = z
+
+    rs = np.empty(3, dtype=np.float64)
+    y_buf = np.empty(n, dtype=np.float64)
+    for coord in range(3):
+        for j in range(n):
+            y_buf[j] = p[coord, j]
+        for j in range(1, n):
+            for i in range(n - j):
+                y_buf[i] = (t_arr[i + j] * y_buf[i] - t_arr[i] * y_buf[i + 1]) / (t_arr[i + j] - t_arr[i])
+        rs[coord] = y_buf[0]
+    return rs
+
+
+# Warmup JIT compilation on module import
+if _has_numba:
+    _d_pos = np.zeros((NMAX + 1, 3), dtype=np.float64)
+    _d_t = np.arange(NMAX + 1, dtype=np.float64)
+    _interpolate_sp3_core(_d_pos, _d_t, 7.2921151467e-5, NMAX + 1)
+    _interppol_core(_d_t, _d_t.copy(), NMAX + 1)
 MAXDTE = 900.0
 EXTERR_CLK = 1e-3
 EXTERR_EPH = 5e-7
@@ -305,10 +364,7 @@ class peph:
 
     def interppol(self, x, y, n):
         """Interpolate value and derivative using Neville's algorithm."""
-        for j in range(1, n):
-            for i in range(n-j):
-                y[i] = (x[i+j]*y[i]-x[i]*y[i+1])/(x[i+j]-x[i])
-        return y[0]
+        return _interppol_core(x, y.copy(), n)
 
     def pephpos(self, time, sat, nav, vare=False, varc=False):
         """Compute satellite position and velocity from precise ephemeris."""
@@ -321,14 +377,12 @@ class peph:
                 timediff(time, nav.peph[0].time) < -MAXDTE or \
                 timediff(time, nav.peph[nav.ne-1].time) > MAXDTE:
             return None, None, False, False
-        i, j = 0, nav.ne-1
-        while i < j:
-            k = (i+j)//2
-            if timediff(nav.peph[k].time, time) < 0.0:
-                i = k+1
-            else:
-                j = k
-        index = 0 if i <= 0 else i-1
+
+        if not hasattr(nav, 'peph_times') or len(nav.peph_times) != nav.ne:
+            nav.peph_times = np.array([p.time.time + p.time.sec for p in nav.peph], dtype=np.float64)
+        t_sec = time.time + time.sec
+        idx = np.searchsorted(nav.peph_times, t_sec)
+        index = 0 if idx <= 0 else idx - 1
 
         i = index-(NMAX+1)//2
         if i < 0:
@@ -341,16 +395,13 @@ class peph:
             if np.linalg.norm(nav.peph[i+j].pos[sat-1, :]) <= 0.0:
                 return None, None, False, False
 
+        pos_slice = np.empty((NMAX+1, 3), dtype=np.float64)
         for j in range(NMAX+1):
-            pos = nav.peph[i+j].pos[sat-1, :]
-            sinl = sin(rCST.OMGE*t[j])
-            cosl = cos(rCST.OMGE*t[j])
-            p[0, j] = cosl*pos[0]-sinl*pos[1]
-            p[1, j] = sinl*pos[0]+cosl*pos[1]
-            p[2, j] = pos[2]
+            pos_slice[j, 0] = nav.peph[i+j].pos[sat-1, 0]
+            pos_slice[j, 1] = nav.peph[i+j].pos[sat-1, 1]
+            pos_slice[j, 2] = nav.peph[i+j].pos[sat-1, 2]
 
-        for i in range(3):
-            rs[i] = self.interppol(t, p[i, :], NMAX+1)
+        rs = _interpolate_sp3_core(pos_slice, t, rCST.OMGE, NMAX+1)
 
         p_ = nav.peph[index:index+2]
 
@@ -399,14 +450,12 @@ class peph:
                 timediff(time, nav.pclk[0].time) < -MAXDTE or \
                 timediff(time, nav.pclk[nav.nc-1].time) > MAXDTE:
             return None, False
-        i, j = 0, nav.nc-1
-        while i < j:
-            k = (i+j)//2
-            if timediff(nav.pclk[k].time, time) < 0.0:
-                i = k+1
-            else:
-                j = k
-        index = 0 if i <= 0 else i-1
+
+        if not hasattr(nav, 'pclk_times') or len(nav.pclk_times) != nav.nc:
+            nav.pclk_times = np.array([p.time.time + p.time.sec for p in nav.pclk], dtype=np.float64)
+        t_sec = time.time + time.sec
+        idx = np.searchsorted(nav.pclk_times, t_sec)
+        index = 0 if idx <= 0 else idx - 1
         p_ = nav.pclk[index:index+2]
 
         t[0] = timediff(time, p_[0].time)
@@ -620,10 +669,38 @@ class atxdec():
                     self.pcvr.append(pcv)
 
 
-def searchpcv(pcvs, name, time):
-    """Get satellite or receiver antenna pcv."""
-    if isinstance(name, str):
+_pcv_map = {}
 
+
+def searchpcv(pcvs, name, time):
+    """Get satellite or receiver antenna pcv with indexed lookup."""
+    key = id(pcvs)
+    submap = _pcv_map.get(key)
+    if submap is None:
+        submap = {}
+        for pcv in pcvs:
+            k = pcv.type if pcv.sat is None else pcv.sat
+            if k not in submap:
+                submap[k] = []
+            submap[k].append(pcv)
+            if isinstance(k, str) and k.strip() not in submap:
+                submap[k.strip()] = submap[k]
+        _pcv_map[key] = submap
+
+    candidates = submap.get(name)
+    if candidates is None and isinstance(name, str):
+        candidates = submap.get(name.strip())
+
+    if candidates is not None:
+        for pcv in candidates:
+            if pcv.ts.time != 0 and timediff(pcv.ts, time) > 0.0:
+                continue
+            if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
+                continue
+            return pcv
+        return None
+
+    if isinstance(name, str):
         for pcv in pcvs:
             if pcv.type != name:
                 continue
@@ -632,9 +709,7 @@ def searchpcv(pcvs, name, time):
             if pcv.te.time != 0 and timediff(pcv.te, time) < 0.0:
                 continue
             return pcv
-
     else:
-
         for pcv in pcvs:
             if pcv.sat != name:
                 continue
@@ -1287,27 +1362,48 @@ class biasdec():
 
         return bias, std, bcode
 
+    def _ensure_osb_map(self):
+        """Build lookup map for OSB entries by (sat, sig1)."""
+        if not hasattr(self, 'osb_map') or len(self.osb_map) == 0:
+            self.osb_map = {}
+            for osb in self.osb:
+                k = (osb.sat, osb.sig1)
+                if k not in self.osb_map:
+                    self.osb_map[k] = []
+                self.osb_map[k].append(osb)
+
     def getosb(self, sat, time, sig):
         """Retrieve OSB value based on satellite, epoch and signal code."""
+        self._ensure_osb_map()
+        candidates = self.osb_map.get((sat, sig))
+        if candidates is not None:
+            for osb in candidates:
+                if timediff(time, osb.tst) >= 0.0 and timediff(time, osb.ted) < 0.0:
+                    return osb.bias
+            return np.nan
+
         bias = np.nan
-
         for osb in self.osb:
-
             if osb.sat == sat and \
                     osb.sig1 == sig and \
                     timediff(time, osb.tst) >= 0.0 and \
                     timediff(time, osb.ted) < 0.0:
                 bias = osb.bias
                 break
-
         return bias
 
     def getosbstd(self, sat, time, sig):
         """Retrieve OSB sigma based on satellite, epoch and signal code."""
+        self._ensure_osb_map()
+        candidates = self.osb_map.get((sat, sig))
+        if candidates is not None:
+            for osb in candidates:
+                if timediff(time, osb.tst) >= 0.0 and timediff(time, osb.ted) < 0.0:
+                    return osb.std
+            return np.nan
+
         std = np.nan
-
         for osb in self.osb:
-
             if osb.sat == sat and \
                     osb.sig1 == sig and \
                     timediff(time, osb.tst) >= 0.0 and \

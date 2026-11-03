@@ -333,7 +333,7 @@ def satpos(sat, t, nav, cs=None, orb=None):
     i = 0
     sys, _ = sat2prn(sat)
 
-    if nav.ephopt == 4:
+    if nav.ephopt == 4 and orb is not None:
 
         rs_, dts_, _ = orb.peph2pos(t, sat, nav)
         if rs_ is None or dts_ is None or np.isnan(dts_[0]):
@@ -460,7 +460,7 @@ def satpos(sat, t, nav, cs=None, orb=None):
 
             svh[i] = eph.svh
 
-    if nav.ephopt == 4:  # precise ephemeris
+    if nav.ephopt == 4 and orb is not None:  # precise ephemeris
 
         rs_, dts_, _ = orb.peph2pos(t, sat, nav)
         rs[i, :] = rs_[0: 3]
@@ -570,7 +570,7 @@ def satposs(obs, nav, cs=None, orb=None):
         pr = obs.P[i, 0]  # TODO: catch invalid observation!
         t = timeadd(obs.t, -pr/rCST.CLIGHT)
 
-        if nav.ephopt == 4:
+        if nav.ephopt == 4 and orb is not None:
 
             rs_, dts_, _ = orb.peph2pos(t, sat, nav)
             if rs_ is None or dts_ is None or np.isnan(dts_[0]):
@@ -694,7 +694,7 @@ def satposs(obs, nav, cs=None, orb=None):
 
         t = timeadd(t, -dt)
 
-        if nav.ephopt == 4:  # precise ephemeris
+        if nav.ephopt == 4 and orb is not None:  # precise ephemeris
 
             rs_, dts_, _ = orb.peph2pos(t, sat, nav)
             rs[i, :] = rs_[0: 3]
