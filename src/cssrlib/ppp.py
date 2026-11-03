@@ -1,7 +1,7 @@
 """Module for PPP processing."""
 from cssrlib.gnss import rCST, epoch2time, time2epoch, timeadd
 from cssrlib.gnss import timediff, vnorm, ecef2pos, xyz2enu, enu2xyz, gpst2utc
-from cssrlib.gnss import ecef2enu, Nav, prn2sat, pos2ecef, uGNSS
+from cssrlib.gnss import ecef2enu, Nav, prn2sat, pos2ecef, uGNSS, cross3
 from math import sin, cos, atan2, asin
 import numpy as np
 try:
@@ -10,9 +10,7 @@ except ImportError:
     solid_grid = None
 
 
-def nut_iau1980(t_, f):
-    """Define IAU1980 nutation."""
-    nut = np.array([
+_NUT_IAU1980 = np.array([
         [0,   0,   0,   0,   1, -6798.4, -171996, -174.2, 92025,   8.9],
         [0,   0,   2,  -2,   2,   182.6,  -13187,   -1.6,  5736,  -3.1],
         [0,   0,   2,   0,   2,    13.7,   -2274,   -0.2,   977,  -0.5],
@@ -119,13 +117,22 @@ def nut_iau1980(t_, f):
         [-1,   0,   0,   1,   1,  -388.3,       1,    0.0,     0,   0.0],
         [-1,  -1,   0,   2,   1,    35.0,       1,    0.0,     0,   0.0],
         [0,   1,   0,   1,   0,    27.3,       1,    0.0,     0,   0.0]
-    ])
-    dpsi = 0
-    deps = 0
-    for i in range(106):
-        ang = nut[i, 0:5]@f
-        dpsi += (nut[i, 6]+nut[i, 7]*t_)*sin(ang)
-        deps += (nut[i, 8]+nut[i, 9]*t_)*cos(ang)
+])
+
+_AST_ARGS_FC = np.array([
+    [134.96340251, 1717915923.2178, 31.8792, 0.051635, -0.00024470],
+    [357.52910918, 129596581.0481, -0.5532, 0.000136, -0.00001149],
+    [93.27209062, 1739527262.8478, -12.7512, -0.001037, 0.00000417],
+    [297.85019547, 1602961601.2090, -6.3706, 0.006593, -0.00003169],
+    [125.04455501, -6962890.2665, 7.4722, 0.007702, -0.00005939],
+])
+
+
+def nut_iau1980(t_, f):
+    """Define IAU1980 nutation."""
+    ang = _NUT_IAU1980[:, 0:5]@f
+    dpsi = np.dot(_NUT_IAU1980[:, 6]+_NUT_IAU1980[:, 7]*t_, np.sin(ang))
+    deps = np.dot(_NUT_IAU1980[:, 8]+_NUT_IAU1980[:, 9]*t_, np.cos(ang))
 
     dpsi *= rCST.AS2R*1e-4
     deps *= rCST.AS2R*1e-4
@@ -134,25 +141,10 @@ def nut_iau1980(t_, f):
 
 def ast_args(t_):
     """Compute IAU 1980 fundamental nutation arguments [rad]."""
-    fc = np.array([[134.96340251, 1717915923.2178, 31.8792, 0.051635,
-                    -0.00024470],
-                   [357.52910918, 129596581.0481, -0.5532, 0.000136,
-                    -0.00001149],
-                   [93.27209062, 1739527262.8478, -12.7512, -0.001037,
-                    0.00000417],
-                   [297.85019547, 1602961601.2090, -6.3706, 0.006593,
-                    -0.00003169],
-                   [125.04455501,  -6962890.2665,  7.4722, 0.007702,
-                    -0.00005939]])
-    tt = np.zeros(4)
-    f = np.zeros(5)
-    tt[0] = t_
-    for k_ in range(3):
-        tt[k_+1] = tt[k_]*t_
-    for k_ in range(5):
-        f[k_] = fc[k_, 0]*3600.0+fc[k_, 1:]@tt
-        f[k_] = np.fmod(f[k_]*rCST.AS2R, 2.0*np.pi)
-    return f
+    t2 = t_*t_
+    tt = np.array([t_, t2, t2*t_, t2*t2])
+    f = _AST_ARGS_FC[:, 0]*3600.0 + _AST_ARGS_FC[:, 1:]@tt
+    return np.fmod(f*rCST.AS2R, 2.0*np.pi)
 
 
 def Rx(t_):
@@ -282,28 +274,28 @@ def windupcorr(time, rs, vs, rr, rsun, phw, full=False):
         ezs = r/np.linalg.norm(r)
         r = rsun-rs
         ess = r/np.linalg.norm(r)
-        r = np.cross(ezs, ess)
+        r = cross3(ezs, ess)
         eys = r/np.linalg.norm(r)
-        exs = np.cross(eys, ezs)
+        exs = cross3(eys, ezs)
     else:
         we = np.array([0, 0, rCST.OMGE])
         ek = vnorm(rr-rs)
         ezs = vnorm(-rs)
-        ess = vnorm(vs+np.cross(we, rs))
-        eys = vnorm(np.cross(ezs, ess))
-        exs = np.cross(eys, ezs)
+        ess = vnorm(vs+cross3(we, rs))
+        eys = vnorm(cross3(ezs, ess))
+        exs = cross3(eys, ezs)
     pos = ecef2pos(rr)
     E = xyz2enu(pos)
     exr = E[0, :]
     eyr = E[1, :]
-    eks = np.cross(ek, eys)
-    ekr = np.cross(ek, eyr)
+    eks = cross3(ek, eys)
+    ekr = cross3(ek, eyr)
     ds = exs-ek*(ek@exs)-eks
     dr = exr-ek*(ek@exr)+ekr
     c_p = (ds@dr)/(np.linalg.norm(ds)*np.linalg.norm(dr))
     c_p = max(-1.0, min(1.0, c_p))
     ph = np.arccos(c_p)/(2.0*np.pi)
-    drs = np.cross(ds, dr)
+    drs = cross3(ds, dr)
     if ek@drs < 0.0:
         ph = -ph
     phw = ph+np.floor(phw-ph+0.5)  # [cycle]

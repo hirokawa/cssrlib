@@ -22,6 +22,43 @@ fmt_amb = "{} {}-{} amb {} ({:3d},{:3d}) {:10.3f} {:10.3f} {:10.3f} " + \
     "{:10.3f} {:10.3f} {:10.3f}\n"
 
 
+# Pre-allocated APC reference signals by (cssrmode, uGNSS)
+_SIG0_GC1W_2W = (rSigRnx("GC1W"), rSigRnx("GC2W"))
+_SIG0_RC1C_2C = (rSigRnx("RC1C"), rSigRnx("RC2C"))
+_SIG0_EC1C_5Q = (rSigRnx("EC1C"), rSigRnx("EC5Q"))
+_SIG0_JC1C_5Q = (rSigRnx("JC1C"), rSigRnx("JC5Q"))
+_SIG0_EC1C_7Q = (rSigRnx("EC1C"), rSigRnx("EC7Q"))
+_SIG0_GC1C_5Q = (rSigRnx("GC1C"), rSigRnx("GC5Q"))
+_SIG0_SC1C_5Q = (rSigRnx("SC1C"), rSigRnx("SC5Q"))
+_SIG0_GC1C = (rSigRnx("GC1C"),)
+_SIG0_RC1C = (rSigRnx("RC1C"),)
+_SIG0_EC1C = (rSigRnx("EC1C"),)
+_SIG0_CC2I = (rSigRnx("CC2I"),)
+_SIG0_JC1C = (rSigRnx("JC1C"),)
+_SIG0_CC6I = (rSigRnx("CC6I"),)
+
+_APC_SIG0_MAP = {
+    (sc.QZS_MADOCA, uGNSS.GPS): _SIG0_GC1W_2W,
+    (sc.QZS_MADOCA, uGNSS.GLO): _SIG0_RC1C_2C,
+    (sc.QZS_MADOCA, uGNSS.GAL): _SIG0_EC1C_5Q,
+    (sc.QZS_MADOCA, uGNSS.QZS): _SIG0_JC1C_5Q,
+    (sc.GAL_HAS_SIS, uGNSS.GPS): _SIG0_GC1W_2W,
+    (sc.GAL_HAS_SIS, uGNSS.GAL): _SIG0_EC1C_7Q,
+    (sc.BDS_PPP, uGNSS.GPS): _SIG0_GC1W_2W,
+    (sc.BDS_PPP, uGNSS.BDS): _SIG0_CC6I,
+}
+for _m in (sc.GAL_HAS_IDD, sc.IGS_SSR, sc.RTCM3_SSR):
+    _APC_SIG0_MAP[(_m, uGNSS.GPS)] = _SIG0_GC1C
+    _APC_SIG0_MAP[(_m, uGNSS.GLO)] = _SIG0_RC1C
+    _APC_SIG0_MAP[(_m, uGNSS.GAL)] = _SIG0_EC1C
+    _APC_SIG0_MAP[(_m, uGNSS.BDS)] = _SIG0_CC2I
+    _APC_SIG0_MAP[(_m, uGNSS.QZS)] = _SIG0_JC1C
+for _m in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5):
+    _APC_SIG0_MAP[(_m, uGNSS.GPS)] = _SIG0_GC1C_5Q
+    _APC_SIG0_MAP[(_m, uGNSS.GAL)] = _SIG0_EC1C_5Q
+    _APC_SIG0_MAP[(_m, uGNSS.SBS)] = _SIG0_SC1C_5Q
+
+
 class pppos():
     """Class for PPP processing."""
 
@@ -293,15 +330,10 @@ class pppos():
         # pos,vel,ztd,ion,amb
         #
         nx = self.nav.nx
-        Phi = np.eye(nx)
-        # if self.nav.niono > 0:
-        #    ni = self.nav.na-uGNSS.MAXSAT
-        #    Phi[ni:self.nav.na, ni:self.nav.na] = np.zeros(
-        #        (uGNSS.MAXSAT, uGNSS.MAXSAT))
         if self.nav.pmode > 0:
             self.nav.x[0:3] += self.nav.x[3:6]*tt
-            Phi[0:3, 3:6] = np.eye(3)*tt
-        self.nav.P[0:nx, 0:nx] = Phi@self.nav.P[0:nx, 0:nx]@Phi.T
+            self.nav.P[0:3, 0:nx] += self.nav.P[3:6, 0:nx]*tt
+            self.nav.P[0:nx, 0:3] += self.nav.P[0:nx, 3:6]*tt
 
         # Process noise
         #
@@ -672,52 +704,7 @@ class pppos():
             #
             sig0 = None
             if cs is not None:
-
-                if cs.cssrmode == sc.QZS_MADOCA:
-
-                    if sys == uGNSS.GPS:
-                        sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
-                    elif sys == uGNSS.GLO:
-                        sig0 = (rSigRnx("RC1C"), rSigRnx("RC2C"))
-                    elif sys == uGNSS.GAL:
-                        sig0 = (rSigRnx("EC1C"), rSigRnx("EC5Q"))
-                    elif sys == uGNSS.QZS:
-                        sig0 = (rSigRnx("JC1C"), rSigRnx("JC5Q"))
-
-                elif cs.cssrmode == sc.GAL_HAS_SIS:
-
-                    if sys == uGNSS.GPS:
-                        sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
-                    elif sys == uGNSS.GAL:
-                        sig0 = (rSigRnx("EC1C"), rSigRnx("EC7Q"))
-
-                elif cs.cssrmode in (sc.GAL_HAS_IDD, sc.IGS_SSR, sc.RTCM3_SSR):
-
-                    if sys == uGNSS.GPS:
-                        sig0 = (rSigRnx("GC1C"),)
-                    elif sys == uGNSS.GLO:
-                        sig0 = (rSigRnx("RC1C"),)
-                    elif sys == uGNSS.GAL:
-                        sig0 = (rSigRnx("EC1C"),)
-                    elif sys == uGNSS.BDS:
-                        sig0 = (rSigRnx("CC2I"),)
-                    elif sys == uGNSS.QZS:
-                        sig0 = (rSigRnx("JC1C"),)
-
-                elif cs.cssrmode == sc.BDS_PPP:
-
-                    if sys == uGNSS.GPS:
-                        sig0 = (rSigRnx("GC1W"), rSigRnx("GC2W"))
-                    elif sys == uGNSS.BDS:
-                        sig0 = (rSigRnx("CC6I"),)
-
-                elif cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5):
-                    if sys == uGNSS.GPS:
-                        sig0 = (rSigRnx("GC1C"), rSigRnx("GC5Q"))
-                    elif sys == uGNSS.GAL:
-                        sig0 = (rSigRnx("EC1C"), rSigRnx("EC5Q"))
-                    elif sys == uGNSS.SBS:
-                        sig0 = (rSigRnx("SC1C"), rSigRnx("SC5Q"))
+                sig0 = _APC_SIG0_MAP.get((cs.cssrmode, sys))
 
             # Receiver/satellite antenna offset
             #
@@ -726,14 +713,13 @@ class pppos():
                 antrCP = [0.0 for _ in sigsCP]
             else:
                 antrPR = antModelRx(self.nav, pos, e[i, :], sigsPR, rtype)
-                antrCP = antModelRx(self.nav, pos, e[i, :], sigsCP, rtype)
+                antrCP = antrPR
 
             if self.nav.ephopt == 4:
 
                 antsPR = antModelTx(
                     self.nav, e[i, :], sigsPR, sat, obs.t, rs[i, :])
-                antsCP = antModelTx(
-                    self.nav, e[i, :], sigsCP, sat, obs.t, rs[i, :])
+                antsCP = antsPR
 
             elif cs is not None and cs.cssrmode in (sc.QZS_MADOCA,
                                                     sc.GAL_HAS_SIS,
@@ -743,10 +729,9 @@ class pppos():
                                                     sc.BDS_PPP,
                                                     sc.PVS_PPP):
 
-                ants = antModelTx(self.nav, e[i, :], (sigsPR + sigsCP),
-                                  sat, obs.t, rs[i, :], sig0)
-                antsPR = ants[0:len(sigsPR)]
-                antsCP = ants[len(sigsPR):]
+                antsPR = antModelTx(self.nav, e[i, :], sigsPR,
+                                    sat, obs.t, rs[i, :], sig0)
+                antsCP = antsPR
 
             else:
 
@@ -1120,13 +1105,16 @@ class pppos():
         P (ndarray): Updated state covariance matrix
         S (ndarray): Innovation covariance matrix
         """
-        PHt = P@H.T
-        S = H@PHt+R
+        ix = np.nonzero(np.diag(P) > 0.0)[0]
+        P_ = P[np.ix_(ix, ix)]
+        H_ = H[:, ix]
+        PHt = P_@H_.T
+        S = H_@PHt+R
         K = PHt@np.linalg.inv(S)
-        x += K@v
+        x[ix] += K@v
         # P = P - K@H@P
-        IKH = np.eye(P.shape[0])-K@H
-        P = IKH@P@IKH.T + K@R@K.T  # Joseph stabilized version
+        IKH = np.eye(len(ix))-K@H_
+        P[np.ix_(ix, ix)] = IKH@P_@IKH.T + K@R@K.T  # Joseph stabilized version
 
         return x, P, S
 

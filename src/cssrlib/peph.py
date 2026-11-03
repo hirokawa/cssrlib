@@ -8,7 +8,7 @@ from cssrlib.gnss import Nav, id2sat, sat2id, char2sys, sat2prn
 from cssrlib.gnss import epoch2time, time2epoch, timeadd, timediff, gtime_t
 from cssrlib.gnss import str2time, time2doy
 from cssrlib.gnss import gpst2utc, utc2gpst, time2gpst
-from cssrlib.gnss import ecef2enu
+from cssrlib.gnss import ecef2enu, cross3
 from cssrlib.gnss import rCST, rSigRnx, uGNSS, uTYP, uSIG
 
 from cssrlib.rinex import rnxdec
@@ -986,9 +986,7 @@ def Rz(t):
     return np.array([[ct, st, 0.0], [-st, ct, 0.0], [0.0, 0.0, 1.0]])
 
 
-def nut_iau1980(t, f):
-    """Compute IAU 1980 nutation angles in longitude and obliquity."""
-    nut = np.array([
+_NUT_IAU1980 = np.array([
         [0,   0,   0,   0,   1, -6798.4, -171996, -174.2, 92025,   8.9],
         [0,   0,   2,  -2,   2,   182.6,  -13187,   -1.6,  5736,  -3.1],
         [0,   0,   2,   0,   2,    13.7,   -2274,   -0.2,   977,  -0.5],
@@ -1095,15 +1093,14 @@ def nut_iau1980(t, f):
         [-1,   0,   0,   1,   1,  -388.3,       1,    0.0,     0,   0.0],
         [-1,  -1,   0,   2,   1,    35.0,       1,    0.0,     0,   0.0],
         [0,   1,   0,   1,   0,    27.3,       1,    0.0,     0,   0.0]
-    ])
+])
 
-    dpsi = deps = 0.0
-    for i in range(106):
-        ang = 0.0
-        for j in range(5):
-            ang += nut[i][j]*f[j]
-        dpsi += (nut[i][6]+nut[i][7]*t)*sin(ang)
-        deps += (nut[i][8]+nut[i][9]*t)*cos(ang)
+
+def nut_iau1980(t, f):
+    """Compute IAU 1980 nutation angles in longitude and obliquity."""
+    ang = _NUT_IAU1980[:, 0:5]@f
+    dpsi = np.dot(_NUT_IAU1980[:, 6]+_NUT_IAU1980[:, 7]*t, np.sin(ang))
+    deps = np.dot(_NUT_IAU1980[:, 8]+_NUT_IAU1980[:, 9]*t, np.cos(ang))
     dpsi *= 1E-4*rCST.AS2R  # 0.1 mas -> rad
     deps *= 1E-4*rCST.AS2R
     return dpsi, deps
@@ -1144,9 +1141,9 @@ def orb2ecef(time, rs, rsun=None):
     ez = r/np.linalg.norm(r)
     r = rsun-rs
     es = r/np.linalg.norm(r)
-    r = np.cross(ez, es)
+    r = cross3(ez, es)
     ey = r/np.linalg.norm(r)
-    ex = np.cross(ey, ez)
+    ex = cross3(ey, ez)
 
     return np.array([ex, ey, ez])
 
@@ -1180,27 +1177,21 @@ def eci2ecef(tutc, erpv):
     return U, gmst_
 
 
+_AST_ARGS_FC = np.array([
+    [134.96340251, 1717915923.2178, 31.8792, 0.051635, -0.00024470],
+    [357.52910918, 129596581.0481, -0.5532, 0.000136, -0.00001149],
+    [93.27209062, 1739527262.8478, -12.7512, -0.001037, 0.00000417],
+    [297.85019547, 1602961601.2090, -6.3706, 0.006593, -0.00003169],
+    [125.04455501, -6962890.2665, 7.4722, 0.007702, -0.00005939],
+])
+
+
 def ast_args(t):
     """Compute fundamental astronomical arguments f={l,l',F,D,OMG} (rad)."""
-    # coefficients for iau 1980 nutation
-    fc = np.array([[134.96340251, 1717915923.2178,  31.8792,  0.051635, -0.00024470],
-                   [357.52910918,  129596581.0481,  -
-                       0.5532,  0.000136, -0.00001149],
-                   [93.27209062, 1739527262.8478, -12.7512, -0.001037,  0.00000417],
-                   [297.85019547, 1602961601.2090,  -
-                       6.3706,  0.006593, -0.00003169],
-                   [125.04455501,   -6962890.2665,   7.4722,  0.007702, -0.00005939]])
-    f = np.zeros(5)
-    tt = np.zeros(4)
-    tt[0] = t
-    for i in range(1, 4):
-        tt[i] = tt[i-1]*t
-    for i in range(5):
-        f[i] = fc[i][0]*3600.0
-        for j in range(4):
-            f[i] += fc[i][j+1]*tt[j]
-        f[i] = np.fmod(f[i]*rCST.AS2R, 2.0*np.pi)
-    return f
+    t2 = t*t
+    tt = np.array([t, t2, t2*t, t2*t2])
+    f = _AST_ARGS_FC[:, 0]*3600.0 + _AST_ARGS_FC[:, 1:]@tt
+    return np.fmod(f*rCST.AS2R, 2.0*np.pi)
 
 
 def sunmoonpos_eci(tut, rsun=False, rmoon=False):

@@ -3,7 +3,7 @@
 from cssrlib.cssrlib import sCType
 from cssrlib.cssrlib import sCSSRTYPE as sc
 import numpy as np
-from cssrlib.gnss import uGNSS, rCST, sat2prn, timediff, timeadd, vnorm
+from cssrlib.gnss import uGNSS, rCST, sat2prn, timediff, timeadd, vnorm, cross3
 from cssrlib.gnss import gtime_t, Geph, Eph, Alm, prn2sat, gpst2time, \
     time2gpst, timeget, time2gst, time2bdt, gst2time, bdt2time, epoch2time
 from datetime import datetime
@@ -449,15 +449,15 @@ def satpos(sat, t, nav, cs=None, orb=None):
 
             if cs.cssrmode == sc.BDS_PPP:
                 er = vnorm(rs[i, :])
-                rc = np.cross(rs[i, :], vs[i, :])
+                rc = cross3(rs[i, :], vs[i, :])
                 ec = vnorm(rc)
-                ea = np.cross(ec, er)
+                ea = cross3(ec, er)
                 A = np.array([er, ea, ec])
             else:
                 ea = vnorm(vs[i, :])
-                rc = np.cross(rs[i, :], vs[i, :])
+                rc = cross3(rs[i, :], vs[i, :])
                 ec = vnorm(rc)
-                er = np.cross(ea, ec)
+                er = cross3(ea, ec)
                 A = np.array([er, ea, ec])
 
             if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5):
@@ -682,15 +682,15 @@ def satposs(obs, nav, cs=None, orb=None):
 
                 if cs.cssrmode == sc.BDS_PPP:
                     er = vnorm(rs[i, :])
-                    rc = np.cross(rs[i, :], vs[i, :])
+                    rc = cross3(rs[i, :], vs[i, :])
                     ec = vnorm(rc)
-                    ea = np.cross(ec, er)
+                    ea = cross3(ec, er)
                     A = np.array([er, ea, ec])
                 else:
                     ea = vnorm(vs[i, :])
-                    rc = np.cross(rs[i, :], vs[i, :])
+                    rc = cross3(rs[i, :], vs[i, :])
                     ec = vnorm(rc)
-                    er = np.cross(ea, ec)
+                    er = cross3(ea, ec)
                     A = np.array([er, ea, ec])
 
                 if cs.cssrmode in (sc.PVS_PPP, sc.SBAS_L1, sc.SBAS_L5):
