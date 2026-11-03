@@ -50,27 +50,29 @@ def dtadjust(t1, t2, tw=604800):
     return dt
 
 
+_GLO_OMG2 = rCST.OMGE_GLO**2
+_GLO_J2_C = 1.5*rCST.J2_GLO*rCST.MU_GLO*rCST.RE_GLO**2
+
+
 def deq(x, acc):
     """Compute differential equations of motion for GLONASS orbit."""
-    xdot = np.zeros(6)
-
-    r2 = x[0:3]@x[0:3]
-    r3 = r2*np.sqrt(r2)
-    omg2 = rCST.OMGE_GLO**2
-
+    r2 = x[0]*x[0] + x[1]*x[1] + x[2]*x[2]
     if r2 <= 0.0:
-        return xdot
+        return np.zeros(6)
 
-    a = 1.5*rCST.J2_GLO*rCST.MU_GLO*rCST.RE_GLO**2/r2/r3
-    b = 5.0*x[2]**2/r2
-    c = -rCST.MU_GLO/r3-a*(1.0-b)
+    r3 = r2*np.sqrt(r2)
+    a = _GLO_J2_C/(r2*r3)
+    b = 5.0*x[2]*x[2]/r2
+    c = -rCST.MU_GLO/r3 - a*(1.0-b)
 
-    xdot[0:3] = x[3:6]
-    xdot[3] = (c+omg2)*x[0]+2.0*rCST.OMGE_GLO*x[4]
-    xdot[4] = (c+omg2)*x[1]-2.0*rCST.OMGE_GLO*x[3]
-    xdot[5] = (c-2.0*a)*x[2]
-    xdot[3:6] += acc
-    return xdot
+    return np.array([
+        x[3],
+        x[4],
+        x[5],
+        (c+_GLO_OMG2)*x[0] + 2.0*rCST.OMGE_GLO*x[4] + acc[0],
+        (c+_GLO_OMG2)*x[1] - 2.0*rCST.OMGE_GLO*x[3] + acc[1],
+        (c-2.0*a)*x[2] + acc[2],
+    ])
 
 
 def glorbit(t, x, acc):
@@ -95,6 +97,22 @@ def geph2pos(time: gtime_t, geph: Geph, flg_v=False, TSTEP=1.0):
     x[3:6] = geph.vel
 
     tt = -TSTEP if t < 0.0 else TSTEP
+
+    if TSTEP == 1.0:
+        attr = "_rk4_neg" if t < 0.0 else "_rk4_pos"
+        steps = getattr(geph, attr, None)
+        if steps is None:
+            steps = [(0.0, x.copy())]
+            setattr(geph, attr, steps)
+        n_steps = int(np.fabs(t))
+        if np.fabs(t) - n_steps <= 1e-9 and n_steps > 0:
+            n_steps -= 1
+        while len(steps) <= n_steps:
+            t_prev, x_prev = steps[-1]
+            steps.append((t_prev + tt, glorbit(tt, x_prev.copy(), geph.acc)))
+        t_done, x_base = steps[n_steps]
+        x = x_base.copy()
+        t -= t_done
 
     while True:
         if np.fabs(t) <= 1e-9:
