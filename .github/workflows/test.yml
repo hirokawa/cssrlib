@@ -1,0 +1,39 @@
+name: Execute Python Scripts
+
+on:
+  push:
+    branches:
+      - main
+      - devel
+
+jobs:
+  execute-scripts:
+    name: Execute Python Scripts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout cssrlib repository
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies from repository
+        run: pip install -r requirements.txt
+ 
+      - name: Install cssrlib from cloned repository
+        run: pip install .
+ 
+      - name: Execute Python scripts
+        run: |
+          cd ./src/cssrlib/test
+          for file in $(find . -name "*.py"); do
+            echo "# Execute $file"
+            echo "#"
+            python "$file" > /dev/null
+            echo "# ...done!"
+            echo "#"
+            echo
+          done
